@@ -1,0 +1,26 @@
+name: Deploy configured clinic web
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: Deploy with mandatory OneDrive persistence
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CODIMATE_ORIGIN: ${{ vars.CODIMATE_ORIGIN }}
+        run: |
+          test -n "$CODIMATE_ORIGIN"
+          case "$CODIMATE_ORIGIN" in https://*) ;; *) exit 1;; esac
+          npx wrangler deploy --var "APP_ORIGIN:$CODIMATE_ORIGIN" --var REQUIRE_ONEDRIVE:true

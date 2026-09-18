@@ -1,0 +1,4029 @@
+import { native, takePhoto, printPage, NativeClinic } from "./lib/native";
+import { needsServer, configureServer } from "./lib/api";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  Camera,
+  Users,
+  ClipboardList,
+  Settings,
+  BarChart3,
+  LogOut,
+  Plus,
+  Search,
+  ArrowLeft,
+  Check,
+  Cloud,
+  FileSpreadsheet,
+  ChevronRight,
+  HeartHandshake,
+  Bell,
+} from "lucide-react";
+import {
+  emptyState,
+  emptyQuote,
+  latestCatalog,
+  allowed,
+  age,
+  money,
+  permissions,
+  type State,
+  type User,
+  type Patient,
+  type Consultation,
+  type Command,
+  type Catalog,
+  type Product,
+  type Photo,
+} from "./core/model";
+import {
+  applyCommand,
+  calculate,
+  metrics,
+  gradeFor,
+  duplicates,
+  activeLedger,
+  consentContent,
+  sha,
+} from "./core/domain";
+import {
+  api,
+  command,
+  makeCommand,
+  setToken,
+  unlockVault,
+  lockVault,
+  vaultRead,
+  vaultWrite,
+  vaultEnabled,
+  recoveryCommands,
+  upload,
+  type CachedSession,
+} from "./lib/api";
+import {
+  catalogWorkbook,
+  catalogCSV,
+  statisticsWorkbook,
+  downloadWorkbook,
+  download,
+} from "./core/excel";
+import { consultationPDF, quoteJPG, documentName } from "./lib/documents";
+import {
+  PhotoEditor,
+  SignaturePad,
+  annotatedBlob,
+} from "./components/PhotoEditor";
+const names: Record<string, string> = {
+  "patient.edit": "환자정보 편집",
+  "money.read": "금액 열람",
+  "receipt.create": "수납 등록",
+  "refund.create": "환불 등록",
+  "ledger.correct": "금액 정정",
+  "note.read": "환자 메모 열람",
+  "note.edit": "메모 작성",
+  "grade.edit": "등급 지정",
+  "catalog.edit": "단가표 관리",
+  "stats.read": "통계",
+  export: "내보내기",
+  "followup.edit": "후속 상태 변경",
+};
+const date = () =>
+  new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+const status = (c: Consultation) =>
+  c.cancelled ? "취소" : { H: "보류", P: "성공", F: "실패" }[c.status];
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+function Empty({ children }: { children: ReactNode }) {
+  return (
+    <div className="empty">
+      <HeartHandshake size={36} />
+      <p>{children}</p>
+    </div>
+  );
+}
+function Modal({
+  title,
+  children,
+  close,
+}: {
+  title: string;
+  children: ReactNode;
+  close: () => void;
+}) {
+  return (
+    <div className="overlay" onClick={close}>
+      <section
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="section-title">
+          <h2>{title}</h2>
+          <button onClick={close}>닫기</button>
+        </div>
+        {children}
+      </section>
+    </div>
+  );
+}
+export function App() {
+  const [state, setState] = useState<State>(emptyState()),
+    [user, setUser] = useState<User | null>(null),
+    [page, setPage] = useState("patients"),
+    [patientId, setPatientId] = useState(""),
+    [consultId, setConsultId] = useState(""),
+    [tab, setTab] = useState("photo"),
+    [health, setHealth] = useState<any>({}),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false),
+    [pending, setPending] = useState<Command[]>([]),
+    [modal, setModal] = useState(""),
+    [guest, setGuest] = useState(false),
+    [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
+  const work = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    setError("");
+    try {
+      return await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "처리하지 못했습니다");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const refresh = async () => {
+    const d = await api("/state");
+    setState(d.state);
+    setHealth((h: any) => ({ ...h, ...d }));
+    if (vaultEnabled())
+      await vaultWrite("session", {
+        state: d.state,
+        user: d.user,
+        savedAt: Date.now(),
+      });
+    return d.state as State;
+  };
+  useEffect(() => {
+    if (needsServer) return;
+    api("/health")
+      .then(setHealth)
+      .catch(() => setError("서버에 연결할 수 없습니다."));
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    const t = setInterval(() => {
+      if (
+        document.visibilityState === "visible" &&
+        navigator.onLine &&
+        !pending.length &&
+        !consultId
+      )
+        refresh().catch(() => {});
+    }, 30000);
+    return () => clearInterval(t);
+  }, [user, pending.length, consultId]);
+  const execute = async (c: Command) => {
+    if (vaultEnabled()) {
+      const q = [
+        ...((await vaultRead<Command[]>("pending")) || []).filter(
+          (x) => x.id !== c.id,
+        ),
+        c,
+      ];
+      await vaultWrite("pending", q);
+      setPending(q);
+    }
+    try {
+      await command(c);
+      if (c.type === "consultation.save" && vaultEnabled())
+        await vaultWrite("draft:" + c.entityId, null);
+      if (vaultEnabled()) {
+        const q = ((await vaultRead<Command[]>("pending")) || []).filter(
+          (x) => x.id !== c.id,
+        );
+        await vaultWrite("pending", q);
+        setPending(q);
+      }
+      await refresh();
+      setNotice(
+        health.mode === "local-development"
+          ? "개발 서버에 저장했습니다."
+          : "OneDrive에 저장했습니다.",
+      );
+      return true;
+    } catch (e: any) {
+      if (!e.status || e.status >= 500) {
+        if (!vaultEnabled())
+          throw new Error(
+            e.message +
+              " · 기기 보관을 설정하지 않아 대기열에 저장하지 못했습니다. 화면 내용을 유지하세요.",
+          );
+        const queue = [
+          ...((await vaultRead<Command[]>("pending")) || pending).filter(
+            (x) => x.id !== c.id,
+          ),
+          c,
+        ];
+        await vaultWrite("pending", queue);
+        setPending(queue);
+        if (
+          [
+            "patient.create",
+            "consultation.create",
+            "consultation.save",
+            "note.save",
+          ].includes(c.type)
+        ) {
+          try {
+            const next = await applyCommand(state, user!, c);
+            setState(next);
+            const cached = await vaultRead<CachedSession>("session");
+            if (cached) await vaultWrite("session", { ...cached, state: next });
+          } catch {}
+        }
+        setNotice("기기에 저장됨 · 동기화 대기");
+        return false;
+      }
+      if (vaultEnabled()) {
+        const q = ((await vaultRead<Command[]>("pending")) || []).filter(
+          (x) => x.id !== c.id,
+        );
+        await vaultWrite("conflict:" + c.id, c);
+        await vaultWrite("pending", q);
+        setPending(q);
+      }
+      throw e;
+    }
+  };
+  const send = (
+    type: string,
+    payload: Record<string, unknown>,
+    entityId?: string,
+    baseRev?: number,
+  ) => execute(makeCommand(type, payload, entityId, baseRev));
+  const sync = () =>
+    work(async () => {
+      for (const c of pending) {
+        await command(c);
+        const q = ((await vaultRead<Command[]>("pending")) || []).filter(
+          (x) => x.id !== c.id,
+        );
+        await vaultWrite("pending", q);
+        setPending(q);
+      }
+      await api("/sync", { method: "POST" });
+      await refresh();
+      setNotice("동기화를 완료했습니다.");
+    });
+  const patient = state.patients.find((p) => p.id === patientId),
+    consult = state.consultations.find((c) => c.id === consultId);
+  const newConsult = (p: Patient) =>
+    work(async () => {
+      const id = crypto.randomUUID();
+      await send(
+        "consultation.create",
+        {
+          patientId: p.id,
+          category: window.confirm(
+            "미용 상담을 시작할까요? 취소를 누르면 보험 상담을 시작합니다.",
+          )
+            ? "미용"
+            : "보험",
+        },
+        id,
+      );
+      setPatientId(p.id);
+      setConsultId(id);
+      setPage("consult");
+      setTab("photo");
+    });
+  const logout = () => {
+    if (
+      pending.length &&
+      !window.confirm(
+        "기기 대기 자료가 있습니다. 로그아웃 후 같은 기기 보관 암호로 복구해야 합니다.",
+      )
+    )
+      return;
+    api("/logout", { method: "POST" }).catch(() => {});
+    lockVault();
+    setUser(null);
+    setState(emptyState());
+    setPending([]);
+    setConsultId("");
+    setPatientId("");
+  };
+  useEffect(() => {
+    if (!user) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        api("/logout", { method: "POST" }).catch(() => {});
+        lockVault();
+        setUser(null);
+        setState(emptyState());
+        setPending([]);
+        setConsultId("");
+        setPatientId("");
+      }, 15 * 60000);
+    };
+    window.addEventListener("pointerdown", reset);
+    window.addEventListener("keydown", reset);
+    reset();
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown", reset);
+      window.removeEventListener("keydown", reset);
+    };
+  }, [user, pending.length]);
+  if (needsServer)
+    return (
+      <div className="login-page">
+        <form
+          className="login-card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            work(async () =>
+              configureServer(
+                String(new FormData(e.currentTarget).get("server")),
+              ),
+            );
+          }}
+        >
+          <h1>병원 서버 연결</h1>
+          <p>배포된 코디메이트 웹 주소를 입력하세요.</p>
+          <input
+            type="url"
+            name="server"
+            placeholder="https://codimate.example.workers.dev"
+            required
+          />
+          <button className="primary">연결</button>
+          {error && <p role="alert">{error}</p>}
+        </form>
+      </div>
+    );
+  if (!user)
+    return (
+      <div className="login-page">
+        <div className="login-brand">
+          <span className="brand-icon">
+            <HeartHandshake size={30} />
+          </span>
+          <b>코디메이트</b>
+          <span>GRAND · CONSULTATION WORKSPACE</span>
+        </div>
+        <main className="welcome">
+          <p className="eyebrow">상담에 집중하는 시간</p>
+          <h1>
+            사진 한 장에서,
+            <br />
+            <em>더 깊은 상담으로.</em>
+          </h1>
+          <p className="intro">
+            환자의 이야기와 사진, 시술 계획을
+            <br />
+            하나의 공간에서 이어갑니다.
+          </p>
+          <div className="welcome-actions">
+            <button className="primary" onClick={() => setGuest(true)}>
+              <Camera /> 사진 촬영
+            </button>
+            <button onClick={() => setGuest(false)}>
+              <Users /> 상담 로그인
+            </button>
+          </div>
+          <span className="small">
+            사진 촬영은 로그인 없이 이용할 수 있습니다.
+          </span>
+        </main>
+        <section className="login-card">
+          <p className="eyebrow">
+            {guest
+              ? "PHOTO STUDIO"
+              : health.needsSetup
+                ? "INITIAL SETUP"
+                : "WELCOME BACK"}
+          </p>
+          <h2>
+            {guest
+              ? "상담 전 사진 준비"
+              : health.needsSetup
+                ? "첫 관리자 등록"
+                : "상담실에 오신 것을 환영합니다"}
+          </h2>
+          {guest ? (
+            <>
+              <input
+                aria-label="사진 촬영 또는 선택"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                multiple
+                onChange={(e) => {
+                  for (const file of Array.from(e.target.files || []))
+                    setGuestPhotos((p) => [
+                      ...p,
+                      { file, url: URL.createObjectURL(file) },
+                    ]);
+                }}
+              />
+              <div className="thumbnails">
+                {guestPhotos.map((p, i) => (
+                  <img key={i} src={p.url} alt={`촬영 ${i + 1}`} />
+                ))}
+              </div>
+              <p className="small">
+                로그인 후 환자 상담에 연결하세요. 이 화면의 미연결 사진은 현재
+                창에만 보관됩니다.
+              </p>
+              <button onClick={() => setGuest(false)}>로그인하고 연결</button>
+            </>
+          ) : (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const data = new FormData(e.currentTarget);
+                work(async () => {
+                  if (health.needsSetup) {
+                    await api("/setup", {
+                      method: "POST",
+                      body: JSON.stringify(Object.fromEntries(data)),
+                    });
+                    setHealth({ ...health, needsSetup: false });
+                    setNotice("관리자 등록 완료. 로그인하세요.");
+                    return;
+                  }
+                  const username = String(data.get("username")),
+                    password = String(data.get("password"));
+                  const d = await api("/login", {
+                    method: "POST",
+                    body: JSON.stringify({ username, password }),
+                  });
+                  setToken(d.token);
+                  if (data.get("trusted")) {
+                    await unlockVault(
+                      d.user.id,
+                      String(data.get("vaultPassword")),
+                    );
+                    const q = (await vaultRead<Command[]>("pending")) || [];
+                    setPending(q);
+                  }
+                  setUser(d.user);
+                  await refresh();
+                });
+              }}
+            >
+              {health.needsSetup && (
+                <>
+                  <Field label="초기 설정 키">
+                    <input
+                      name="key"
+                      type="password"
+                      required
+                      autoComplete="off"
+                    />
+                  </Field>
+                  <Field label="관리자 이름">
+                    <input name="name" required />
+                  </Field>
+                </>
+              )}
+              <Field label="아이디">
+                <input
+                  name="username"
+                  required
+                  autoComplete="username"
+                  placeholder="개인 계정 아이디"
+                />
+              </Field>
+              <Field label="비밀번호">
+                <input
+                  name="password"
+                  type="password"
+                  required
+                  minLength={health.needsSetup ? 12 : 1}
+                  autoComplete={
+                    health.needsSetup ? "new-password" : "current-password"
+                  }
+                  placeholder="비밀번호 입력"
+                />
+              </Field>
+              {!health.needsSetup && (
+                <details>
+                  <summary>병원 기기에서 오프라인 보관 사용</summary>
+                  <label className="check">
+                    <input name="trusted" type="checkbox" /> 이 기기에 암호화
+                    보관
+                  </label>
+                  <Field label="기기 보관 암호 (12자 이상)">
+                    <input
+                      name="vaultPassword"
+                      type="password"
+                      minLength={12}
+                    />
+                  </Field>
+                  <p className="small">
+                    계정 비밀번호와 별도로 설정하며, 잊으면 기기 대기 자료를
+                    복구할 수 없습니다.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = window.prompt(
+                          "이 기기에 마지막 로그인한 사용자 ID",
+                        ),
+                        pass = window.prompt("기기 보관 암호");
+                      if (id && pass)
+                        work(async () => {
+                          await unlockVault(id, pass);
+                          const cached =
+                            await vaultRead<CachedSession>("session");
+                          if (
+                            !cached ||
+                            Date.now() - cached.savedAt > 12 * 3600000
+                          )
+                            throw new Error(
+                              "오프라인 로그인 유효기간(12시간)이 지났습니다. 온라인 로그인하세요.",
+                            );
+                          setState(cached.state);
+                          setUser(cached.user);
+                          setPending(
+                            (await vaultRead<Command[]>("pending")) || [],
+                          );
+                          setNotice("오프라인 · 기기 보관 자료");
+                        });
+                    }}
+                  >
+                    오프라인 잠금 해제
+                  </button>
+                </details>
+              )}
+              <button className="primary full" disabled={busy}>
+                {busy
+                  ? "연결 중…"
+                  : health.needsSetup
+                    ? "관리자 등록"
+                    : "로그인"}{" "}
+                <ChevronRight size={18} />
+              </button>
+            </form>
+          )}
+          {error && (
+            <div className="error" role="alert">
+              {error}
+            </div>
+          )}
+          {notice && <p className="notice">{notice}</p>}
+          <p className="login-foot">
+            {health.mode === "local-development"
+              ? "개발 환경 · 실제 환자정보 입력 전 운영 연결 필요"
+              : "병원 직원 전용 · 안전한 상담 기록"}
+          </p>
+        </section>
+      </div>
+    );
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="logo">
+          <HeartHandshake />
+          <div>
+            코디메이트<small>GRAND CLINIC</small>
+          </div>
+        </div>
+        <p className="nav-label">WORKSPACE</p>
+        {[
+          ["patients", "환자목록", Users],
+          ["consultations", "상담이력", ClipboardList],
+          ["stats", "통계", BarChart3],
+          ["catalog", "단가표 관리", FileSpreadsheet],
+          ["settings", "설정", Settings],
+        ].map(([key, label, Icon]: any) => (
+          <button
+            key={key}
+            className={"nav-item " + (page === key ? "active" : "")}
+            onClick={() => {
+              setPage(key);
+              setConsultId("");
+              setPatientId("");
+            }}
+          >
+            <Icon size={20} />
+            {label}
+          </button>
+        ))}
+        <div className="sidebar-bottom">
+          <div className="avatar">{user.name.slice(0, 1)}</div>
+          <div>
+            <b>{user.name}</b>
+            <small>
+              {user.role === "admin"
+                ? "관리자"
+                : user.role === "doctor"
+                  ? "의사"
+                  : "코디네이터"}
+            </small>
+          </div>
+          <button aria-label="로그아웃" onClick={logout}>
+            <LogOut size={18} />
+          </button>
+        </div>
+      </aside>
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <span className="small">GRAND 아름다운의원</span>
+            <span className="today">
+              {new Date().toLocaleDateString("ko-KR", {
+                month: "long",
+                day: "numeric",
+                weekday: "long",
+              })}
+            </span>
+          </div>
+          <div className="top-actions">
+            <button onClick={() => setModal("recovery")}>복구 자료</button>
+            <button
+              onClick={() =>
+                work(async () => {
+                  const r = await api("/update");
+                  if (!r) throw new Error("게시된 업데이트가 없습니다.");
+                  if (
+                    window.confirm(
+                      `${r.version}\n${r.notes}\n업데이트 파일을 열까요?`,
+                    )
+                  ) {
+                    if (native)
+                      await NativeClinic.install({
+                        url: r.url,
+                        sha256: r.sha256,
+                      });
+                    else window.open(r.url, "_blank", "noopener,noreferrer");
+                  }
+                })
+              }
+            >
+              업데이트
+            </button>
+
+            <span className={"sync " + (pending.length ? "warning" : "")}>
+              <Cloud size={16} />
+              {pending.length
+                ? `기기 저장 · ${pending.length}건 대기`
+                : health.mode === "local-development"
+                  ? "개발 서버"
+                  : health.driveConnected
+                    ? "OneDrive 연결됨"
+                    : "OneDrive 연결 필요"}
+            </span>
+            {pending.length > 0 && <button onClick={sync}>재시도</button>}
+            <button
+              aria-label="의견 요청 알림"
+              onClick={() => setModal("opinions")}
+            >
+              <Bell size={20} />
+              <span>
+                {
+                  state.opinions.filter((o) => o.toId === user.id && !o.answer)
+                    .length
+                }
+              </span>
+            </button>
+          </div>
+        </header>
+        {error && (
+          <div className="error floating" role="alert">
+            {error}
+            <button onClick={() => setError("")}>닫기</button>
+          </div>
+        )}
+        {notice && (
+          <div className="notice" onClick={() => setNotice("")}>
+            {notice}
+          </div>
+        )}
+        <div className="content">
+          {page === "patients" &&
+            (patient ? (
+              <PatientDetail
+                patient={patient}
+                state={state}
+                user={user}
+                back={() => setPatientId("")}
+                start={() => newConsult(patient)}
+                send={(...args: Parameters<typeof send>) =>
+                  work(() => send(...args))
+                }
+                open={(c) => {
+                  setConsultId(c.id);
+                  setPage("consult");
+                  setTab("consult");
+                }}
+              />
+            ) : (
+              <Patients
+                state={state}
+                user={user}
+                select={setPatientId}
+                create={() => setModal("patient")}
+              />
+            ))}
+          {page === "consultations" && (
+            <>
+              <Title
+                title="상담이력"
+                description="함께 이어온 상담을 한눈에 확인하세요."
+              />
+              <div className="card">
+                {state.consultations.length ? (
+                  state.consultations
+                    .slice()
+                    .reverse()
+                    .map((c) => (
+                      <button
+                        className="list-row"
+                        key={c.id}
+                        onClick={() => {
+                          setConsultId(c.id);
+                          setPatientId(c.patientId);
+                          setPage("consult");
+                          setTab("consult");
+                        }}
+                      >
+                        <span>
+                          <b>{c.patient.name}</b>
+                          <small>
+                            {c.createdAt.slice(0, 10)} · {c.category}
+                          </small>
+                        </span>
+                        <span className={"badge " + c.status}>{status(c)}</span>
+                        <span>{money(c.quote.total)}</span>
+                        <ChevronRight />
+                      </button>
+                    ))
+                ) : (
+                  <Empty>환자목록에서 첫 상담을 시작하세요.</Empty>
+                )}
+              </div>
+            </>
+          )}
+          {page === "consult" && consult && (
+            <ConsultationView
+              key={consult.id + "-" + consult.rev}
+              consult={consult}
+              state={state}
+              user={user}
+              tab={tab}
+              setTab={setTab}
+              send={send}
+              work={work}
+              back={() => {
+                setPage("patients");
+                setPatientId(consult.patientId);
+                setConsultId("");
+              }}
+              guestPhotos={guestPhotos}
+              clearGuest={() => {
+                guestPhotos.forEach((p) => URL.revokeObjectURL(p.url));
+                setGuestPhotos([]);
+              }}
+            />
+          )}
+          {page === "catalog" && (
+            <CatalogView state={state} user={user} send={send} work={work} />
+          )}
+          {page === "stats" &&
+            (allowed(user, "stats.read") ? (
+              <Stats state={state} work={work} user={user} send={send} />
+            ) : (
+              <Empty>통계 열람 권한이 필요합니다.</Empty>
+            ))}
+          {page === "settings" && (
+            <SettingsView
+              state={state}
+              user={user}
+              send={send}
+              work={work}
+              refresh={refresh}
+              health={health}
+            />
+          )}
+        </div>
+      </main>
+      {busy && <div className="busy-bar" />}
+      {modal === "recovery" && (
+        <Modal title="미전송·충돌 자료 보관함" close={() => setModal("")}>
+          <RecoveryView pending={pending} state={state} />
+        </Modal>
+      )}
+      {modal === "patient" && (
+        <Modal title="새 환자 등록" close={() => setModal("")}>
+          <PatientForm
+            state={state}
+            save={(data) =>
+              work(async () => {
+                const id = crypto.randomUUID();
+                await send("patient.create", data, id);
+                setModal("");
+                setPatientId(id);
+              })
+            }
+          />
+        </Modal>
+      )}
+      {modal === "opinions" && (
+        <Modal title="의견 요청·답변" close={() => setModal("")}>
+          {state.opinions.length ? (
+            state.opinions
+              .slice()
+              .reverse()
+              .map((o) => (
+                <div className="card" key={o.id}>
+                  <b>
+                    {
+                      state.consultations.find((c) => c.id === o.consultationId)
+                        ?.patient.name
+                    }{" "}
+                    님
+                  </b>
+                  <p>{o.request}</p>
+                  {o.answer ? (
+                    <p className="notice">{o.answer}</p>
+                  ) : (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const answer = new FormData(e.currentTarget).get(
+                          "answer",
+                        );
+                        work(() =>
+                          send("opinion.answer", { answer }, o.id, o.rev),
+                        );
+                      }}
+                    >
+                      <textarea
+                        name="answer"
+                        required
+                        placeholder="의견을 작성하세요"
+                      />
+                      <button className="primary">답변 저장</button>
+                    </form>
+                  )}
+                </div>
+              ))
+          ) : (
+            <Empty>의견 요청이 없습니다.</Empty>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+}
+function Title({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-title">
+      <div>
+        <p className="eyebrow">CODIMATE WORKSPACE</p>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function Patients({
+  state,
+  user,
+  select,
+  create,
+}: {
+  state: State;
+  user: User;
+  select: (id: string) => void;
+  create: () => void;
+}) {
+  const [search, setSearch] = useState(""),
+    [grade, setGrade] = useState(""),
+    [sort, setSort] = useState("recent"),
+    [unpaid, setUnpaid] = useState(false),
+    [owner, setOwner] = useState(""),
+    [consultStatus, setConsultStatus] = useState(""),
+    [since, setSince] = useState("");
+  const ps = state.patients
+    .filter((p) => !p.mergedInto && !p.archived)
+    .map((p) => ({
+      p,
+      m: metrics(state, p.id),
+      g: gradeFor(state, p),
+      cs: state.consultations.filter((c) => c.patientId === p.id),
+    }))
+    .filter(
+      ({ p, g, m, cs }) =>
+        [p.name, p.phone, p.dob, p.id].some((x) =>
+          x.toLowerCase().includes(search.toLowerCase()),
+        ) &&
+        (!owner ||
+          p.ownerId === owner ||
+          cs.some((c) => c.ownerId === owner)) &&
+        (!consultStatus ||
+          cs.some((c) => c.status === consultStatus && !c.cancelled)) &&
+        (!since || cs.some((c) => c.createdAt.slice(0, 10) >= since)) &&
+        (!grade || g.id === grade) &&
+        (!unpaid || m.outstanding > 0),
+    )
+    .sort((a, b) =>
+      sort === "revenue"
+        ? b.m.revenue - a.m.revenue
+        : sort === "name"
+          ? a.p.name.localeCompare(b.p.name)
+          : (b.cs.at(-1)?.createdAt || b.p.createdAt).localeCompare(
+              a.cs.at(-1)?.createdAt || a.p.createdAt,
+            ),
+    );
+  return (
+    <>
+      <Title
+        title="환자목록"
+        description="환자의 이야기와 상담 기록을 한곳에서 이어가세요."
+        action={
+          <button className="primary" onClick={create}>
+            <Plus size={20} />새 환자 등록
+          </button>
+        }
+      />
+      <div className="summary-grid">
+        <Summary
+          label="전체 환자"
+          value={`${state.patients.filter((p) => !p.mergedInto).length}명`}
+          detail="함께하고 있는 환자"
+        />
+        <Summary
+          label="보류 상담"
+          value={`${state.consultations.filter((c) => c.status === "H").length}건`}
+          detail="이어서 상담할 기록"
+        />
+        <Summary
+          label="기여매출"
+          value={
+            allowed(user, "money.read")
+              ? money(
+                  state.patients
+                    .filter((p) => !p.mergedInto)
+                    .reduce((a, p) => a + metrics(state, p.id).revenue, 0),
+                )
+              : "권한 필요"
+          }
+          detail="실수납 − 실제 환불"
+        />
+      </div>
+      <div className="card">
+        <div className="table-toolbar">
+          <div className="search">
+            <Search size={19} />
+            <input
+              aria-label="환자 검색"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="이름, 전화번호, 생년월일로 검색"
+            />
+          </div>
+          <select
+            aria-label="등급 필터"
+            value={grade}
+            onChange={(e) => setGrade(e.target.value)}
+          >
+            <option value="">모든 등급</option>
+            {state.policies[0]?.grades.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="정렬"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+          >
+            <option value="recent">최근 상담순</option>
+            <option value="name">이름순</option>
+            <option value="revenue">기여매출순</option>
+          </select>
+          <select
+            aria-label="담당 직원 필터"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+          >
+            <option value="">모든 직원</option>
+            {state.users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="상담 상태 필터"
+            value={consultStatus}
+            onChange={(e) => setConsultStatus(e.target.value)}
+          >
+            <option value="">모든 상태</option>
+            <option value="H">보류</option>
+            <option value="P">성공</option>
+            <option value="F">실패</option>
+          </select>
+          <input
+            aria-label="상담 시작일 필터"
+            title="이 날짜 이후 상담한 환자"
+            type="date"
+            value={since}
+            onChange={(e) => setSince(e.target.value)}
+          />
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={unpaid}
+              onChange={(e) => setUnpaid(e.target.checked)}
+            />
+            미납
+          </label>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>환자</th>
+                <th>연락처</th>
+                <th>최근 상담</th>
+                <th>계약금액</th>
+                <th>기여매출</th>
+                <th>미수금</th>
+                <th>등급</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {ps.map(({ p, m, g, cs }) => (
+                <tr
+                  key={p.id}
+                  onClick={() => select(p.id)}
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === "Enter" && select(p.id)}
+                >
+                  <td>
+                    <div className="person">
+                      <span className="patient-avatar">{p.name[0]}</span>
+                      <span>
+                        <b>{p.name}</b>
+                        <small>
+                          {age(p.dob)}세 ·{" "}
+                          {p.sex === "M"
+                            ? "남성"
+                            : p.sex === "F"
+                              ? "여성"
+                              : "미상"}{" "}
+                          · 상담 {cs.length}건
+                        </small>
+                      </span>
+                    </div>
+                  </td>
+                  <td>{p.phone}</td>
+                  <td>{cs.at(-1)?.createdAt.slice(0, 10) || "—"}</td>
+                  <td>
+                    {allowed(user, "money.read") ? money(m.contract) : "—"}
+                  </td>
+                  <td className="emphasis">
+                    {allowed(user, "money.read") ? money(m.revenue) : "—"}
+                  </td>
+                  <td>
+                    {allowed(user, "money.read") ? money(m.outstanding) : "—"}
+                  </td>
+                  <td>
+                    <span className="grade" style={{ color: g.color }}>
+                      {g.name}
+                    </span>
+                  </td>
+                  <td>
+                    <ChevronRight size={18} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {!ps.length && (
+          <Empty>
+            등록된 환자가 없습니다. 새 환자를 등록해 상담을 시작하세요.
+          </Empty>
+        )}
+      </div>
+    </>
+  );
+}
+function Summary({
+  label,
+  value,
+  detail,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <div className="summary">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+function PatientForm({
+  state,
+  patient,
+  save,
+}: {
+  state: State;
+  patient?: Patient;
+  save: (data: Record<string, unknown>) => void;
+}) {
+  const [data, setData] = useState({
+    name: patient?.name || "",
+    sex: patient?.sex || "F",
+    dob: patient?.dob || "",
+    phone: patient?.phone || "",
+    address: patient?.address || "",
+  });
+  const found = duplicates(state, data).filter((p) => p.id !== patient?.id);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (
+          found.length &&
+          !window.confirm(
+            "기존 환자 후보가 있습니다. 별도의 환자로 등록할까요?",
+          )
+        )
+          return;
+        save(data);
+      }}
+    >
+      <div className="form-grid">
+        {[
+          ["name", "이름"],
+          ["dob", "생년월일"],
+          ["phone", "전화번호"],
+          ["address", "주소 (동까지)"],
+        ].map(([k, label]) => (
+          <Field key={k} label={label}>
+            <input
+              type={k === "dob" ? "date" : "text"}
+              value={data[k as keyof typeof data]}
+              required
+              onChange={(e) => setData({ ...data, [k]: e.target.value })}
+            />
+          </Field>
+        ))}
+        <Field label="성별">
+          <select
+            value={data.sex}
+            onChange={(e) =>
+              setData({ ...data, sex: e.target.value as Patient["sex"] })
+            }
+          >
+            <option value="F">여성</option>
+            <option value="M">남성</option>
+            <option value="U">미상</option>
+          </select>
+        </Field>
+      </div>
+      {found.length > 0 && (
+        <div className="warning-panel">
+          기존 환자 후보:{" "}
+          {found.map((p) => `${p.name} (${p.dob}, ${p.phone})`).join(", ")}
+          <p>동명이인·가족 연락처는 자동 병합하지 않습니다.</p>
+        </div>
+      )}
+      <button className="primary">저장</button>
+    </form>
+  );
+}
+function PatientDetail({
+  patient: p,
+  state: s,
+  user,
+  back,
+  start,
+  send,
+  open,
+}: {
+  patient: Patient;
+  state: State;
+  user: User;
+  back: () => void;
+  start: () => void;
+  send: (...args: any[]) => any;
+  open: (c: Consultation) => void;
+}) {
+  const [tab, setTab] = useState("history"),
+    [edit, setEdit] = useState(false);
+  const m = metrics(s, p.id),
+    g = gradeFor(s, p),
+    cs = s.consultations.filter((c) => c.patientId === p.id);
+  return (
+    <>
+      <button className="back" onClick={back}>
+        <ArrowLeft size={18} />
+        환자목록
+      </button>
+      <Title
+        title={`${p.name} 님`}
+        description={`${age(p.dob)}세 · ${p.dob} · ${p.phone}`}
+        action={
+          <button className="primary" onClick={start}>
+            <Plus size={18} />새 상담 시작
+          </button>
+        }
+      />
+      <div className="patient-banner">
+        <span className="grade" style={{ color: g.color }}>
+          {g.name} · {g.manual ? "관리자 지정" : "자동 산정"}
+        </span>
+        <span>{p.address}</span>
+        <small>환자번호 {p.id}</small>
+        {allowed(user, "patient.edit") && (
+          <button onClick={() => setEdit(true)}>정보 수정</button>
+        )}
+      </div>
+      {allowed(user, "money.read") && (
+        <div className="summary-grid four">
+          <Summary
+            label="유효 계약금액"
+            value={money(m.contract)}
+            detail="취소 계약 제외"
+          />
+          <Summary
+            label="기여매출"
+            value={money(m.revenue)}
+            detail={`수납 ${money(m.receipts)} − 환불 ${money(m.refunds)}`}
+          />
+          <Summary
+            label="미수금"
+            value={money(m.outstanding)}
+            detail="상담별 잔액 합계"
+          />
+          <Summary
+            label="상담 횟수"
+            value={`${cs.length}건`}
+            detail={`성공 ${cs.filter((c) => c.status === "P" && !c.cancelled).length}건`}
+          />
+        </div>
+      )}
+      <div className="tabs">
+        {[
+          ["history", "상담·타임라인"],
+          ["money", "수납·환불"],
+          ["notes", "환자 메모"],
+          ["grade", "등급·관리"],
+        ].map(([k, l]) => (
+          <button
+            className={tab === k ? "active" : ""}
+            key={k}
+            onClick={() => setTab(k)}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {tab === "history" && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>상담이력</h3>
+            {cs.length ? (
+              cs
+                .slice()
+                .reverse()
+                .map((c) => (
+                  <button
+                    className="list-row"
+                    key={c.id}
+                    onClick={() => open(c)}
+                  >
+                    <span>
+                      <b>{c.category} 상담</b>
+                      <small>{c.createdAt.slice(0, 10)}</small>
+                    </span>
+                    <span className={"badge " + c.status}>{status(c)}</span>
+                    <span>{money(c.quote.total)}</span>
+                    <ChevronRight size={18} />
+                  </button>
+                ))
+            ) : (
+              <Empty>아직 상담이 없습니다.</Empty>
+            )}
+          </div>
+          <div className="card">
+            <h3>활동 타임라인</h3>
+            {s.events
+              .filter((e) => e.patientId === p.id)
+              .slice()
+              .reverse()
+              .map((e) => (
+                <div className="timeline" key={e.id}>
+                  <span className="dot" />
+                  <div>
+                    <b>{e.text}</b>
+                    <small>
+                      {new Date(e.createdAt).toLocaleString("ko-KR")} ·{" "}
+                      {s.users.find((u) => u.id === e.actorId)?.name}
+                    </small>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+      {tab === "notes" && allowed(user, "note.read") && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>환자 메모</h3>
+            {s.notes
+              .filter((n) => n.patientId === p.id)
+              .map((n) => (
+                <article className="note" key={n.id}>
+                  <b>{n.important ? "★ 중요 메모" : "메모"}</b>
+                  <p>{n.text}</p>
+                  <small>
+                    {s.users.find((u) => u.id === n.authorId)?.name} ·{" "}
+                    {n.updatedAt.slice(0, 10)}
+                  </small>
+                  {(n.authorId === user.id || user.role === "admin") && (
+                    <button
+                      onClick={() => {
+                        const text = window.prompt("메모 수정", n.text);
+                        if (text)
+                          send(
+                            "note.save",
+                            { patientId: p.id, text, important: n.important },
+                            n.id,
+                            n.rev,
+                          );
+                      }}
+                    >
+                      수정
+                    </button>
+                  )}
+                </article>
+              ))}
+          </div>
+          {allowed(user, "note.edit") && (
+            <form
+              className="card"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const d = new FormData(e.currentTarget);
+                send("note.save", {
+                  patientId: p.id,
+                  text: d.get("text"),
+                  important: !!d.get("important"),
+                });
+                e.currentTarget.reset();
+              }}
+            >
+              <h3>메모 남기기</h3>
+              <textarea
+                name="text"
+                required
+                placeholder="상담 선호, 연락 요청 등 다음 상담에 필요한 내용을 남기세요."
+              />
+              <label className="check">
+                <input type="checkbox" name="important" />
+                중요 표시
+              </label>
+              <button className="primary">메모 저장</button>
+            </form>
+          )}
+        </div>
+      )}
+      {tab === "money" && allowed(user, "money.read") && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>수납·환불 기록</h3>
+            {s.ledger
+              .filter((l) => l.patientId === p.id)
+              .slice()
+              .reverse()
+              .map((l) => (
+                <div className="list-row" key={l.id}>
+                  <span>
+                    <b>
+                      {
+                        {
+                          receipt: "수납",
+                          refund: "환불",
+                          reversal: "정정 취소",
+                        }[l.kind]
+                      }{" "}
+                      · {money(l.amount)}
+                    </b>
+                    <small>
+                      {l.date} · {l.method} · {l.memo}
+                    </small>
+                  </span>
+                  {l.kind !== "reversal" &&
+                    allowed(user, "ledger.correct") &&
+                    activeLedger(s).some((x) => x.id === l.id) && (
+                      <button
+                        onClick={() => {
+                          const memo = window.prompt("정정 사유");
+                          if (memo)
+                            send("ledger.create", {
+                              kind: "reversal",
+                              consultationId: l.consultationId,
+                              originalId: l.id,
+                              amount: l.amount,
+                              date: date(),
+                              method: l.method,
+                              memo,
+                            });
+                        }}
+                      >
+                        정정
+                      </button>
+                    )}
+                </div>
+              ))}
+          </div>
+          <LedgerForm state={s} patient={p} send={send} />
+        </div>
+      )}
+      {tab === "grade" && (
+        <div className="card">
+          <h3>환자 등급</h3>
+          <p>
+            누적 기여매출 {money(m.revenue)} · 현재 {g.name} (
+            {g.manual ? "관리자 지정" : "자동 산정"})
+          </p>
+          {allowed(user, "grade.edit") && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const d = new FormData(e.currentTarget);
+                send(
+                  "grade.override",
+                  { gradeId: d.get("gradeId"), reason: d.get("reason") },
+                  p.id,
+                  p.rev,
+                );
+              }}
+            >
+              <Field label="등급">
+                <select name="gradeId">
+                  <option value="">자동 산정으로 복귀</option>
+                  {s.policies[0]?.grades.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="지정 사유">
+                <input name="reason" />
+              </Field>
+              <button className="primary">등급 적용</button>
+            </form>
+          )}
+          {user.role === "admin" && (
+            <details>
+              <summary>중복 환자 병합</summary>
+              <p>
+                이 환자의 상담·수납·이력을 선택한 환자에게 연결합니다. 실제 중복
+                수납은 별도로 정정하세요.
+              </p>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const d = new FormData(e.currentTarget);
+                  if (
+                    window.confirm(
+                      "환자정보와 이력을 확인했나요? 병합 이력이 남습니다.",
+                    )
+                  )
+                    send(
+                      "patient.merge",
+                      { targetId: d.get("targetId"), reason: d.get("reason") },
+                      p.id,
+                      p.rev,
+                    );
+                }}
+              >
+                <select name="targetId">
+                  {s.patients
+                    .filter((x) => x.id !== p.id && !x.mergedInto)
+                    .map((x) => (
+                      <option value={x.id} key={x.id}>
+                        {x.name} · {x.dob} · {x.phone}
+                      </option>
+                    ))}
+                </select>
+                <input name="reason" required placeholder="병합 사유" />
+                <button>병합</button>
+              </form>
+            </details>
+          )}
+        </div>
+      )}
+      {edit && (
+        <Modal title="환자정보 수정" close={() => setEdit(false)}>
+          <PatientForm
+            state={s}
+            patient={p}
+            save={(d) => {
+              send("patient.update", d, p.id, p.rev);
+              setEdit(false);
+            }}
+          />
+        </Modal>
+      )}
+    </>
+  );
+}
+function LedgerForm({
+  state: s,
+  patient: p,
+  send,
+}: {
+  state: State;
+  patient: Patient;
+  send: (...args: any[]) => any;
+}) {
+  const [kind, setKind] = useState("receipt");
+  return (
+    <form
+      className="card"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const d = Object.fromEntries(new FormData(e.currentTarget));
+        send("ledger.create", { ...d, amount: Number(d.amount) });
+      }}
+    >
+      <h3>금액 기록</h3>
+      <Field label="구분">
+        <select
+          name="kind"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+        >
+          <option value="receipt">수납</option>
+          <option value="refund">환불</option>
+        </select>
+      </Field>
+      <Field label="연결 상담">
+        <select name="consultationId" required>
+          {s.consultations
+            .filter((c) => c.patientId === p.id && c.status === "P")
+            .map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.createdAt.slice(0, 10)} · {c.category} ·{" "}
+                {money(c.quote.total)}
+                {c.cancelled ? " (취소)" : ""}
+              </option>
+            ))}
+        </select>
+      </Field>
+      {kind === "refund" && (
+        <Field label="원수납">
+          <select name="originalId" required>
+            {activeLedger(s)
+              .filter((l) => l.patientId === p.id && l.kind === "receipt")
+              .map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.date} · {money(l.amount)}
+                </option>
+              ))}
+          </select>
+        </Field>
+      )}
+      <div className="form-grid">
+        <Field label="금액">
+          <input name="amount" type="number" min={1} required />
+        </Field>
+        <Field label="처리일">
+          <input name="date" type="date" defaultValue={date()} required />
+        </Field>
+        <Field label="방법">
+          <select name="method">
+            <option>카드</option>
+            <option>현금</option>
+            <option>계좌이체</option>
+            <option>기타</option>
+          </select>
+        </Field>
+        <Field label="메모·사유">
+          <input name="memo" required={kind === "refund"} />
+        </Field>
+      </div>
+      <button className="primary">기록 확정</button>
+      <p className="small">온라인 확인 후 기여매출·미수금·등급에 반영됩니다.</p>
+    </form>
+  );
+}
+function ConsultationView({
+  consult: c,
+  state: s,
+  user,
+  tab,
+  setTab,
+  send,
+  work,
+  back,
+  guestPhotos,
+  clearGuest,
+}: {
+  consult: Consultation;
+  state: State;
+  user: User;
+  tab: string;
+  setTab: (t: string) => void;
+  send: (...args: any[]) => Promise<any>;
+  work: (f: () => Promise<any>) => any;
+  back: () => void;
+  guestPhotos: { url: string; file: File }[];
+  clearGuest: () => void;
+}) {
+  const [draft, setDraft] = useState(c),
+    [search, setSearch] = useState(""),
+    [category, setCategory] = useState(""),
+    [photoIndex, setPhotoIndex] = useState(0),
+    [ratio, setRatio] = useState(50),
+    [sig, setSig] = useState(""),
+    [template, setTemplate] = useState(""),
+    [checks, setChecks] = useState<string[]>([]),
+    [signer, setSigner] = useState(c.patient.name),
+    [compare, setCompare] = useState(false);
+  const catalog =
+    s.catalogs.find((x) => x.version === draft.catalogVersion) ||
+    latestCatalog(s);
+  const readonly = !(
+    user.role === "admin" ||
+    (c.status === "H" && c.ownerId === user.id)
+  );
+  const products = (catalog?.products || []).filter(
+    (p) =>
+      p.active &&
+      (!category || p.category === category) &&
+      [p.name, p.category, p.description].some((t) =>
+        t.toLowerCase().includes(search.toLowerCase()),
+      ),
+  );
+  let quote = draft.quote;
+  let quoteError = "";
+  try {
+    quote = calculate(
+      draft.quote.lines,
+      draft.quote.discount,
+      draft.quote.vat,
+      draft.quote.reason,
+    );
+  } catch (e) {
+    quoteError = (e as Error).message;
+  }
+  const [draftReady, setDraftReady] = useState(false);
+  const [localSaved, setLocalSaved] = useState(false);
+  useEffect(() => {
+    let active = true;
+    vaultRead<Consultation>("draft:" + c.id)
+      .then((saved) => {
+        if (!active) return;
+        if (
+          saved &&
+          JSON.stringify(saved) !== JSON.stringify(c) &&
+          window.confirm(
+            saved.rev === c.rev
+              ? "이 기기에 저장된 상담 초안을 이어서 작성할까요?"
+              : "서버에 새 버전이 있습니다. 기기 초안을 열어 비교할까요? 저장 시 충돌 검사를 진행합니다.",
+          )
+        )
+          setDraft(saved);
+        setDraftReady(true);
+      })
+      .catch(() => setDraftReady(true));
+    return () => {
+      active = false;
+    };
+  }, [c.id, c.rev]);
+  useEffect(() => {
+    if (!draftReady || !vaultEnabled()) return;
+    setLocalSaved(false);
+    const t = setTimeout(() => {
+      vaultWrite("draft:" + c.id, draft).then(() => setLocalSaved(true));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [draft, draftReady]);
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!localSaved && JSON.stringify(draft) !== JSON.stringify(c)) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [draft, localSaved]);
+  const photo = draft.photos[photoIndex];
+  const updateQuote = (patch: Partial<typeof draft.quote>) =>
+    setDraft({ ...draft, quote: { ...draft.quote, ...patch } });
+  const save = () => {
+    if (quoteError) throw new Error(quoteError);
+    return send(
+      "consultation.save",
+      {
+        lines: draft.quote.lines,
+        discount: draft.quote.discount,
+        vat: draft.quote.vat,
+        memo: draft.memo,
+        photos: draft.photos,
+        reason: draft.quote.reason,
+        catalogVersion: draft.catalogVersion,
+      },
+      c.id,
+      draft.rev,
+    );
+  };
+  const addPhotos = (files: File[]) =>
+    work(async () => {
+      const next = [...draft.photos];
+      for (const file of files) {
+        const { id } = await upload(file, file.name, c.id);
+        next.push({
+          id: crypto.randomUUID(),
+          name: file.name,
+          mediaId: id,
+          rotation: 0,
+          selected: true,
+          annotations: [],
+        });
+      }
+      setDraft({ ...draft, photos: next });
+      clearGuest();
+    });
+  const author = s.users.find((u) => u.id === c.ownerId) || user;
+  const pdf = async (statusOverride?: "P" | "F") => {
+    const images = [];
+    for (const p of draft.photos.filter((p) => p.selected)) {
+      const b = await annotatedBlob(p);
+      images.push({ bytes: await b.arrayBuffer(), type: b.type });
+    }
+    return consultationPDF(
+      { ...draft, quote, status: statusOverride || draft.status },
+      author,
+      images,
+      s.signatures.filter((x) => x.consultationId === c.id),
+      s.opinions.filter((x) => x.consultationId === c.id),
+    );
+  };
+  return (
+    <>
+      {quoteError && (
+        <div className="error" role="alert">
+          {quoteError}
+        </div>
+      )}
+      {localSaved && (
+        <p className="small">
+          기기 초안 저장됨 · 공유하려면 보류 저장을 눌러주세요
+        </p>
+      )}
+      <button className="back" onClick={back}>
+        <ArrowLeft size={18} />
+        환자 상세
+      </button>
+      <Title
+        title={`${c.patient.name} 님의 상담`}
+        description={`${c.category} · ${age(c.patient.dob)}세 · ${status(c)} · ${c.createdAt.slice(0, 10)}`}
+        action={
+          <>
+            <span className={"badge " + c.status}>{status(c)}</span>
+            <button
+              className="primary"
+              disabled={readonly}
+              onClick={() => work(save)}
+            >
+              <Check size={18} />
+              보류·변경 저장
+            </button>
+          </>
+        }
+      />
+      <div className="tabs">
+        {[
+          ["photo", "01  사진"],
+          ["consult", "02  상담"],
+          ["quote", "03  견적서"],
+        ].map(([t, l]) => (
+          <button
+            key={t}
+            className={tab === t ? "active" : ""}
+            onClick={() => setTab(t)}
+          >
+            {l}
+          </button>
+        ))}
+        <div className="tab-spacer" />
+        <select
+          aria-label="화면 방향"
+          onChange={async (e) => {
+            const { Capacitor } = await import("@capacitor/core");
+            if (Capacitor.isNativePlatform()) {
+              const { ScreenOrientation } =
+                await import("@capacitor/screen-orientation");
+              if (e.target.value === "auto") await ScreenOrientation.unlock();
+              else
+                await ScreenOrientation.lock({
+                  orientation: e.target.value as "portrait" | "landscape",
+                });
+            }
+          }}
+        >
+          <option value="auto">자동회전</option>
+          <option value="landscape">가로 고정</option>
+          <option value="portrait">세로 고정</option>
+        </select>
+      </div>
+      {(tab === "photo" || tab === "consult") && (
+        <div
+          className={"consult-layout " + (tab === "photo" ? "photo-only" : "")}
+          style={
+            {
+              "--split": ratio + "%",
+              "--photo-height": ratio + "vh",
+            } as React.CSSProperties
+          }
+        >
+          <section className="card photo-panel">
+            <div className="section-title">
+              <h3>
+                상담 사진 <small>{draft.photos.length}장</small>
+              </h3>
+              {native && (
+                <button
+                  disabled={readonly}
+                  onClick={() =>
+                    work(async () => addPhotos([await takePhoto()]))
+                  }
+                >
+                  <Camera size={18} />
+                  카메라
+                </button>
+              )}
+              <label className="button">
+                <Camera size={18} />
+                촬영·추가
+                <input
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  disabled={readonly}
+                  onChange={(e) => addPhotos(Array.from(e.target.files || []))}
+                />
+              </label>
+            </div>
+            {user.role === "doctor" && (
+              <button
+                onClick={() =>
+                  work(() =>
+                    send(
+                      "consultation.annotate",
+                      { photos: draft.photos },
+                      c.id,
+                      c.rev,
+                    ),
+                  )
+                }
+              >
+                내 주석 저장
+              </button>
+            )}
+            {guestPhotos.length > 0 && (
+              <button onClick={() => addPhotos(guestPhotos.map((p) => p.file))}>
+                로그인 전 촬영한 {guestPhotos.length}장 연결
+              </button>
+            )}
+            <div className="photo-picker">
+              {draft.photos.map((p, i) => (
+                <button
+                  key={p.id}
+                  className={i === photoIndex ? "selected" : ""}
+                  onClick={() => setPhotoIndex(i)}
+                >
+                  {i + 1}. {p.name.slice(0, 15)}
+                  {p.selected ? " ✓" : ""}
+                </button>
+              ))}
+            </div>
+            {photo ? (
+              <>
+                <PhotoEditor
+                  photo={photo}
+                  userId={user.id}
+                  readonly={readonly && user.role !== "doctor"}
+                  onChange={(p) =>
+                    setDraft({
+                      ...draft,
+                      photos: draft.photos.map((x) => (x.id === p.id ? p : x)),
+                    })
+                  }
+                />
+                <div className="editor-tools">
+                  <label className="check">
+                    <input
+                      type="checkbox"
+                      disabled={readonly}
+                      checked={photo.selected}
+                      onChange={(e) =>
+                        setDraft({
+                          ...draft,
+                          photos: draft.photos.map((x) =>
+                            x.id === photo.id
+                              ? { ...x, selected: e.target.checked }
+                              : x,
+                          ),
+                        })
+                      }
+                    />
+                    상담·출력에 포함
+                  </label>
+                  <button onClick={() => setCompare(!compare)}>
+                    사진 비교
+                  </button>
+                  {!readonly && (
+                    <button
+                      onClick={() => {
+                        if (photoIndex > 0) {
+                          const photos = [...draft.photos];
+                          [photos[photoIndex - 1], photos[photoIndex]] = [
+                            photos[photoIndex],
+                            photos[photoIndex - 1],
+                          ];
+                          setDraft({ ...draft, photos });
+                          setPhotoIndex(photoIndex - 1);
+                        }
+                      }}
+                    >
+                      앞으로 이동
+                    </button>
+                  )}
+                </div>
+                {compare && draft.photos.length > 1 && (
+                  <PhotoEditor
+                    photo={draft.photos[(photoIndex + 1) % draft.photos.length]}
+                    userId={user.id}
+                    readonly
+                    onChange={() => {}}
+                  />
+                )}
+              </>
+            ) : (
+              <Empty>
+                사진을 촬영하거나 업로드하세요.
+                <br />
+                사진 없이도 상담을 진행할 수 있습니다.
+              </Empty>
+            )}
+            {tab === "consult" && (
+              <Field label="사진·장바구니 비율">
+                <input
+                  type="range"
+                  min={25}
+                  max={75}
+                  value={ratio}
+                  onChange={(e) => setRatio(Number(e.target.value))}
+                />
+              </Field>
+            )}
+          </section>
+          {tab === "consult" && (
+            <div
+              className="split-handle"
+              role="separator"
+              tabIndex={0}
+              aria-label="사진과 장바구니 분할선"
+              aria-valuenow={ratio}
+              aria-valuemin={25}
+              aria-valuemax={75}
+              onKeyDown={(e) => {
+                if (["ArrowLeft", "ArrowUp"].includes(e.key))
+                  setRatio(Math.max(25, ratio - 5));
+                if (["ArrowRight", "ArrowDown"].includes(e.key))
+                  setRatio(Math.min(75, ratio + 5));
+              }}
+              onPointerDown={(e) =>
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }
+              onPointerMove={(e) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                const parent = e.currentTarget.parentElement!;
+                const r = parent.getBoundingClientRect();
+                const vertical =
+                  getComputedStyle(parent).flexDirection === "column";
+                setRatio(
+                  Math.round(
+                    Math.max(
+                      25,
+                      Math.min(
+                        75,
+                        100 *
+                          (vertical
+                            ? (e.clientY - r.top) / r.height
+                            : (e.clientX - r.left) / r.width),
+                      ),
+                    ),
+                  ),
+                );
+              }}
+            >
+              ⋮
+            </div>
+          )}
+          {tab === "consult" && (
+            <section className="catalog-panel">
+              <div className="card">
+                <div className="section-title">
+                  <h3>시술 선택</h3>
+                  <small>
+                    단가표 {catalog?.publishedAt?.slice(0, 10) || "미게시"}
+                  </small>
+                </div>
+                <div className="search">
+                  <Search size={18} />
+                  <input
+                    aria-label="시술 검색"
+                    placeholder="시술명 또는 설명 검색"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </div>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                >
+                  <option value="">모든 카테고리</option>
+                  {[...new Set(catalog?.products.map((p) => p.category))].map(
+                    (c) => (
+                      <option key={c}>{c}</option>
+                    ),
+                  )}
+                </select>
+                <div className="product-list">
+                  {products.slice(0, 70).map((p) => (
+                    <div className="product" key={p.id}>
+                      <b>{p.name}</b>
+                      <small>{p.category}</small>
+                      <details>
+                        <summary>구성·설명</summary>
+                        <p>{p.description}</p>
+                        <p>{p.composition}</p>
+                      </details>
+                      {p.options.map((o) => (
+                        <button
+                          className="option-row"
+                          disabled={readonly || o.review || o.price === null}
+                          key={o.id}
+                          onClick={() => {
+                            const line = {
+                              id: crypto.randomUUID(),
+                              productId: p.id,
+                              optionId: o.id,
+                              name: p.name,
+                              label: o.label,
+                              quantity: 1,
+                              unit: o.unit,
+                              price: o.price!,
+                              tax: o.tax,
+                              discount: { kind: "amount" as const, value: 0 },
+                            };
+                            updateQuote({
+                              lines: [...draft.quote.lines, line],
+                            });
+                          }}
+                        >
+                          <span>{o.label}</span>
+                          <b>
+                            {o.review
+                              ? "확인 필요"
+                              : o.price === null
+                                ? "별도 견적"
+                                : money(o.price)}
+                          </b>
+                          <Plus size={16} />
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                {!products.length && (
+                  <Empty>
+                    게시된 판매상품이 없습니다.
+                    <br />
+                    관리자 단가표에서 검토 후 게시하세요.
+                  </Empty>
+                )}
+              </div>
+              <div className="card">
+                <h3>
+                  장바구니 <small>{draft.quote.lines.length}개</small>
+                </h3>
+                {draft.quote.lines.map((l, i) => (
+                  <div className="cart-line" key={l.id}>
+                    <b>{l.name}</b>
+                    <small>
+                      {l.label} · {money(l.price)} ·{" "}
+                      {l.tax === "inclusive"
+                        ? "VAT 포함"
+                        : l.tax === "exempt"
+                          ? "면세"
+                          : "VAT 별도"}
+                    </small>
+                    <div className="inline-fields">
+                      <Field label="수량">
+                        <input
+                          type="number"
+                          min={0.1}
+                          step={0.1}
+                          disabled={readonly}
+                          value={l.quantity}
+                          onChange={(e) => {
+                            const lines = [...draft.quote.lines];
+                            lines[i] = {
+                              ...l,
+                              quantity: Math.max(0.1, Number(e.target.value)),
+                            };
+                            updateQuote({ lines });
+                          }}
+                        />
+                      </Field>
+                      <Field label="할인">
+                        <input
+                          type="number"
+                          min={0}
+                          disabled={readonly}
+                          value={l.discount.value}
+                          onChange={(e) => {
+                            const lines = [...draft.quote.lines];
+                            lines[i] = {
+                              ...l,
+                              discount: {
+                                ...l.discount,
+                                value: Number(e.target.value),
+                              },
+                            };
+                            updateQuote({ lines });
+                          }}
+                        />
+                      </Field>
+                      <select
+                        value={l.discount.kind}
+                        disabled={readonly}
+                        onChange={(e) => {
+                          const lines = [...draft.quote.lines];
+                          lines[i] = {
+                            ...l,
+                            discount: {
+                              ...l.discount,
+                              kind: e.target.value as "amount" | "percent",
+                            },
+                          };
+                          updateQuote({ lines });
+                        }}
+                      >
+                        <option value="amount">원</option>
+                        <option value="percent">%</option>
+                      </select>
+                      <button
+                        disabled={readonly}
+                        onClick={() =>
+                          updateQuote({
+                            lines: draft.quote.lines.filter(
+                              (x) => x.id !== l.id,
+                            ),
+                          })
+                        }
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="inline-fields">
+                  <Field label="전체 할인">
+                    <input
+                      type="number"
+                      min={0}
+                      value={draft.quote.discount.value}
+                      disabled={readonly}
+                      onChange={(e) =>
+                        updateQuote({
+                          discount: {
+                            ...draft.quote.discount,
+                            value: Number(e.target.value),
+                          },
+                        })
+                      }
+                    />
+                  </Field>
+                  <select
+                    value={draft.quote.discount.kind}
+                    onChange={(e) =>
+                      updateQuote({
+                        discount: {
+                          ...draft.quote.discount,
+                          kind: e.target.value as "amount" | "percent",
+                        },
+                      })
+                    }
+                  >
+                    <option value="amount">원</option>
+                    <option value="percent">%</option>
+                  </select>
+                </div>
+                <Field label="부가세 안내">
+                  <select
+                    disabled={readonly}
+                    value={draft.quote.vat}
+                    onChange={(e) =>
+                      updateQuote({
+                        vat: e.target.value as "separate" | "included",
+                      })
+                    }
+                  >
+                    <option value="separate">별도 추가 (포함 상품 제외)</option>
+                    <option value="included">포함 금액으로 안내</option>
+                  </select>
+                </Field>
+                <Field label="할인·변경 사유">
+                  <input
+                    value={draft.quote.reason}
+                    onChange={(e) => updateQuote({ reason: e.target.value })}
+                    disabled={readonly}
+                  />
+                </Field>
+                <div className="total">
+                  <span>최종 안내금액</span>
+                  <strong>{money(quote.total)}</strong>
+                </div>
+                <small>
+                  할인 {money(quote.discountTotal)} · 부가세{" "}
+                  {money(quote.vatAmount)}
+                </small>
+              </div>
+            </section>
+          )}
+        </div>
+      )}
+      {tab === "consult" && (
+        <div className="detail-grid">
+          <div className="card">
+            <Field label="상담 메모">
+              <textarea
+                disabled={readonly}
+                value={draft.memo}
+                onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
+              />
+            </Field>
+            {latestCatalog(s)?.version !== c.catalogVersion && (
+              <button
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "가격 갱신은 장바구니를 비운 뒤 최신 상품을 다시 선택합니다. 진행할까요?",
+                    )
+                  )
+                    setDraft({
+                      ...draft,
+                      catalogVersion: latestCatalog(s)?.version || "",
+                      quote: emptyQuote(),
+                    });
+                }}
+              >
+                최신 단가표 가져오기
+              </button>
+            )}
+          </div>
+          <form
+            className="card"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const d = new FormData(e.currentTarget);
+              work(() =>
+                send("opinion.request", {
+                  consultationId: c.id,
+                  toId: d.get("toId"),
+                  request: d.get("request"),
+                }),
+              );
+            }}
+          >
+            <h3>의사 의견 요청</h3>
+            <select name="toId" required>
+              {s.users
+                .filter((u) => u.role === "doctor" || u.role === "admin")
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+            </select>
+            <textarea
+              name="request"
+              required
+              placeholder="확인받고 싶은 내용을 적어주세요."
+            />
+            <button>요청 보내기</button>
+          </form>
+        </div>
+      )}
+      {tab === "quote" && (
+        <div className="detail-grid">
+          <div className="card quote-paper">
+            <p className="eyebrow">GRAND CLINIC</p>
+            <h2>시술 상담 견적서</h2>
+            <p>
+              {c.patient.name} 님 · {c.category}
+            </p>
+            {quote.lines.map((l) => (
+              <div className="list-row" key={l.id}>
+                <span>
+                  <b>{l.name}</b>
+                  <small>
+                    {l.label} × {l.quantity}
+                  </small>
+                </span>
+                <span>{money(l.price * l.quantity)}</span>
+              </div>
+            ))}
+            <div className="list-row">
+              <span>할인</span>
+              <span>− {money(quote.discountTotal)}</span>
+            </div>
+            <div className="list-row">
+              <span>부가세</span>
+              <span>{money(quote.vatAmount)}</span>
+            </div>
+            <div className="total">
+              <span>최종 안내금액</span>
+              <strong>{money(quote.total)}</strong>
+            </div>
+            <div className="button-row">
+              <button
+                onClick={() =>
+                  work(async () => {
+                    await send("audit.export", { format: "consultation-pdf" });
+                    return download(await pdf(), documentName(draft, author));
+                  })
+                }
+              >
+                병원용 PDF
+              </button>
+              <button
+                onClick={() =>
+                  work(async () => {
+                    await send("audit.export", { format: "quote-jpg" });
+                    const pages = await quoteJPG({ ...draft, quote });
+                    pages.forEach((b, i) =>
+                      download(b, `견적서_${c.patient.name}_${i + 1}.jpg`),
+                    );
+                  })
+                }
+              >
+                환자용 JPG
+              </button>
+              <button
+                onClick={() =>
+                  work(async () => {
+                    if (native) {
+                      await printPage();
+                      return;
+                    }
+                    const b = await pdf(),
+                      u = URL.createObjectURL(b);
+                    const w = window.open(u);
+                    w?.addEventListener("load", () => w.print());
+                    setTimeout(() => URL.revokeObjectURL(u), 60000);
+                  })
+                }
+              >
+                인쇄
+              </button>
+            </div>
+            {c.status === "H" && (
+              <div className="button-row">
+                <button
+                  className="primary"
+                  onClick={() =>
+                    work(async () => {
+                      if (JSON.stringify(draft) !== JSON.stringify(c)) {
+                        await save();
+                        throw new Error(
+                          "변경 내용을 저장했습니다. 최신 견적을 확인하고 다시 확정하세요.",
+                        );
+                      }
+                      if (
+                        !window.confirm(
+                          "성공 확정 후 원문 수정·취소는 관리자만 가능합니다. 확정할까요?",
+                        )
+                      )
+                        return;
+                      const b = await pdf("P"),
+                        doc = await upload(
+                          b,
+                          documentName(c, author, "P"),
+                          c.id,
+                        );
+                      await send(
+                        "consultation.finalize",
+                        { status: "P", documents: [doc.id] },
+                        c.id,
+                        c.rev,
+                      );
+                    })
+                  }
+                >
+                  성공 확정
+                </button>
+                <button
+                  onClick={() =>
+                    work(async () => {
+                      if (JSON.stringify(draft) !== JSON.stringify(c)) {
+                        await save();
+                        throw new Error("저장 후 다시 확정하세요.");
+                      }
+                      if (
+                        !window.confirm(
+                          "실패 확정 후 수정은 관리자만 가능합니다.",
+                        )
+                      )
+                        return;
+                      const b = await pdf("F"),
+                        doc = await upload(
+                          b,
+                          documentName(c, author, "F"),
+                          c.id,
+                        );
+                      await send(
+                        "consultation.finalize",
+                        { status: "F", documents: [doc.id] },
+                        c.id,
+                        c.rev,
+                      );
+                    })
+                  }
+                >
+                  실패 확정
+                </button>
+              </div>
+            )}
+            {user.role === "admin" && c.status !== "H" && (
+              <div className="button-row">
+                <button
+                  onClick={() => {
+                    const reason = window.prompt("계약 취소 사유 (환불 별도)");
+                    if (reason)
+                      work(() =>
+                        send("consultation.cancel", { reason }, c.id, c.rev),
+                      );
+                  }}
+                >
+                  계약 취소
+                </button>
+                <button
+                  onClick={() => {
+                    const reason = window.prompt("재작성 사유");
+                    if (reason)
+                      work(() =>
+                        send("consultation.rewrite", { reason }, c.id, c.rev),
+                      );
+                  }}
+                >
+                  재작성
+                </button>
+              </div>
+            )}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const d = new FormData(e.currentTarget);
+                work(() =>
+                  send(
+                    "followup.save",
+                    {
+                      appointment: d.get("appointment"),
+                      attendance: d.get("attendance"),
+                    },
+                    c.id,
+                    c.rev,
+                  ),
+                );
+              }}
+            >
+              <h3>예약·방문</h3>
+              <input
+                name="appointment"
+                type="datetime-local"
+                defaultValue={c.appointment}
+              />
+              <select name="attendance" defaultValue={c.attendance}>
+                {["미정", "예약", "방문", "노쇼"].map((v) => (
+                  <option key={v}>{v}</option>
+                ))}
+              </select>
+              <button>상태 저장</button>
+            </form>
+          </div>
+          <div className="card">
+            <h3>시술동의서</h3>
+            <select
+              value={template}
+              onChange={(e) => {
+                setTemplate(e.target.value);
+                setChecks([]);
+                setSig("");
+              }}
+            >
+              <option value="">게시된 양식 선택</option>
+              {s.consents
+                .filter((t) => t.status === "published")
+                .map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} v{t.version}
+                  </option>
+                ))}
+            </select>
+            {template &&
+              (() => {
+                const t = s.consents.find((t) => t.id === template)!;
+                return (
+                  <>
+                    <div className="consent-text">{t.body}</div>
+                    {t.checks.map((check) => (
+                      <label className="check" key={check}>
+                        <input
+                          type="checkbox"
+                          checked={checks.includes(check)}
+                          onChange={(e) =>
+                            setChecks(
+                              e.target.checked
+                                ? [...checks, check]
+                                : checks.filter((x) => x !== check),
+                            )
+                          }
+                        />
+                        {check}
+                      </label>
+                    ))}
+                    <Field label="서명자">
+                      <input
+                        value={signer}
+                        onChange={(e) => setSigner(e.target.value)}
+                      />
+                    </Field>
+                    <SignaturePad onChange={setSig} />
+                    <button
+                      className="primary"
+                      disabled={!sig || readonly}
+                      onClick={() =>
+                        work(async () => {
+                          if (JSON.stringify(draft) !== JSON.stringify(c))
+                            throw new Error("상담 변경을 먼저 저장하세요.");
+                          await send("signature.create", {
+                            consultationId: c.id,
+                            templateId: t.id,
+                            signer,
+                            relationship: "본인",
+                            checks,
+                            image: sig,
+                            contentHash: await sha(
+                              consentContent(c) + JSON.stringify(t),
+                            ),
+                          });
+                        })
+                      }
+                    >
+                      서명 저장
+                    </button>
+                  </>
+                );
+              })()}
+            {!s.consents.some((t) => t.status === "published") && (
+              <Empty>병원 검토 후 게시된 동의서가 없습니다.</Empty>
+            )}
+            {s.signatures
+              .filter((x) => x.consultationId === c.id)
+              .map((x) => (
+                <p key={x.id}>
+                  서명 기록 · {x.signer} · {x.createdAt.slice(0, 16)}
+                </p>
+              ))}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+async function compressPhoto(file: File) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const factor = Math.min(1, 2500 / Math.max(img.width, img.height)),
+      canvas = document.createElement("canvas");
+    canvas.width = img.width * factor;
+    canvas.height = img.height * factor;
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return await new Promise<Blob>((r) =>
+      canvas.toBlob((b) => r(b!), "image/jpeg", 0.92),
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function CatalogView({
+  state: s,
+  user,
+  send,
+  work,
+}: {
+  state: State;
+  user: User;
+  send: (...args: any[]) => Promise<any>;
+  work: (f: () => Promise<any>) => any;
+}) {
+  const can = allowed(user, "catalog.edit");
+  const [draft, setDraft] = useState<Catalog | undefined>(undefined),
+    [search, setSearch] = useState(""),
+    [category, setCategory] = useState(""),
+    [selected, setSelected] = useState(""),
+    [includeInactive, setIncludeInactive] = useState(false),
+    [onlyReview, setOnlyReview] = useState(false);
+  const [bulkIds, setBulkIds] = useState<string[]>([]),
+    [paste, setPaste] = useState("");
+  const current =
+    draft ||
+    s.catalogs.filter((c) => c.status === "draft").at(-1) ||
+    latestCatalog(s);
+  const products =
+    current?.products.filter(
+      (p) =>
+        (!category || p.category === category) &&
+        p.name.toLowerCase().includes(search.toLowerCase()) &&
+        (!onlyReview || p.options.some((o) => o.review)),
+    ) || [];
+  const product = current?.products.find((p) => p.id === selected);
+  const editable = current?.status === "draft" && can;
+  const change = (p: Product) => {
+    if (current)
+      setDraft({
+        ...current,
+        products: current.products.map((x) => (x.id === p.id ? p : x)),
+      });
+  };
+  const save = () => {
+    if (!current) throw new Error("단가표를 선택하세요");
+    return send("catalog.save", { catalog: current }, current.id, current.rev);
+  };
+  return (
+    <>
+      <Title
+        title="단가표 관리"
+        description="하나의 원본으로 상담 가격과 보기 좋은 엑셀을 함께 관리합니다."
+        action={
+          <div className="button-row">
+            {can && (
+              <label className="button">
+                <Plus size={18} />
+                JSON 초안 가져오기
+                <input
+                  type="file"
+                  hidden
+                  accept="application/json"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file)
+                      work(async () => {
+                        const c = JSON.parse(await file.text()) as Catalog;
+                        if (c.schemaVersion !== 1 || !Array.isArray(c.products))
+                          throw new Error("변환된 단가표 JSON을 선택하세요.");
+                        setDraft({
+                          ...c,
+                          id: crypto.randomUUID(),
+                          rev: 0,
+                          status: "draft",
+                        });
+                        setSelected("");
+                      });
+                  }}
+                />
+              </label>
+            )}
+            <button
+              disabled={
+                current?.status !== "published" || !allowed(user, "export")
+              }
+              onClick={() =>
+                work(async () => {
+                  await send("audit.export", { format: "catalog-csv" });
+                  download(catalogCSV(current!), "코디메이트_단가표.csv");
+                })
+              }
+            >
+              CSV 자료 교환
+            </button>
+            <button
+              disabled={!current || !allowed(user, "export")}
+              onClick={() =>
+                work(async () => {
+                  if (!current || current.status !== "published")
+                    throw new Error("게시된 버전을 선택하세요.");
+                  await send("audit.export", { format: "catalog-xlsx" });
+                  await downloadWorkbook(
+                    await catalogWorkbook(
+                      current,
+                      category ? [category] : undefined,
+                      includeInactive,
+                    ),
+                    "코디메이트_단가표_" + date() + ".xlsx",
+                  );
+                })
+              }
+            >
+              <FileSpreadsheet size={18} />
+              Excel 다운로드
+            </button>
+          </div>
+        }
+      />
+      <div className="card">
+        <div className="table-toolbar">
+          <select
+            aria-label="단가표 버전"
+            value={current?.id || ""}
+            onChange={(e) => {
+              setDraft(s.catalogs.find((c) => c.id === e.target.value));
+              setSelected("");
+            }}
+          >
+            <option value="">단가표 선택</option>
+            {s.catalogs.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.status === "draft" ? "초안" : "게시본"} · {c.version}
+              </option>
+            ))}
+            {draft && !s.catalogs.some((c) => c.id === draft.id) && (
+              <option value={draft.id}>가져온 새 초안</option>
+            )}
+          </select>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+            />
+            비활성 포함 내보내기
+          </label>
+          {current && can && (
+            <button
+              onClick={() =>
+                setDraft({
+                  ...structuredClone(current),
+                  id: crypto.randomUUID(),
+                  rev: 0,
+                  status: "draft",
+                  publishedAt: undefined,
+                })
+              }
+            >
+              복제·이전 버전 복원 초안
+            </button>
+          )}
+        </div>
+        {current && (
+          <div className="catalog-summary">
+            <span>{current.products.length}개 상품 후보</span>
+            <span>
+              {current.products.reduce(
+                (n, p) => n + p.options.filter((o) => o.review).length,
+                0,
+              )}
+              개 가격 확인 필요
+            </span>
+            <span>{current.references.length}개 원본 시트</span>
+          </div>
+        )}
+      </div>
+      <div className="catalog-admin">
+        <aside className="card category-list">
+          <h3>카테고리</h3>
+          <button
+            className={!category ? "selected" : ""}
+            onClick={() => setCategory("")}
+          >
+            전체 카테고리
+          </button>
+          {[...new Set(current?.products.map((p) => p.category))].map((c) => (
+            <button
+              key={c}
+              className={c === category ? "selected" : ""}
+              onClick={() => setCategory(c)}
+            >
+              {c}
+            </button>
+          ))}
+        </aside>
+        <div className="card">
+          <div className="table-toolbar">
+            <div className="search">
+              <Search size={18} />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="상품 검색"
+              />
+            </div>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={onlyReview}
+                onChange={(e) => setOnlyReview(e.target.checked)}
+              />
+              확인 필요
+            </label>
+          </div>
+          {editable && current && (
+            <details className="bulk-edit">
+              <summary>표 편집·선택 가격 조정·엑셀 붙여넣기</summary>
+              <div className="button-row">
+                <button onClick={() => setBulkIds(products.map((p) => p.id))}>
+                  현재 목록 선택
+                </button>
+                <button onClick={() => setBulkIds([])}>선택 해제</button>
+                <button
+                  onClick={() => {
+                    const raw = window.prompt(
+                      "선택 상품 옵션의 가격 조정률 (%) · 예: 5, -10",
+                    );
+                    if (raw === null) return;
+                    const percent = Number(raw);
+                    if (
+                      !Number.isFinite(percent) ||
+                      percent < -100 ||
+                      percent > 1000
+                    )
+                      return;
+                    setDraft({
+                      ...current,
+                      products: current.products.map((p) =>
+                        bulkIds.includes(p.id)
+                          ? {
+                              ...p,
+                              options: p.options.map((o) => ({
+                                ...o,
+                                price:
+                                  o.price === null
+                                    ? null
+                                    : Math.round(o.price * (1 + percent / 100)),
+                              })),
+                            }
+                          : p,
+                      ),
+                    });
+                  }}
+                >
+                  선택 가격 일괄 조정
+                </button>
+                <button
+                  onClick={() =>
+                    setDraft({
+                      ...current,
+                      products: current.products.map((p) =>
+                        bulkIds.includes(p.id) ? { ...p, active: false } : p,
+                      ),
+                    })
+                  }
+                >
+                  선택 비활성화
+                </button>
+              </div>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>선택</th>
+                      <th>상품</th>
+                      <th>첫 옵션 가격</th>
+                      <th>판매</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={p.name + " 선택"}
+                            checked={bulkIds.includes(p.id)}
+                            onChange={(e) =>
+                              setBulkIds(
+                                e.target.checked
+                                  ? [...bulkIds, p.id]
+                                  : bulkIds.filter((id) => id !== p.id),
+                              )
+                            }
+                          />
+                        </td>
+                        <td>{p.name}</td>
+                        <td>
+                          <input
+                            aria-label={p.name + " 가격"}
+                            type="number"
+                            min={0}
+                            value={p.options[0]?.price ?? ""}
+                            disabled={!p.options.length}
+                            onChange={(e) =>
+                              change({
+                                ...p,
+                                options: p.options.map((o, i) =>
+                                  i
+                                    ? o
+                                    : {
+                                        ...o,
+                                        price:
+                                          e.target.value === ""
+                                            ? null
+                                            : Number(e.target.value),
+                                      },
+                                ),
+                              })
+                            }
+                          />
+                        </td>
+                        <td>
+                          <input
+                            aria-label={p.name + " 판매"}
+                            type="checkbox"
+                            checked={p.active}
+                            onChange={(e) =>
+                              change({ ...p, active: e.target.checked })
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                카테고리 / 상품명 / 옵션명 / 가격 / 부가세(별도·포함·면세) 열을
+                엑셀에서 복사하세요. 새 후보로 추가되며 검토 후 판매를 켭니다.
+              </p>
+              <textarea
+                value={paste}
+                onChange={(e) => setPaste(e.target.value)}
+                placeholder="탭으로 구분된 여러 행"
+              />
+              <button
+                onClick={() =>
+                  work(async () => {
+                    const now = new Date().toISOString();
+                    const rows = paste
+                      .trim()
+                      .split(/\r?\n/)
+                      .filter(Boolean)
+                      .map((row) => {
+                        const [category, name, label, raw, tax] =
+                          row.split("\t");
+                        if (!category || !name || !label)
+                          throw new Error("카테고리·상품·옵션 열을 확인하세요");
+                        const price = raw?.trim()
+                          ? Number(raw.replaceAll(",", ""))
+                          : null;
+                        if (
+                          price !== null &&
+                          (!Number.isSafeInteger(price) || price < 0)
+                        )
+                          throw new Error("가격을 확인하세요");
+                        return {
+                          id: crypto.randomUUID(),
+                          rev: 1,
+                          createdAt: now,
+                          updatedAt: now,
+                          category,
+                          name,
+                          description: "",
+                          composition: "",
+                          active: false,
+                          sources: [],
+                          options: [
+                            {
+                              id: crypto.randomUUID(),
+                              label,
+                              price,
+                              tax:
+                                tax === "포함"
+                                  ? "inclusive"
+                                  : tax === "면세"
+                                    ? "exempt"
+                                    : "exclusive",
+                              review: true,
+                              issues: ["붙여넣기 자료 검토"],
+                              sources: [],
+                              priceKind: "clinic",
+                              unit: "개",
+                            },
+                          ],
+                        } as Product;
+                      });
+                    setDraft({
+                      ...current,
+                      products: [...current.products, ...rows],
+                    });
+                    setPaste("");
+                  })
+                }
+              >
+                후보 행 추가
+              </button>
+            </details>
+          )}
+          {!current ? (
+            <Empty>
+              전체 XLSX에서 변환한 JSON 초안을 가져오세요.
+              <br />
+              실제 단가표는 소스코드에 포함하지 않습니다.
+            </Empty>
+          ) : (
+            <div className="product-admin-list">
+              {products.map((p) => (
+                <button
+                  className={
+                    "list-row " + (selected === p.id ? "selected" : "")
+                  }
+                  key={p.id}
+                  onClick={() => setSelected(p.id)}
+                >
+                  <span>
+                    <b>{p.name}</b>
+                    <small>
+                      {p.category} · 옵션 {p.options.length}개
+                    </small>
+                  </span>
+                  <span className={"badge " + (p.active ? "P" : "H")}>
+                    {p.active ? "판매 중" : "비활성"}
+                  </span>
+                  {p.options.some((o) => o.review) && (
+                    <span className="review-dot">확인 필요</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {current && editable && (
+            <div className="button-row">
+              <button
+                onClick={() => {
+                  const now = new Date().toISOString(),
+                    p: Product = {
+                      id: crypto.randomUUID(),
+                      rev: 1,
+                      createdAt: now,
+                      updatedAt: now,
+                      category: category || "새 분류",
+                      name: "새 상품",
+                      description: "",
+                      composition: "",
+                      active: false,
+                      sources: [],
+                      options: [],
+                    };
+                  setDraft({ ...current, products: [...current.products, p] });
+                  setSelected(p.id);
+                }}
+              >
+                상품 추가
+              </button>
+              <button
+                onClick={() =>
+                  work(async () => {
+                    await save();
+                    setDraft(undefined);
+                  })
+                }
+              >
+                초안 저장
+              </button>
+              <button
+                className="primary"
+                onClick={() =>
+                  work(async () => {
+                    if (draft) {
+                      await save();
+                      setDraft(undefined);
+                      throw new Error(
+                        "초안을 저장했습니다. 저장된 내용을 확인하고 다시 게시하세요.",
+                      );
+                    }
+                    if (
+                      window.confirm(
+                        "검토한 활성 상품만 상담에 적용됩니다. 게시할까요?",
+                      )
+                    )
+                      await send(
+                        "catalog.publish",
+                        {},
+                        current.id,
+                        current.rev,
+                      );
+                  })
+                }
+              >
+                검증 후 게시
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+      {product && (
+        <Modal title="상품·옵션 편집" close={() => setSelected("")}>
+          <div className="form-grid">
+            <Field label="상품명">
+              <input
+                disabled={!editable}
+                value={product.name}
+                onChange={(e) => change({ ...product, name: e.target.value })}
+              />
+            </Field>
+            <Field label="카테고리">
+              <input
+                disabled={!editable}
+                value={product.category}
+                onChange={(e) =>
+                  change({ ...product, category: e.target.value })
+                }
+              />
+            </Field>
+          </div>
+          <Field label="설명">
+            <textarea
+              disabled={!editable}
+              value={product.description}
+              onChange={(e) =>
+                change({ ...product, description: e.target.value })
+              }
+            />
+          </Field>
+          <Field label="패키지·회차별 구성">
+            <textarea
+              disabled={!editable}
+              value={product.composition}
+              onChange={(e) =>
+                change({ ...product, composition: e.target.value })
+              }
+            />
+          </Field>
+          <label className="check">
+            <input
+              type="checkbox"
+              disabled={!editable}
+              checked={product.active}
+              onChange={(e) => change({ ...product, active: e.target.checked })}
+            />
+            판매 활성화
+          </label>
+          {product.options.map((o, i) => (
+            <div className="option-edit" key={o.id}>
+              <Field label="옵션">
+                <input
+                  disabled={!editable}
+                  value={o.label}
+                  onChange={(e) => {
+                    const options = [...product.options];
+                    options[i] = { ...o, label: e.target.value };
+                    change({ ...product, options });
+                  }}
+                />
+              </Field>
+              <Field label="가격 (원)">
+                <input
+                  disabled={!editable}
+                  type="number"
+                  value={o.price ?? ""}
+                  min={0}
+                  onChange={(e) => {
+                    const options = [...product.options];
+                    options[i] = {
+                      ...o,
+                      price:
+                        e.target.value === "" ? null : Number(e.target.value),
+                    };
+                    change({ ...product, options });
+                  }}
+                />
+              </Field>
+              <Field label="가격 구분">
+                <select
+                  disabled={!editable}
+                  value={o.priceKind}
+                  onChange={(e) =>
+                    change({
+                      ...product,
+                      options: product.options.map((x) =>
+                        x.id === o.id
+                          ? {
+                              ...x,
+                              priceKind: e.target.value as typeof o.priceKind,
+                            }
+                          : x,
+                      ),
+                    })
+                  }
+                >
+                  <option value="regular">정가</option>
+                  <option value="clinic">원내 적용가</option>
+                  <option value="event">이벤트가</option>
+                  <option value="quote">별도 견적</option>
+                </select>
+              </Field>
+              <Field label="부가세">
+                <select
+                  disabled={!editable}
+                  value={o.tax}
+                  onChange={(e) => {
+                    const options = [...product.options];
+                    options[i] = { ...o, tax: e.target.value as any };
+                    change({ ...product, options });
+                  }}
+                >
+                  <option value="exclusive">별도</option>
+                  <option value="inclusive">포함</option>
+                  <option value="exempt">면세</option>
+                </select>
+              </Field>
+              <label className="check">
+                <input
+                  disabled={!editable}
+                  type="checkbox"
+                  checked={!o.review}
+                  onChange={(e) => {
+                    const options = [...product.options];
+                    options[i] = { ...o, review: !e.target.checked };
+                    change({ ...product, options });
+                  }}
+                />
+                가격·옵션 검토 완료
+              </label>
+              {o.review && <p className="small">{o.issues.join(" · ")}</p>}
+            </div>
+          ))}
+          {editable && (
+            <div className="button-row">
+              <button
+                onClick={() =>
+                  change({
+                    ...product,
+                    options: [
+                      ...product.options,
+                      {
+                        id: crypto.randomUUID(),
+                        label: "새 옵션",
+                        price: null,
+                        tax: "exclusive",
+                        review: true,
+                        issues: ["가격 검토 필요"],
+                        sources: [],
+                        priceKind: "clinic",
+                        unit: "개",
+                      },
+                    ],
+                  })
+                }
+              >
+                옵션 추가
+              </button>
+              <button
+                onClick={() => {
+                  const copy = {
+                    ...structuredClone(product),
+                    id: crypto.randomUUID(),
+                    name: product.name + " (복사)",
+                    active: false,
+                    options: product.options.map((o) => ({
+                      ...o,
+                      id: crypto.randomUUID(),
+                    })),
+                  };
+                  setDraft({
+                    ...current!,
+                    products: [...current!.products, copy],
+                  });
+                  setSelected(copy.id);
+                }}
+              >
+                상품 복제
+              </button>
+              <button className="primary" onClick={() => setSelected("")}>
+                편집 내용 유지
+              </button>
+            </div>
+          )}
+          <details>
+            <summary>원본 위치·내용</summary>
+            {product.sources.map((source) => (
+              <p key={source.cell}>
+                <b>
+                  {source.sheet}!{source.cell}
+                </b>
+                <br />
+                {source.text}
+              </p>
+            ))}
+          </details>
+        </Modal>
+      )}
+    </>
+  );
+}
+function Stats({
+  state: s,
+  work,
+  user,
+  send,
+}: {
+  state: State;
+  user: User;
+  send: (...args: any[]) => Promise<any>;
+  work: (fn: () => Promise<any>) => any;
+}) {
+  const valid = s.consultations.filter((c) => !c.cancelled),
+    passed = valid.filter((c) => c.status === "P"),
+    failed = valid.filter((c) => c.status === "F");
+  const sums = s.patients
+    .filter((p) => !p.mergedInto)
+    .reduce(
+      (a, p) => {
+        const m = metrics(s, p.id);
+        return {
+          revenue: a.revenue + m.revenue,
+          outstanding: a.outstanding + m.outstanding,
+          contract: a.contract + m.contract,
+        };
+      },
+      { revenue: 0, outstanding: 0, contract: 0 },
+    );
+  return (
+    <>
+      <Title
+        title="상담·기여매출 통계"
+        description="계약과 실제 수납을 구분해 성과를 확인하세요."
+        action={
+          <button
+            disabled={!allowed(user, "export")}
+            onClick={() =>
+              work(async () => {
+                await send("audit.export", { format: "statistics-xlsx" });
+                return downloadWorkbook(
+                  await statisticsWorkbook(s),
+                  "코디메이트_통계_" + date() + ".xlsx",
+                );
+              })
+            }
+          >
+            <FileSpreadsheet size={18} />
+            통계 Excel
+          </button>
+        }
+      />
+      <div className="summary-grid four">
+        <Summary
+          label="성공률"
+          value={`${passed.length + failed.length ? Math.round((passed.length / (passed.length + failed.length)) * 100) : 0}%`}
+          detail={`성공 ${passed.length} / 실패 ${failed.length} · 보류 제외`}
+        />
+        <Summary
+          label="유효 계약"
+          value={money(sums.contract)}
+          detail="취소 제외"
+        />
+        <Summary
+          label="기여매출"
+          value={money(sums.revenue)}
+          detail="수납 − 환불"
+        />
+        <Summary
+          label="미수금"
+          value={money(sums.outstanding)}
+          detail="상담별 미수 잔액"
+        />
+      </div>
+      <div className="detail-grid">
+        <div className="card">
+          <h3>직원별 상담 성과</h3>
+          {s.users.map((u) => {
+            const cs = valid.filter((c) => c.ownerId === u.id);
+            return (
+              <div className="list-row" key={u.id}>
+                <b>{u.name}</b>
+                <span>
+                  상담 {cs.length} · 성공{" "}
+                  {cs.filter((c) => c.status === "P").length}
+                </span>
+                <span>
+                  {money(
+                    cs
+                      .filter((c) => c.status === "P")
+                      .reduce((a, c) => a + c.quote.total, 0),
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <div className="card">
+          <h3>환자 등급별 현황</h3>
+          {[
+            ...new Set(
+              s.patients
+                .filter((p) => !p.mergedInto)
+                .map((p) => gradeFor(s, p).name),
+            ),
+          ].map((name) => (
+            <div className="list-row" key={name}>
+              <b>{name}</b>
+              <span>
+                {
+                  s.patients.filter(
+                    (p) => !p.mergedInto && gradeFor(s, p).name === name,
+                  ).length
+                }
+                명
+              </span>
+            </div>
+          ))}
+          <h3>방문 상태</h3>
+          <p>
+            노쇼 {valid.filter((c) => c.attendance === "노쇼").length}건 · 예약{" "}
+            {valid.filter((c) => c.attendance === "예약").length}건
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+function SettingsView({
+  state: s,
+  user,
+  send,
+  work,
+  refresh,
+  health,
+}: {
+  state: State;
+  user: User;
+  send: (...args: any[]) => Promise<any>;
+  work: (fn: () => Promise<any>) => any;
+  refresh: () => Promise<any>;
+  health: any;
+}) {
+  const [tab, setTab] = useState("grade"),
+    [grades, setGrades] = useState(s.policies[0]?.grades || []),
+    [account, setAccount] = useState<User | undefined>();
+  if (user.role !== "admin")
+    return <Empty>관리자만 설정을 변경할 수 있습니다.</Empty>;
+  return (
+    <>
+      <Title
+        title="관리자 설정"
+        description="병원 운영 기준과 직원별 권한을 관리합니다."
+      />
+      <div className="tabs">
+        {[
+          ["grade", "환자 등급"],
+          ["users", "직원·권한"],
+          ["consent", "동의서 양식"],
+          ["connection", "연결·복구"],
+          ["updates", "앱 업데이트"],
+        ].map(([k, l]) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={tab === k ? "active" : ""}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {tab === "updates" && (
+        <form
+          className="card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const d = Object.fromEntries(new FormData(e.currentTarget));
+            work(() =>
+              api("/update", {
+                method: "POST",
+                body: JSON.stringify({
+                  ...d,
+                  versionCode: Number(d.versionCode),
+                }),
+              }),
+            );
+          }}
+        >
+          <h3>APK 업데이트 게시</h3>
+          <p>
+            같은 서명 키로 만든 APK의 주소와 빌드 결과의 SHA-256을 등록합니다.
+          </p>
+          <div className="form-grid">
+            {[
+              ["version", "표시 버전"],
+              ["versionCode", "버전 코드"],
+              ["url", "APK HTTPS 주소"],
+              ["sha256", "SHA-256"],
+            ].map(([name, label]) => (
+              <Field key={name} label={label}>
+                <input
+                  name={name}
+                  required
+                  type={
+                    name === "versionCode"
+                      ? "number"
+                      : name === "url"
+                        ? "url"
+                        : "text"
+                  }
+                />
+              </Field>
+            ))}
+          </div>
+          <Field label="변경 내용">
+            <textarea name="notes" required />
+          </Field>
+          <button className="primary">업데이트 게시</button>
+        </form>
+      )}
+      {tab === "grade" && (
+        <div className="card">
+          <h3>누적 기여매출 기준</h3>
+          <p>
+            수납 − 환불에 따라 자동 산정합니다. 기준 미설정 시 미분류입니다.
+          </p>
+          {grades.map((g, i) => (
+            <div className="inline-fields" key={g.id}>
+              <Field label="등급명">
+                <input
+                  value={g.name}
+                  onChange={(e) =>
+                    setGrades(
+                      grades.map((v, j) =>
+                        i === j ? { ...v, name: e.target.value } : v,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="하한액 (원)">
+                <input
+                  type="number"
+                  min={0}
+                  value={g.minimum}
+                  onChange={(e) =>
+                    setGrades(
+                      grades.map((v, j) =>
+                        i === j ? { ...v, minimum: Number(e.target.value) } : v,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <input
+                aria-label="등급 색상"
+                type="color"
+                value={g.color}
+                onChange={(e) =>
+                  setGrades(
+                    grades.map((v, j) =>
+                      i === j ? { ...v, color: e.target.value } : v,
+                    ),
+                  )
+                }
+              />
+              <button
+                onClick={() => setGrades(grades.filter((_, j) => j !== i))}
+              >
+                삭제
+              </button>
+            </div>
+          ))}
+          <div className="button-row">
+            <button
+              onClick={() =>
+                setGrades([
+                  ...grades,
+                  {
+                    id: crypto.randomUUID(),
+                    name: "새 등급",
+                    minimum: 0,
+                    color: "#145d55",
+                  },
+                ])
+              }
+            >
+              등급 추가
+            </button>
+            <button
+              className="primary"
+              onClick={() =>
+                work(() =>
+                  send(
+                    "grade.policy",
+                    { grades },
+                    "grades",
+                    s.policies[0]?.rev,
+                  ),
+                )
+              }
+            >
+              기준 적용·재산정
+            </button>
+          </div>
+        </div>
+      )}
+      {tab === "users" && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>직원 계정</h3>
+            {s.users.map((u) => (
+              <button
+                className="list-row"
+                key={u.id}
+                onClick={() => setAccount(u)}
+              >
+                <b>{u.name}</b>
+                <span>
+                  {u.username} · {u.role} · {u.active ? "사용" : "중지"}
+                </span>
+              </button>
+            ))}
+            <button
+              onClick={() =>
+                setAccount({
+                  id: "",
+                  name: "",
+                  username: "",
+                  role: "coordinator",
+                  active: true,
+                  permissions: {},
+                })
+              }
+            >
+              계정 추가
+            </button>
+          </div>
+          {account && (
+            <form
+              className="card"
+              key={account.id}
+              onSubmit={(e) => {
+                e.preventDefault();
+                const d = new FormData(e.currentTarget);
+                work(async () => {
+                  await api("/users", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      ...account,
+                      name: d.get("name"),
+                      username: d.get("username"),
+                      password: d.get("password") || undefined,
+                    }),
+                  });
+                  await refresh();
+                  setAccount(undefined);
+                });
+              }}
+            >
+              <Field label="이름">
+                <input name="name" defaultValue={account.name} required />
+              </Field>
+              <Field label="아이디">
+                <input
+                  name="username"
+                  defaultValue={account.username}
+                  required
+                />
+              </Field>
+              <Field label="새 비밀번호 (12자 이상)">
+                <input
+                  type="password"
+                  name="password"
+                  minLength={12}
+                  required={!account.id}
+                />
+              </Field>
+              <Field label="역할">
+                <select
+                  value={account.role}
+                  onChange={(e) =>
+                    setAccount({ ...account, role: e.target.value as any })
+                  }
+                >
+                  <option value="coordinator">코디네이터</option>
+                  <option value="doctor">의사</option>
+                  <option value="admin">관리자</option>
+                </select>
+              </Field>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={account.active}
+                  onChange={(e) =>
+                    setAccount({ ...account, active: e.target.checked })
+                  }
+                />
+                사용 계정
+              </label>
+              {permissions.map((p) => (
+                <div className="permission" key={p}>
+                  <span>{names[p]}</span>
+                  <select
+                    value={
+                      account.permissions[p] === undefined
+                        ? "default"
+                        : String(account.permissions[p])
+                    }
+                    onChange={(e) =>
+                      setAccount({
+                        ...account,
+                        permissions: {
+                          ...account.permissions,
+                          [p]:
+                            e.target.value === "default"
+                              ? undefined
+                              : e.target.value === "true",
+                        },
+                      })
+                    }
+                  >
+                    <option value="default">역할 기본값</option>
+                    <option value="true">허용</option>
+                    <option value="false">차단</option>
+                  </select>
+                </div>
+              ))}
+              <button className="primary">계정 저장</button>
+            </form>
+          )}
+        </div>
+      )}
+      {tab === "consent" && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>양식 목록</h3>
+            {s.consents.map((t) => (
+              <div className="list-row" key={t.id}>
+                <span>
+                  <b>{t.name}</b>
+                  <small>
+                    v{t.version} ·{" "}
+                    {t.status === "published" ? "게시됨" : "초안"}
+                  </small>
+                </span>
+                {t.status === "draft" && (
+                  <button
+                    onClick={() =>
+                      work(() =>
+                        send(
+                          "consent.save",
+                          {
+                            name: t.name,
+                            body: t.body,
+                            productIds: t.productIds,
+                            checks: t.checks,
+                            status: "published",
+                          },
+                          t.id,
+                          t.rev,
+                        ),
+                      )
+                    }
+                  >
+                    병원 검토 완료·게시
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <form
+            className="card"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const d = new FormData(e.currentTarget);
+              work(() =>
+                send("consent.save", {
+                  name: d.get("name"),
+                  body: d.get("body"),
+                  checks: String(d.get("checks")).split("\n").filter(Boolean),
+                  productIds: [],
+                  status: "draft",
+                }),
+              );
+            }}
+          >
+            <h3>동의서 초안 등록</h3>
+            <Field label="양식명">
+              <input name="name" required />
+            </Field>
+            <Field label="본문">
+              <textarea
+                name="body"
+                required
+                rows={12}
+                placeholder="병원에서 검토할 시술동의서 문구를 입력하세요."
+              />
+            </Field>
+            <Field label="필수 확인 항목 (한 줄에 하나)">
+              <textarea name="checks" />
+            </Field>
+            <button className="primary">초안 저장</button>
+          </form>
+        </div>
+      )}
+      {tab === "connection" && (
+        <div className="detail-grid">
+          <div className="card">
+            <h3>OneDrive 연결</h3>
+            <p>
+              {health.driveConnected
+                ? "병원 OneDrive가 연결되어 있습니다."
+                : "운영 데이터를 저장할 병원 계정을 연결하세요."}
+            </p>
+            <button
+              className="primary"
+              onClick={() =>
+                work(async () => {
+                  const d = await api("/onedrive/connect");
+                  window.location.assign(d.url);
+                })
+              }
+            >
+              Microsoft 계정 연결
+            </button>
+            <p className="small">
+              연결 정보는 서버에서 관리하며 직원에게 전달하지 않습니다.
+            </p>
+            <button
+              onClick={() =>
+                work(async () => {
+                  const result = await api("/backup", { method: "POST" });
+                  download(
+                    new Blob([result.encrypted], { type: "application/json" }),
+                    "codimate-backup-" + date() + ".enc",
+                  );
+                })
+              }
+            >
+              암호화 백업 내보내기
+            </button>
+            <h3>원본에서 복구</h3>
+            {health.restoreRequired && (
+              <p role="alert" className="error">
+                기존 OneDrive 자료를 발견했습니다. 재구축을 완료하기 전에는 새 자료를 저장할 수 없습니다.
+              </p>
+            )}
+            <p>
+              OneDrive에 완료된 기록을 다시 읽어 검색·집계 인덱스를
+              재구축합니다.
+            </p>
+            <button
+              onClick={() =>
+                work(async () => {
+                  if (
+                    window.confirm(
+                      "현재 서버 인덱스와 계정을 OneDrive 원본으로 재구축할까요? 완료 후 원본에 보관된 계정으로 다시 로그인해야 합니다.",
+                    )
+                  ) {
+                    const result = await api("/restore", { method: "POST" });
+                    if (result.requiresLogin) {
+                      lockVault();
+                      window.location.reload();
+                    } else await refresh();
+                  }
+                })
+              }
+            >
+              OneDrive 원본에서 재구축
+            </button>
+          </div>
+          <div className="card">
+            <h3>암호화 기기 보관</h3>
+            <p>
+              {vaultEnabled()
+                ? "이 기기에 암호화 보관이 활성화되어 있습니다."
+                : "로그인 화면에서 병원 기기 보관과 암호를 설정할 수 있습니다."}
+            </p>
+            <p className="small">사용자 ID: {user.id}</p>
+            <h3>운영 상태</h3>
+            <p>
+              {health.mode === "local-development"
+                ? "개발 서버 · 실제 OneDrive 저장 아님"
+                : "운영 연결 모드"}
+            </p>
+            <p>대기 작업 {health.pending || 0}건</p>
+            <button
+              onClick={() =>
+                work(async () => {
+                  await api("/sync", { method: "POST" });
+                  await refresh();
+                })
+              }
+            >
+              서버 저장 재시도
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+function RecoveryView({
+  pending,
+  state,
+}: {
+  pending: Command[];
+  state: State;
+}) {
+  const [conflicts, setConflicts] = useState<Command[]>([]);
+  useEffect(() => {
+    recoveryCommands().then(setConflicts);
+  }, []);
+  return (
+    <>
+      <p>
+        충돌하거나 권한 확인이 필요한 내 변경입니다. 서버 내용은 자동으로
+        덮어쓰지 않습니다. 관리자는 해당 기록과 비교해 정정할 수 있습니다.
+      </p>
+      {[...pending, ...conflicts].map((c) => (
+        <details key={c.id}>
+          <summary>
+            {c.type} · {c.entityId || c.id}
+          </summary>
+          <div className="detail-grid">
+            <div>
+              <h3>기기에 보존한 내 변경</h3>
+              <pre className="recovery-json">
+                {JSON.stringify(c.payload, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <h3>현재 서버 자료</h3>
+              <pre className="recovery-json">
+                {JSON.stringify(
+                  Object.values(state)
+                    .flat()
+                    .find((x: any) => x.id === c.entityId) || "현재 자료 없음",
+                  null,
+                  2,
+                )}
+              </pre>
+            </div>
+          </div>
+        </details>
+      ))}
+      {!pending.length && !conflicts.length && (
+        <Empty>복구 대기 자료가 없습니다.</Empty>
+      )}
+    </>
+  );
+}

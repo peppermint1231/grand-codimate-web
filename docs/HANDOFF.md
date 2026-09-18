@@ -12,7 +12,10 @@
 - 로컬 API·브라우저 검증 통과, `npm audit --omit=dev` 보고 취약점 0건입니다. 복구 회귀 테스트는 가짜 Graph 응답과 메모리 SQLite를 사용했으며 실제 OneDrive 시험을 대신하지 않습니다.
 - [Cloudflare·Microsoft 최초 연결 안내](CLOUD-SETUP.md)를 추가했습니다. `scripts/prepare-production.mjs`는 비밀값을 출력하지 않고 기존 키를 덮어쓰지 않는 설정 준비 도구입니다.
 - 실제 클라우드 배포·OneDrive 연결·태블릿 시험은 여전히 미실시입니다. 아래의 단가표 의미 검수, 게스트 사진 영속 보관, 대량 자료 검색, 관리 UI 보완 및 G마크 작업도 남아 있습니다.
-- 루트가 정본이며 Git 최초 커밋·원격 게시도 아직 하지 않았습니다. 비밀 파일·개발 DB·기존 서명 키는 보존했습니다.
+- 루트가 정본이며 루트 Git은 아직 최초 커밋 전입니다. 웹 저장소 `peppermint1231/grand-codimate-web`의 `main`에는 검증된 소스 48개를 최초 게시했습니다(기능 소스 커밋 `135ecbda50ee60c8e466dab94e0c4b1fa4326108`). Git 객체 해시로 게시본과 로컬 파일의 일치를 확인했습니다. Android 원격 저장소는 아직 게시하지 않았습니다.
+- 운영 주소는 `https://grand-codimate.peppermint-3.workers.dev`, Microsoft Client ID는 `11716900-1b40-4192-9ca9-b7467519585d`입니다. 사용자는 네 가지 Cloudflare 런타임 Secret 등록 완료를 알려주었습니다. 운영 키는 Git 제외 `private/production-secrets.json`과 입력용 `private/cloudflare-setup-keys.txt`에 보존했습니다. Microsoft 암호는 사용자만 Cloudflare에 입력했으며 로컬 파일에는 빈 암호 항목도 남기지 않았습니다.
+- Cloudflare 로컬 인증은 없으며, 다음 사용자 작업은 기존 Worker의 Settings → Builds → Connect에서 웹 저장소/main을 연결하는 것입니다. 빌드 `npm run check`, 배포 `npx wrangler deploy`, 루트 `/`, Node 24입니다. 실제 앱 배포와 OneDrive 검증은 아직 완료되지 않았습니다.
+- 운영 APP_ORIGIN을 wrangler 설정에 반영했고 로컬 `.dev.vars`에는 localhost override를 유지했습니다. 한글 폰트는 공식 Google Fonts의 고정 커밋·SHA-256으로 최초 빌드 시 준비하며 기존 APK의 폰트와 동일함을 확인했습니다. 변경 후 24개 테스트·웹 빌드·Worker 배포 dry-run을 통과했습니다. 비밀 파일·개발 DB·기존 서명 키는 보존했습니다.
 
 ## 사이드채팅 중단 당시 기록
 

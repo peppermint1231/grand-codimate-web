@@ -1,4 +1,6 @@
 import { patientFolder, photoFileName } from "../src/core/storagePaths";
+import bundledRelease from "../releases/android-latest.json";
+import { latestRelease, parseRelease } from "../src/core/appRelease";
 import { DurableObject } from "cloudflare:workers";
 import {
   emptyState,
@@ -248,7 +250,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.2.0",
+        version: "0.2.1",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -258,6 +260,8 @@ export class Clinic extends DurableObject<Env> {
           .exec("SELECT id FROM secrets WHERE id LIKE ? LIMIT 1", "user:%")
           .toArray().length,
       });
+    if (path === "/api/app-release" && req.method === "GET")
+      return json(latestRelease(await this.secret("release"), bundledRelease));
     if (path === "/api/setup" && req.method === "POST") {
       const b = await body();
       ensure(
@@ -421,19 +425,11 @@ export class Clinic extends DurableObject<Env> {
       });
     }
     if (path === "/api/update" && req.method === "GET")
-      return json((await this.secret("release")) || null);
+      return json(latestRelease(await this.secret("release"), bundledRelease));
     if (path === "/api/update" && req.method === "POST") {
       admin();
       const b = await body();
-      ensure(
-        Number.isSafeInteger(b.versionCode) &&
-          b.versionCode > 0 &&
-          typeof b.version === "string" &&
-          typeof b.notes === "string" &&
-          /^https:\/\//.test(b.url) &&
-          /^[a-f0-9]{64}$/i.test(b.sha256),
-        "버전·APK 주소·SHA-256을 확인하세요",
-      );
+      ensure(!!parseRelease(b), "버전·APK 주소·SHA-256을 확인하세요");
       const release = {
         versionCode: b.versionCode,
         version: b.version,

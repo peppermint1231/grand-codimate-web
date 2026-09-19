@@ -1,0 +1,7 @@
+{
+  "version": "0.2.1",
+  "versionCode": 4,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.2.1.apk",
+  "sha256": "db68ca684211a14bfa8d139cf791f9bea54bce1fb38cedf4c589d1028e89d8dc",
+  "notes": "앱 시작 시 새 버전 자동 확인 · 업데이트 알림과 나중에 · 저장/전송 중 설치 차단 · 같은 버전/이전 버전 재설치 방지"
+}

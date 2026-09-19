@@ -1,7 +1,13 @@
 # 코디메이트 개발 인계
 
+## 2026-09-19 Android 자동 업데이트 — 0.2.1
+
+앱 시작 시 버전 자동 확인·나중에·수동 재확인·저장/전송 중 설치 차단을 구현했습니다. 공개 배포 API와 기존 앱 업데이트 API가 `releases/android-latest.json`을 기본으로 사용합니다. 관리자 게시 버전이 더 높으면 우선합니다. 현재 APK는 versionCode 4이며 SHA-256은 `db68ca684211a14bfa8d139cf791f9bea54bce1fb38cedf4c589d1028e89d8dc`입니다. 39개 테스트, 브리지 모의 브라우저 시험 및 APK 검증을 마쳤습니다. 원격 배포·다운로드 검증을 이어갑니다. 사용 흐름과 실기기 확인 항목은 [0.2.1 변경 기록](RELEASE-0.2.1.md)을 참고합니다.
+
 
 ## 2026-09-19 사진·중간/연장상담 업데이트 — 0.2.0
+
+**APK 다운로드 링크 수정:** 내부 파일 경로 대신 [HTTPS 다운로드](https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.2.0.apk)를 제공합니다. GitHub 게시 커밋 `6defa72cc19f804a681241114ee1351baa6c888b`. APK 자체는 기존 0.2.0과 동일하며 설치 파일을 웹 빌드에 포함하지 않도록 `releases/`에 분리했습니다.
 
 이 절이 아래 0.1.1 기록보다 우선합니다. 사용자 웹 시험 피드백과 후속 주소 검색 요청을 반영했습니다. 상세 사용법·기존 자료 호환성은 [0.2.0 변경 기록](RELEASE-0.2.0.md)을 참고합니다.
 
@@ -9,7 +15,9 @@
 - 사용자 선택에 따라 회차 숫자는 요구하지 않습니다. 성공하면 진행 중, 연장 성공 시 유지, 연장 미진행 시 완료이며 수동 전환도 가능합니다. 미용/보험은 분리합니다.
 - 36개 자동 테스트, 타입 검사·웹 빌드, 로컬 API 시험과 실제 브라우저 흐름이 통과했습니다. 업로드를 4초 지연시킨 작은 합성 이미지 5장의 미리보기는 약 270ms였으며 대용량 실제 촬영 파일 속도를 보장하는 수치는 아닙니다.
 - 추가 테스트: `tests/photo-followup.test.ts`, `tests/storage-workflow.test.ts`, `scripts/verify-photo-workflow.ts`. 증거는 `artifacts/photo-workflow-verification.json` 및 화면 캡처·PDF입니다.
-- 로컬 브랜치 `codex/photo-followup`에 배포 기준 소스를 첫 커밋으로 보존한 뒤 변경했습니다. 원격 웹 main 갱신과 0.2.0 APK 빌드를 이어갑니다. Android 원격 저장소는 아직 따로 게시하지 않았습니다.
+- 로컬 브랜치 `codex/photo-followup`에 배포 기준 소스를 첫 커밋으로 보존했습니다. 원격 웹 main `d756c6590b4e29e4eb86bbb9d5cc4b6dd98a8a23` 게시 완료, GitHub 검사 및 Cloudflare 빌드 모두 성공입니다. 운영 Worker 버전은 `b13c53fe-982b-4bd7-8d7f-c73a17a698ab`입니다. 실제 HTML/JS/CSS가 로컬 빌드와 일치하고 health는 version=0.2.0, mode=onedrive, configured=true, needsSetup=false입니다.
+- `artifacts/codimate-0.2.0.apk` 생성 완료(versionCode 3). 기존 0.1.1과 서명 인증서 일치, APK 서명 검증, 내장 웹 파일 12개와 dist 일치를 확인했습니다. SHA-256은 `1fe6cb84e2faa05cb1de4a18b56d9e6c26eae7e2ac0b9fef4de41cedc78572e5`입니다. Android 원격 저장소는 아직 따로 게시하지 않았습니다.
+- 이전 웹 캐시가 남으면 상담을 저장하고 모든 코디메이트 탭을 닫았다가 다시 엽니다. 이번 버전부터 업데이트 적용 안내가 표시됩니다.
 - 실제 병원 계정의 사진 이동·생성 및 개인정보 입력을 자동 시험하지 않았습니다. OneDrive 저장/복구 회귀는 모의 Graph로 확인했습니다. 이전 파일은 삭제하지 않으며 기존 상담을 다시 저장할 때 환자 폴더로 복사합니다.
 
 ## 메인 대화 재개 후 최신 상태 — 0.1.1

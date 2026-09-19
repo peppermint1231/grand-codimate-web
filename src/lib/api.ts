@@ -195,6 +195,7 @@ type StagedMedia = {
   error?: string;
 };
 const stagedMedia = new Map<string, StagedMedia>();
+export const hasPendingUploads = () => stagedMedia.size > 0;
 const listeners = new Set<() => void>();
 export const watchUploads = (fn: () => void) => {
   listeners.add(fn);

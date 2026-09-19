@@ -1,7 +1,8 @@
 import { AddressSearch } from "./components/AddressSearch";
 import { PhotoBoard, HistoryPhotoPicker } from "./components/PhotoBoard";
 import { consultationKind, packageActive, productCategory } from "./core/model";
-import { native, takePhoto, printPage, NativeClinic } from "./lib/native";
+import { native, takePhoto, printPage } from "./lib/native";
+import { requestAndroidUpdate } from "./components/AndroidUpdateNotice";
 import { needsServer, configureServer } from "./lib/api";
 import {
   useEffect,
@@ -159,6 +160,14 @@ export function App() {
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
   const workInFlight = useRef(false);
+  useEffect(() => {
+    const beforeInstall = (event: Event) => {
+      if (workInFlight.current || pending.length) event.preventDefault();
+    };
+    window.addEventListener("codimate:before-install", beforeInstall);
+    return () =>
+      window.removeEventListener("codimate:before-install", beforeInstall);
+  }, [pending.length]);
   const work = async (fn: () => Promise<unknown>) => {
     if (workInFlight.current) return;
     workInFlight.current = true;
@@ -680,6 +689,10 @@ export function App() {
             <button
               onClick={() =>
                 work(async () => {
+                  if (native) {
+                    requestAndroidUpdate();
+                    return;
+                  }
                   const r = await api("/update");
                   if (!r) throw new Error("게시된 업데이트가 없습니다.");
                   if (
@@ -687,12 +700,7 @@ export function App() {
                       `${r.version}\n${r.notes}\n업데이트 파일을 열까요?`,
                     )
                   ) {
-                    if (native)
-                      await NativeClinic.install({
-                        url: r.url,
-                        sha256: r.sha256,
-                      });
-                    else window.open(r.url, "_blank", "noopener,noreferrer");
+                    window.open(r.url, "_blank", "noopener,noreferrer");
                   }
                 })
               }

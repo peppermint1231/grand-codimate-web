@@ -3,6 +3,7 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
 export const native = Capacitor.isNativePlatform();
 export const NativeClinic = registerPlugin<{
+  appInfo(): Promise<{ version: string; versionCode: number }>;
   seal(o: { value: string }): Promise<{ value: string }>;
   open(o: { value: string }): Promise<{ value: string }>;
   print(): Promise<void>;

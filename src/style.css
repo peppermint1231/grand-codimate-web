@@ -1542,3 +1542,28 @@ details p {
 .web-update-notice button {
   white-space: nowrap;
 }
+.android-update-notice {
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  right: 16px;
+  z-index: 2000;
+  width: min(440px, calc(100vw - 32px));
+  max-height: 65vh;
+  overflow: auto;
+  padding: 20px;
+  background: #183e35;
+  color: white;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px #0003;
+}
+.android-update-notice strong,
+.android-update-notice .small {
+  display: block;
+}
+.android-update-notice .small {
+  color: #d5e7df;
+  margin-top: 6px;
+}
+.android-update-notice .release-notes {
+  white-space: pre-wrap;
+}

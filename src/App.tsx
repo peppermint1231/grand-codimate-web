@@ -1,3 +1,6 @@
+import { AddressSearch } from "./components/AddressSearch";
+import { PhotoBoard, HistoryPhotoPicker } from "./components/PhotoBoard";
+import { consultationKind, packageActive, productCategory } from "./core/model";
 import { native, takePhoto, printPage, NativeClinic } from "./lib/native";
 import { needsServer, configureServer } from "./lib/api";
 import {
@@ -63,6 +66,7 @@ import {
   vaultEnabled,
   recoveryCommands,
   upload,
+  stagePhoto,
   type CachedSession,
 } from "./lib/api";
 import {
@@ -154,14 +158,19 @@ export function App() {
     [modal, setModal] = useState(""),
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
+  const workInFlight = useRef(false);
   const work = async (fn: () => Promise<unknown>) => {
+    if (workInFlight.current) return;
+    workInFlight.current = true;
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       return await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : "처리하지 못했습니다");
     } finally {
+      workInFlight.current = false;
       setBusy(false);
     }
   };
@@ -291,18 +300,27 @@ export function App() {
     });
   const patient = state.patients.find((p) => p.id === patientId),
     consult = state.consultations.find((c) => c.id === consultId);
-  const newConsult = (p: Patient) =>
+  const newConsult = (
+    p: Patient,
+    kind: Consultation["kind"] = "initial",
+    sourceConsultationId?: string,
+    selectedCategory?: "미용" | "보험",
+  ) =>
     work(async () => {
       const id = crypto.randomUUID();
       await send(
         "consultation.create",
         {
           patientId: p.id,
-          category: window.confirm(
-            "미용 상담을 시작할까요? 취소를 누르면 보험 상담을 시작합니다.",
-          )
-            ? "미용"
-            : "보험",
+          kind,
+          sourceConsultationId,
+          category:
+            selectedCategory ||
+            (window.confirm(
+              "미용 상담을 시작할까요? 취소를 누르면 보험 상담을 시작합니다.",
+            )
+              ? "미용"
+              : "보험"),
         },
         id,
       );
@@ -726,7 +744,9 @@ export function App() {
                 state={state}
                 user={user}
                 back={() => setPatientId("")}
-                start={() => newConsult(patient)}
+                start={(kind, source, category) =>
+                  newConsult(patient, kind, source, category)
+                }
                 send={(...args: Parameters<typeof send>) =>
                   work(() => send(...args))
                 }
@@ -1097,6 +1117,17 @@ function Patients({
                       <span className="patient-avatar">{p.name[0]}</span>
                       <span>
                         <b>{p.name}</b>
+                        {(["미용", "보험"] as const).map(
+                          (category) =>
+                            cs.some(
+                              (c) =>
+                                c.category === category && packageActive(c),
+                            ) && (
+                              <span className="badge P" key={category}>
+                                {category} 진행 중
+                              </span>
+                            ),
+                        )}
                         <small>
                           {age(p.dob)}세 ·{" "}
                           {p.sex === "M"
@@ -1198,12 +1229,19 @@ function PatientForm({
           ["address", "주소 (동까지)"],
         ].map(([k, label]) => (
           <Field key={k} label={label}>
-            <input
-              type={k === "dob" ? "date" : "text"}
-              value={data[k as keyof typeof data]}
-              required
-              onChange={(e) => setData({ ...data, [k]: e.target.value })}
-            />
+            {k === "address" ? (
+              <AddressSearch
+                value={data.address}
+                onChange={(address) => setData({ ...data, address })}
+              />
+            ) : (
+              <input
+                type={k === "dob" ? "date" : "text"}
+                value={data[k as keyof typeof data]}
+                required
+                onChange={(e) => setData({ ...data, [k]: e.target.value })}
+              />
+            )}
           </Field>
         ))}
         <Field label="성별">
@@ -1243,12 +1281,19 @@ function PatientDetail({
   state: State;
   user: User;
   back: () => void;
-  start: () => void;
+  start: (
+    kind?: Consultation["kind"],
+    source?: string,
+    category?: "미용" | "보험",
+  ) => void;
   send: (...args: any[]) => any;
   open: (c: Consultation) => void;
 }) {
   const [tab, setTab] = useState("history"),
-    [edit, setEdit] = useState(false);
+    [edit, setEdit] = useState(false),
+    [starting, setStarting] = useState<Consultation["kind"] | null>(null),
+    [startCategory, setStartCategory] = useState<"미용" | "보험">("미용"),
+    [sourceId, setSourceId] = useState("");
   const m = metrics(s, p.id),
     g = gradeFor(s, p),
     cs = s.consultations.filter((c) => c.patientId === p.id);
@@ -1262,17 +1307,156 @@ function PatientDetail({
         title={`${p.name} 님`}
         description={`${age(p.dob)}세 · ${p.dob} · ${p.phone}`}
         action={
-          <button className="primary" onClick={start}>
-            <Plus size={18} />새 상담 시작
-          </button>
+          <div className="button-row">
+            <button
+              className="primary"
+              onClick={() => {
+                setStarting("initial");
+                setSourceId("");
+              }}
+            >
+              <Plus size={18} />새 상담 시작
+            </button>
+            <button
+              onClick={() => {
+                setStarting("interim");
+                setSourceId("");
+              }}
+            >
+              중간상담
+            </button>
+            <button
+              onClick={() => {
+                setStarting("renewal");
+                setSourceId("");
+              }}
+            >
+              연장상담
+            </button>
+          </div>
         }
       />
+      {starting && (
+        <Modal
+          title={
+            starting === "interim"
+              ? "중간상담 시작"
+              : starting === "renewal"
+                ? "연장상담 시작"
+                : "새 상담 시작"
+          }
+          close={() => setStarting(null)}
+        >
+          <Field label="상담 구분">
+            <select
+              value={startCategory}
+              onChange={(e) => {
+                setStartCategory(e.target.value as "미용" | "보험");
+                setSourceId("");
+              }}
+            >
+              <option>미용</option>
+              <option>보험</option>
+            </select>
+          </Field>
+          {starting !== "initial" && (
+            <>
+              <Field label="이어갈 이전 상담">
+                <select
+                  value={sourceId}
+                  onChange={(e) => setSourceId(e.target.value)}
+                >
+                  <option value="">이전 상담 선택</option>
+                  {cs
+                    .filter(
+                      (x) =>
+                        x.category === startCategory &&
+                        !x.cancelled &&
+                        (starting !== "renewal" || x.status === "P") &&
+                        x.kind !== "interim",
+                    )
+                    .slice()
+                    .reverse()
+                    .map((x) => (
+                      <option key={x.id} value={x.id}>
+                        {x.createdAt.slice(0, 10)} ·{" "}
+                        {x.quote.lines
+                          .map((l) => l.name + " " + l.label)
+                          .join(", ") || "사진 상담"}{" "}
+                        · {status(x)}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <p className="small">
+                이전 사진과 주석을 불러온 뒤 비교할 사진을 선택합니다.
+                {starting === "renewal"
+                  ? " 기존 시술은 현재 게시 단가로 담으며, 이전 할인은 자동 적용하지 않습니다."
+                  : ""}
+              </p>
+            </>
+          )}
+          <button
+            className="primary"
+            disabled={starting !== "initial" && !sourceId}
+            onClick={() => {
+              start(starting, sourceId || undefined, startCategory);
+              setStarting(null);
+            }}
+          >
+            상담 시작
+          </button>
+        </Modal>
+      )}
+      <div className="card package-summary">
+        <h3>패키지 진행 상태</h3>
+        {cs.filter(
+          (x) => x.status === "P" && !x.cancelled && x.kind !== "interim",
+        ).length === 0 ? (
+          <p className="small">성공 확정하면 진행 중으로 표시됩니다.</p>
+        ) : (
+          cs
+            .filter(
+              (x) => x.status === "P" && !x.cancelled && x.kind !== "interim",
+            )
+            .slice()
+            .reverse()
+            .map((x) => (
+              <div className="list-row" key={x.id}>
+                <span>
+                  <b>
+                    {x.category} ·{" "}
+                    {x.quote.lines.map((l) => l.name).join(", ") || "시술 상담"}
+                  </b>
+                  <small>{x.createdAt.slice(0, 10)}</small>
+                </span>
+                <span className={"badge " + (packageActive(x) ? "P" : "")}>
+                  {packageActive(x) ? "진행 중" : "완료"}
+                </span>
+                {allowed(user, "followup.edit") && (
+                  <button
+                    onClick={() =>
+                      send(
+                        "consultation.package",
+                        { complete: packageActive(x) },
+                        x.id,
+                        x.rev,
+                      )
+                    }
+                  >
+                    {packageActive(x) ? "완료로 전환" : "진행 중으로 전환"}
+                  </button>
+                )}
+              </div>
+            ))
+        )}
+      </div>
       <div className="patient-banner">
         <span className="grade" style={{ color: g.color }}>
           {g.name} · {g.manual ? "관리자 지정" : "자동 산정"}
         </span>
         <span>{p.address}</span>
-        <small>환자번호 {p.id}</small>
+        <small>환자번호 {p.number || p.id}</small>
         {allowed(user, "patient.edit") && (
           <button onClick={() => setEdit(true)}>정보 수정</button>
         )}
@@ -1332,7 +1516,9 @@ function PatientDetail({
                     onClick={() => open(c)}
                   >
                     <span>
-                      <b>{c.category} 상담</b>
+                      <b>
+                        {c.category} · {consultationKind(c)}
+                      </b>
                       <small>{c.createdAt.slice(0, 10)}</small>
                     </span>
                     <span className={"badge " + c.status}>{status(c)}</span>
@@ -1676,13 +1862,14 @@ function ConsultationView({
   const [draft, setDraft] = useState(c),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
-    [photoIndex, setPhotoIndex] = useState(0),
+    [historyOpen, setHistoryOpen] = useState(false),
+    [adding, setAdding] = useState(false),
+    [photoError, setPhotoError] = useState(""),
     [ratio, setRatio] = useState(50),
     [sig, setSig] = useState(""),
     [template, setTemplate] = useState(""),
     [checks, setChecks] = useState<string[]>([]),
-    [signer, setSigner] = useState(c.patient.name),
-    [compare, setCompare] = useState(false);
+    [signer, setSigner] = useState(c.patient.name);
   const catalog =
     s.catalogs.find((x) => x.version === draft.catalogVersion) ||
     latestCatalog(s);
@@ -1693,6 +1880,7 @@ function ConsultationView({
   const products = (catalog?.products || []).filter(
     (p) =>
       p.active &&
+      productCategory(p) === c.category &&
       (!category || p.category === category) &&
       [p.name, p.category, p.description].some((t) =>
         t.toLowerCase().includes(search.toLowerCase()),
@@ -1752,7 +1940,7 @@ function ConsultationView({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [draft, localSaved]);
-  const photo = draft.photos[photoIndex];
+
   const updateQuote = (patch: Partial<typeof draft.quote>) =>
     setDraft({ ...draft, quote: { ...draft.quote, ...patch } });
   const save = () => {
@@ -1765,6 +1953,7 @@ function ConsultationView({
         vat: draft.quote.vat,
         memo: draft.memo,
         photos: draft.photos,
+        photoColumns: draft.photoColumns || 2,
         reason: draft.quote.reason,
         catalogVersion: draft.catalogVersion,
       },
@@ -1772,23 +1961,49 @@ function ConsultationView({
       draft.rev,
     );
   };
-  const addPhotos = (files: File[]) =>
-    work(async () => {
-      const next = [...draft.photos];
+  const addPhotos = async (files: File[]) => {
+    if (adding) return;
+    if (draft.photos.length + files.length > 50) {
+      setPhotoError("상담당 사진은 50장까지 추가할 수 있습니다.");
+      return;
+    }
+    setAdding(true);
+    setPhotoError("");
+    try {
       for (const file of files) {
-        const { id } = await upload(file, file.name, c.id);
-        next.push({
-          id: crypto.randomUUID(),
-          name: file.name,
-          mediaId: id,
-          rotation: 0,
-          selected: true,
-          annotations: [],
-        });
+        const photo = await stagePhoto(file, c.id, user.id);
+        setDraft((current) => ({
+          ...current,
+          photos: [...current.photos, photo],
+        }));
       }
-      setDraft({ ...draft, photos: next });
       clearGuest();
-    });
+    } catch (e) {
+      setPhotoError(e instanceof Error ? e.message : "사진 추가 실패");
+    } finally {
+      setAdding(false);
+    }
+  };
+  const historyPhotos = s.consultations
+    .filter(
+      (x) =>
+        x.id !== c.id &&
+        x.patientId === c.patientId &&
+        x.category === c.category,
+    )
+    .flatMap((x) =>
+      x.photos.map((p) => ({
+        ...p,
+        capturedAt: p.capturedAt || x.createdAt,
+        sourceConsultationId: x.id,
+        sourcePhotoId: p.id,
+      })),
+    )
+    .filter(
+      (p, index, all) =>
+        all.findIndex((x) => x.id === p.id) === index &&
+        !draft.photos.some((x) => x.mediaId === p.mediaId),
+    );
   const author = s.users.find((u) => u.id === c.ownerId) || user;
   const pdf = async (statusOverride?: "P" | "F") => {
     const images = [];
@@ -1822,7 +2037,7 @@ function ConsultationView({
       </button>
       <Title
         title={`${c.patient.name} 님의 상담`}
-        description={`${c.category} · ${age(c.patient.dob)}세 · ${status(c)} · ${c.createdAt.slice(0, 10)}`}
+        description={`${consultationKind(c)} · ${c.category} · ${age(c.patient.dob)}세 · ${status(c)} · ${c.createdAt.slice(0, 10)}`}
         action={
           <>
             <span className={"badge " + c.status}>{status(c)}</span>
@@ -1841,7 +2056,7 @@ function ConsultationView({
         {[
           ["photo", "01  사진"],
           ["consult", "02  상담"],
-          ["quote", "03  견적서"],
+          ["quote", c.kind === "interim" ? "03  상담결과" : "03  견적서"],
         ].map(([t, l]) => (
           <button
             key={t}
@@ -1874,7 +2089,10 @@ function ConsultationView({
       </div>
       {(tab === "photo" || tab === "consult") && (
         <div
-          className={"consult-layout " + (tab === "photo" ? "photo-only" : "")}
+          className={
+            "consult-layout " +
+            (tab === "photo" || c.kind === "interim" ? "photo-only" : "")
+          }
           style={
             {
               "--split": ratio + "%",
@@ -1908,7 +2126,10 @@ function ConsultationView({
                   capture="environment"
                   multiple
                   disabled={readonly}
-                  onChange={(e) => addPhotos(Array.from(e.target.files || []))}
+                  onChange={(e) => {
+                    void addPhotos(Array.from(e.target.files || []));
+                    e.target.value = "";
+                  }}
                 />
               </label>
             </div>
@@ -1933,87 +2154,62 @@ function ConsultationView({
                 로그인 전 촬영한 {guestPhotos.length}장 연결
               </button>
             )}
-            <div className="photo-picker">
-              {draft.photos.map((p, i) => (
-                <button
-                  key={p.id}
-                  className={i === photoIndex ? "selected" : ""}
-                  onClick={() => setPhotoIndex(i)}
-                >
-                  {i + 1}. {p.name.slice(0, 15)}
-                  {p.selected ? " ✓" : ""}
-                </button>
-              ))}
-            </div>
-            {photo ? (
-              <>
-                <PhotoEditor
-                  photo={photo}
-                  userId={user.id}
-                  readonly={readonly && user.role !== "doctor"}
-                  onChange={(p) =>
-                    setDraft({
-                      ...draft,
-                      photos: draft.photos.map((x) => (x.id === p.id ? p : x)),
-                    })
-                  }
-                />
-                <div className="editor-tools">
-                  <label className="check">
-                    <input
-                      type="checkbox"
-                      disabled={readonly}
-                      checked={photo.selected}
-                      onChange={(e) =>
-                        setDraft({
-                          ...draft,
-                          photos: draft.photos.map((x) =>
-                            x.id === photo.id
-                              ? { ...x, selected: e.target.checked }
-                              : x,
-                          ),
-                        })
-                      }
-                    />
-                    상담·출력에 포함
-                  </label>
-                  <button onClick={() => setCompare(!compare)}>
-                    사진 비교
-                  </button>
-                  {!readonly && (
-                    <button
-                      onClick={() => {
-                        if (photoIndex > 0) {
-                          const photos = [...draft.photos];
-                          [photos[photoIndex - 1], photos[photoIndex]] = [
-                            photos[photoIndex],
-                            photos[photoIndex - 1],
-                          ];
-                          setDraft({ ...draft, photos });
-                          setPhotoIndex(photoIndex - 1);
-                        }
-                      }}
-                    >
-                      앞으로 이동
-                    </button>
-                  )}
-                </div>
-                {compare && draft.photos.length > 1 && (
-                  <PhotoEditor
-                    photo={draft.photos[(photoIndex + 1) % draft.photos.length]}
-                    userId={user.id}
-                    readonly
-                    onChange={() => {}}
-                  />
-                )}
-              </>
-            ) : (
-              <Empty>
-                사진을 촬영하거나 업로드하세요.
-                <br />
-                사진 없이도 상담을 진행할 수 있습니다.
-              </Empty>
+            {adding && <p role="status">사진 미리보기 준비 중…</p>}
+            {photoError && (
+              <p className="error" role="alert">
+                {photoError}
+              </p>
             )}
+            {!readonly && (
+              <button
+                disabled={!historyPhotos.length}
+                onClick={() => setHistoryOpen(true)}
+              >
+                이전 상담 사진 불러오기 ({historyPhotos.length})
+              </button>
+            )}
+            {historyOpen && (
+              <Modal
+                title="이전 상담 사진 · 주석 포함"
+                close={() => setHistoryOpen(false)}
+              >
+                <HistoryPhotoPicker
+                  photos={historyPhotos}
+                  onAdd={(photos) => {
+                    if (draft.photos.length + photos.length > 50) {
+                      setPhotoError(
+                        "상담당 사진은 50장까지 추가할 수 있습니다.",
+                      );
+                      return;
+                    }
+                    setDraft((d) => ({
+                      ...d,
+                      photos: [
+                        ...d.photos,
+                        ...photos.map((p) => ({
+                          ...p,
+                          id: crypto.randomUUID(),
+                          selected: true,
+                        })),
+                      ],
+                    }));
+                    setHistoryOpen(false);
+                  }}
+                />
+              </Modal>
+            )}
+            <PhotoBoard
+              photos={draft.photos}
+              columns={draft.photoColumns || 2}
+              userId={user.id}
+              readonly={readonly}
+              canAnnotate={!readonly || user.role === "doctor"}
+              admin={user.role === "admin"}
+              onChange={(photos) => setDraft((d) => ({ ...d, photos }))}
+              onColumns={(photoColumns) =>
+                setDraft((d) => ({ ...d, photoColumns }))
+              }
+            />
             {tab === "consult" && (
               <Field label="사진·장바구니 비율">
                 <input
@@ -2026,7 +2222,7 @@ function ConsultationView({
               </Field>
             )}
           </section>
-          {tab === "consult" && (
+          {tab === "consult" && c.kind !== "interim" && (
             <div
               className="split-handle"
               role="separator"
@@ -2069,7 +2265,7 @@ function ConsultationView({
               ⋮
             </div>
           )}
-          {tab === "consult" && (
+          {tab === "consult" && c.kind !== "interim" && (
             <section className="catalog-panel">
               <div className="card">
                 <div className="section-title">
@@ -2314,24 +2510,25 @@ function ConsultationView({
                 onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
               />
             </Field>
-            {latestCatalog(s)?.version !== c.catalogVersion && (
-              <button
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "가격 갱신은 장바구니를 비운 뒤 최신 상품을 다시 선택합니다. 진행할까요?",
+            {c.kind !== "interim" &&
+              latestCatalog(s)?.version !== c.catalogVersion && (
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "가격 갱신은 장바구니를 비운 뒤 최신 상품을 다시 선택합니다. 진행할까요?",
+                      )
                     )
-                  )
-                    setDraft({
-                      ...draft,
-                      catalogVersion: latestCatalog(s)?.version || "",
-                      quote: emptyQuote(),
-                    });
-                }}
-              >
-                최신 단가표 가져오기
-              </button>
-            )}
+                      setDraft({
+                        ...draft,
+                        catalogVersion: latestCatalog(s)?.version || "",
+                        quote: emptyQuote(),
+                      });
+                  }}
+                >
+                  최신 단가표 가져오기
+                </button>
+              )}
           </div>
           <form
             className="card"
@@ -2370,7 +2567,9 @@ function ConsultationView({
         <div className="detail-grid">
           <div className="card quote-paper">
             <p className="eyebrow">GRAND CLINIC</p>
-            <h2>시술 상담 견적서</h2>
+            <h2>
+              {c.kind === "interim" ? "중간상담 결과" : "시술 상담 견적서"}
+            </h2>
             <p>
               {c.patient.name} 님 · {c.category}
             </p>
@@ -2457,22 +2656,20 @@ function ConsultationView({
                         )
                       )
                         return;
-                      const b = await pdf("P"),
-                        doc = await upload(
-                          b,
-                          documentName(c, author, "P"),
-                          c.id,
-                        );
                       await send(
                         "consultation.finalize",
-                        { status: "P", documents: [doc.id] },
+                        { status: "P", documents: [] },
                         c.id,
                         c.rev,
                       );
                     })
                   }
                 >
-                  성공 확정
+                  {c.kind === "interim"
+                    ? "중간상담 완료"
+                    : c.kind === "renewal"
+                      ? "연장 확정 · 진행 중 유지"
+                      : "성공 확정 · 진행 중"}
                 </button>
                 <button
                   onClick={() =>
@@ -2483,26 +2680,22 @@ function ConsultationView({
                       }
                       if (
                         !window.confirm(
-                          "실패 확정 후 수정은 관리자만 가능합니다.",
+                          c.kind === "renewal"
+                            ? "연장하지 않고 기존 패키지를 완료로 표시할까요?"
+                            : "실패 확정 후 수정은 관리자만 가능합니다.",
                         )
                       )
                         return;
-                      const b = await pdf("F"),
-                        doc = await upload(
-                          b,
-                          documentName(c, author, "F"),
-                          c.id,
-                        );
                       await send(
                         "consultation.finalize",
-                        { status: "F", documents: [doc.id] },
+                        { status: "F", documents: [] },
                         c.id,
                         c.rev,
                       );
                     })
                   }
                 >
-                  실패 확정
+                  {c.kind === "renewal" ? "연장 안 함 · 완료" : "실패 확정"}
                 </button>
               </div>
             )}
@@ -3222,6 +3415,21 @@ function CatalogView({
             />
             판매 활성화
           </label>
+          <Field label="미용·보험 구분">
+            <select
+              disabled={!editable}
+              value={productCategory(product)}
+              onChange={(e) =>
+                change({
+                  ...product,
+                  careCategory: e.target.value as "미용" | "보험",
+                })
+              }
+            >
+              <option>미용</option>
+              <option>보험</option>
+            </select>
+          </Field>
           {product.options.map((o, i) => (
             <div className="option-edit" key={o.id}>
               <Field label="옵션">
@@ -3386,7 +3594,9 @@ function Stats({
   send: (...args: any[]) => Promise<any>;
   work: (fn: () => Promise<any>) => any;
 }) {
-  const valid = s.consultations.filter((c) => !c.cancelled),
+  const valid = s.consultations.filter(
+      (c) => !c.cancelled && c.kind !== "interim",
+    ),
     passed = valid.filter((c) => c.status === "P"),
     failed = valid.filter((c) => c.status === "F");
   const sums = s.patients
@@ -3918,7 +4128,8 @@ function SettingsView({
             <h3>원본에서 복구</h3>
             {health.restoreRequired && (
               <p role="alert" className="error">
-                기존 OneDrive 자료를 발견했습니다. 재구축을 완료하기 전에는 새 자료를 저장할 수 없습니다.
+                기존 OneDrive 자료를 발견했습니다. 재구축을 완료하기 전에는 새
+                자료를 저장할 수 없습니다.
               </p>
             )}
             <p>

@@ -1,3 +1,4 @@
+import { patientFolder, photoFileName } from "../src/core/storagePaths";
 import { DurableObject } from "cloudflare:workers";
 import {
   emptyState,
@@ -52,7 +53,7 @@ export default {
           "Access-Control-Allow-Origin": origin || env.APP_ORIGIN,
           "Access-Control-Allow-Credentials": "true",
           "Access-Control-Allow-Headers":
-            "Content-Type,Authorization,X-File-Name,X-Consultation-Id,X-Upload-Id",
+            "Content-Type,Authorization,X-File-Name,X-Consultation-Id,X-Upload-Id,X-Captured-At",
           "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
         },
       });
@@ -116,8 +117,9 @@ export class Clinic extends DurableObject<Env> {
     }
     return s;
   }
+  private driveClient?: Drive;
   private drive() {
-    return new Drive(async () => {
+    return (this.driveClient ||= new Drive(async () => {
       let t = await this.secret<OAuthTokens>("drive");
       ensure(t, "OneDrive 연결이 필요합니다", 503);
       if (t.expires_at < Date.now() + 60000) {
@@ -128,7 +130,7 @@ export class Clinic extends DurableObject<Env> {
         await this.setSecret("drive", t);
       }
       return t.access_token;
-    });
+    }));
   }
   private async user(req: Request) {
     const token =
@@ -159,6 +161,40 @@ export class Clinic extends DurableObject<Env> {
         this.env.ENCRYPTION_KEY,
       );
       if (this.env.REQUIRE_ONEDRIVE === "true") {
+        const state = await this.state();
+        for (const change of op.changes.filter(
+          (x) => x.section === "consultations",
+        )) {
+          const c = change.value as State["consultations"][number];
+          const patient =
+            (op.changes.find(
+              (x) => x.section === "patients" && x.id === c.patientId,
+            )?.value as State["patients"][number]) ||
+            state.patients.find((x) => x.id === c.patientId);
+          if (patient) {
+            const photos = await Promise.all(
+              c.photos.map(async (p) => {
+                const m = await this.media(p.mediaId);
+                const { thumbnail, ...photo } = p;
+                return {
+                  ...photo,
+                  fileName: m?.name,
+                  oneDriveItemId: m?.remoteId,
+                  path: m?.path,
+                };
+              }),
+            );
+            await this.drive().put(
+              `${patientFolder(patient, c.category)}/상담_${c.id}.json`,
+              JSON.stringify(
+                { schemaVersion: 1, consultation: { ...c, photos } },
+                null,
+                2,
+              ),
+              "application/json",
+            );
+          }
+        }
         await this.drive().put(op.path, row.value, "application/json");
       }
       const encrypted = await Promise.all(
@@ -212,6 +248,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
+        version: "0.2.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -311,12 +348,14 @@ export class Clinic extends DurableObject<Env> {
       const savedAccounts = await this.drive().listCommits("accounts");
       // Connecting a recovery server must never overwrite the source accounts
       // or add its temporary bootstrap administrator to the source backup.
-      for (const row of (savedAccounts.length ? [] : this.sql
-        .exec<{ id: string }>(
-          "SELECT id FROM secrets WHERE id LIKE ?",
-          "user:%",
-        )
-        .toArray())) {
+      for (const row of savedAccounts.length
+        ? []
+        : this.sql
+            .exec<{ id: string }>(
+              "SELECT id FROM secrets WHERE id LIKE ?",
+              "user:%",
+            )
+            .toArray()) {
         const account = await this.secret<Account>(row.id);
         if (account)
           await this.drive().put(
@@ -328,14 +367,17 @@ export class Clinic extends DurableObject<Env> {
         await this.drive().folders("상담/_codimate/" + folder);
       if (savedAccounts.length) {
         const localUsers = this.sql
-          .exec<{ id: string }>("SELECT id FROM secrets WHERE id LIKE ?", "user:%")
+          .exec<{ id: string }>(
+            "SELECT id FROM secrets WHERE id LIKE ?",
+            "user:%",
+          )
           .toArray();
         const unknownAccount = localUsers.some(
           (u) => !savedAccounts.some((a) => a.name === u.id.slice(5) + ".enc"),
         );
-        const missingHistory = !this.sql
-          .exec("SELECT id FROM operations LIMIT 1").toArray().length &&
-          (await this.drive().listCommits()).length > 0;
+        const missingHistory =
+          !this.sql.exec("SELECT id FROM operations LIMIT 1").toArray()
+            .length && (await this.drive().listCommits()).length > 0;
         if (unknownAccount || missingHistory)
           await this.setSecret("restore-required", true);
       }
@@ -344,9 +386,21 @@ export class Clinic extends DurableObject<Env> {
     const user = await this.user(req);
     const admin = () =>
       ensure(user.role === "admin", "관리자만 가능합니다", 403);
-    if (["/api/commands", "/api/users", "/api/media", "/api/sync", "/api/update"].includes(path) && req.method === "POST")
-      ensure(!(await this.secret("restore-required")),
-        "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.", 409);
+    if (
+      [
+        "/api/commands",
+        "/api/users",
+        "/api/media",
+        "/api/sync",
+        "/api/update",
+      ].includes(path) &&
+      req.method === "POST"
+    )
+      ensure(
+        !(await this.secret("restore-required")),
+        "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
+        409,
+      );
     if (path === "/api/backup" && req.method === "POST") {
       admin();
       const snapshot = {
@@ -540,10 +594,71 @@ export class Clinic extends DurableObject<Env> {
         for (const id of [...c.photos.map((p) => p.mediaId), ...c.documents]) {
           const m = await this.media(id);
           ensure(
-            m?.consultationId === c.id,
-            "상담 파일 업로드를 먼저 완료하세요",
+            m &&
+              (m.consultationId === c.id ||
+                (!c.documents.includes(id) &&
+                  before.consultations.some(
+                    (source) =>
+                      source.id === m.consultationId &&
+                      source.patientId === c.patientId &&
+                      source.category === c.category,
+                  ))),
+            "같은 환자·구분의 사진 업로드를 먼저 완료하세요",
             409,
           );
+          if (
+            this.env.REQUIRE_ONEDRIVE === "true" &&
+            m.remoteId &&
+            !m.path &&
+            m.mime.startsWith("image/")
+          ) {
+            // Copy legacy photos on first save. Preserve old files and stable app media IDs.
+            const patient = after.patients.find((p) => p.id === c.patientId)!;
+            const source = before.consultations.find(
+              (x) => x.id === m.consultationId,
+            )!;
+            const capturedAt =
+              c.photos.find((p) => p.mediaId === id)?.capturedAt ||
+              m.capturedAt ||
+              source.createdAt;
+            const folder = patientFolder(patient, c.category),
+              name = photoFileName(patient, capturedAt, m.mime);
+            const reservation = await this.secret<{ path: string }>(
+              "legacy-path:" + id,
+            );
+            let path = reservation?.path || `${folder}/${name}`;
+            if (!reservation) {
+              if (await this.drive().exists(path))
+                path = path.replace(/(\.[^.]+)$/, "_" + id + "$1");
+              await this.setSecret("legacy-path:" + id, { path });
+            }
+            const bytes = await (
+              await this.drive().get(m.remoteId)
+            ).arrayBuffer();
+            const copied = await this.drive().put(path, bytes, m.mime);
+            ensure(
+              copied.size === m.size,
+              "기존 사진 복사 크기가 다릅니다",
+              503,
+            );
+            const value = await seal(
+              {
+                ...m,
+                id,
+                path,
+                name: path.split("/").at(-1),
+                capturedAt,
+                remoteId: copied.id,
+              },
+              this.env.ENCRYPTION_KEY,
+            );
+            await this.drive().put(`상담/_codimate/media/${id}.enc`, value);
+            this.sql.exec(
+              "INSERT OR REPLACE INTO media VALUES(?,?)",
+              id,
+              value,
+            );
+          }
         }
       }
       const changes: Change[] = [];
@@ -620,10 +735,11 @@ export class Clinic extends DurableObject<Env> {
         await this.drive().folders("상담/_codimate/" + folder);
         for (const item of await this.drive().listCommits(folder)) {
           const value = await (await this.drive().get(item.id)).text();
-          const record = await open<{ id: string; role?: string; active?: boolean }>(
-            value,
-            this.env.ENCRYPTION_KEY,
-          );
+          const record = await open<{
+            id: string;
+            role?: string;
+            active?: boolean;
+          }>(value, this.env.ENCRYPTION_KEY);
           ensure(record.id, "복구 파일 ID가 없습니다");
           if (folder === "accounts" && record.role === "admin" && record.active)
             activeAdmins++;
@@ -634,12 +750,20 @@ export class Clinic extends DurableObject<Env> {
           });
         }
       }
-      ensure(activeAdmins > 0, "원본에 활성 관리자 계정이 없습니다. 기존 서버를 유지합니다.", 409);
+      ensure(
+        activeAdmins > 0,
+        "원본에 활성 관리자 계정이 없습니다. 기존 서버를 유지합니다.",
+        409,
+      );
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("DELETE FROM entities");
         this.sql.exec("DELETE FROM operations");
         this.sql.exec("DELETE FROM media");
-        this.sql.exec("DELETE FROM secrets WHERE id LIKE ? OR id LIKE ?", "user:%", "session:%");
+        this.sql.exec(
+          "DELETE FROM secrets WHERE id LIKE ? OR id LIKE ?",
+          "user:%",
+          "session:%",
+        );
         this.sql.exec("DELETE FROM secrets WHERE id=?", "restore-required");
         for (const r of receipts)
           this.sql.exec(
@@ -663,8 +787,15 @@ export class Clinic extends DurableObject<Env> {
             c.value,
           );
       });
-      const response = json({ ok: true, commits: commits.length, requiresLogin: true });
-      response.headers.set("Set-Cookie", "codimate=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0");
+      const response = json({
+        ok: true,
+        commits: commits.length,
+        requiresLogin: true,
+      });
+      response.headers.set(
+        "Set-Cookie",
+        "codimate=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0",
+      );
       return response;
     }
     if (path === "/api/media" && req.method === "POST") {
@@ -705,17 +836,34 @@ export class Clinic extends DurableObject<Env> {
       const name = decodeURIComponent(
         req.headers.get("X-File-Name") || "photo",
       ).replace(/[\\/:*?"<>|]/g, "_");
-      let remoteId: string | undefined;
+      let remoteId: string | undefined, storagePath: string | undefined;
+      const capturedAt =
+        req.headers.get("X-Captured-At") || new Date().toISOString();
+      ensure(Number.isFinite(Date.parse(capturedAt)), "촬영 날짜를 확인하세요");
       if (this.env.REQUIRE_ONEDRIVE === "true") {
-        const folder =
+        const patient = s.patients.find((p) => p.id === c.patientId)!;
+        const folder = patientFolder(patient, c.category);
+        const filename =
           mime === "application/pdf"
-            ? `상담/${c.category}`
-            : `상담/${c.category}/사진/${c.id}`;
-        const r = await this.drive().put(
-          `${folder}/${name.replace(/(\.[^.]+)$/, "_" + id.slice(0, 8) + "$1")}`,
-          data,
-          mime,
-        );
+            ? name
+            : photoFileName(patient, capturedAt, mime);
+        const reserved = await this.secret<{
+          path: string;
+          fingerprint: string;
+        }>("upload-path:" + id);
+        if (reserved) {
+          ensure(reserved.fingerprint === fingerprint, "업로드 ID 충돌", 409);
+          storagePath = reserved.path;
+        } else {
+          storagePath = `${folder}/${filename}`;
+          if (await this.drive().exists(storagePath))
+            storagePath = storagePath.replace(/(\.[^.]+)$/, "_" + id + "$1");
+          await this.setSecret("upload-path:" + id, {
+            path: storagePath,
+            fingerprint,
+          });
+        }
+        const r = await this.drive().put(storagePath, data, mime);
         ensure(
           r.size === data.byteLength,
           "업로드 파일 크기가 일치하지 않습니다",
@@ -732,7 +880,11 @@ export class Clinic extends DurableObject<Env> {
       const value = await seal(
         {
           id,
-          name,
+          name: storagePath?.split("/").at(-1) || name,
+          path: storagePath,
+          capturedAt,
+          patientId: c.patientId,
+          category: c.category,
           mime,
           consultationId,
           remoteId,
@@ -753,8 +905,11 @@ export class Clinic extends DurableObject<Env> {
       // Stored consultation PDFs contain the unredacted quotation. Hiding
       // amounts in /state alone does not protect these downloadable documents.
       if (m.mime === "application/pdf")
-        ensure(allowed(user, "money.read") && allowed(user, "export"),
-          "상담 문서 열람·내보내기 권한이 없습니다", 403);
+        ensure(
+          allowed(user, "money.read") && allowed(user, "export"),
+          "상담 문서 열람·내보내기 권한이 없습니다",
+          403,
+        );
       let data: ArrayBuffer;
       if (m.remoteId)
         data = await (await this.drive().get(m.remoteId)).arrayBuffer();
@@ -788,6 +943,9 @@ export class Clinic extends DurableObject<Env> {
           size: number;
           mime: string;
           fingerprint?: string;
+          name?: string;
+          path?: string;
+          capturedAt?: string;
         }>(row.value, this.env.ENCRYPTION_KEY)
       : undefined;
   }

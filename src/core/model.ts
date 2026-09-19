@@ -29,6 +29,8 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  number?: string;
+  storageName?: string;
   name: string;
   sex: "M" | "F" | "U";
   dob: string;
@@ -62,6 +64,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  careCategory?: "미용" | "보험";
   category: string;
   name: string;
   description: string;
@@ -110,7 +113,10 @@ export interface Quote {
 }
 export interface Annotation {
   id: string;
-  tool: "pen" | "arrow" | "rect" | "ellipse" | "text";
+  tool: "pen" | "arrow" | "rect" | "ellipse" | "text" | "mosaic";
+  dashed?: boolean;
+  opacity?: number;
+  font?: "sans" | "serif" | "mono";
   points: { x: number; y: number }[];
   color: string;
   width: number;
@@ -118,6 +124,10 @@ export interface Annotation {
   authorId: string;
 }
 export interface Photo {
+  capturedAt?: string;
+  thumbnail?: string;
+  sourceConsultationId?: string;
+  sourcePhotoId?: string;
   id: string;
   name: string;
   mediaId: string;
@@ -127,6 +137,10 @@ export interface Photo {
   annotations: Annotation[];
 }
 export interface Consultation extends Base {
+  kind?: "initial" | "interim" | "renewal";
+  sourceConsultationId?: string;
+  photoColumns?: number;
+  packageProgress?: { total?: number; used?: number; complete: boolean };
   patientId: string;
   patient: Pick<Patient, "name" | "sex" | "dob" | "phone" | "address">;
   ownerId: string;
@@ -247,6 +261,17 @@ export const latestCatalog = (s: State) =>
     .sort((a, b) =>
       (b.publishedAt || "").localeCompare(a.publishedAt || ""),
     )[0];
+export const consultationKind = (c: Consultation) =>
+  c.kind === "interim"
+    ? "중간상담"
+    : c.kind === "renewal"
+      ? "연장상담"
+      : "첫 상담";
+export const packageActive = (c: Consultation) =>
+  !c.cancelled &&
+  c.status === "P" &&
+  c.kind !== "interim" &&
+  !c.packageProgress?.complete;
 export function allowed(u: User, p: Permission) {
   if (!u.active) return false;
   if (u.role === "admin") return true;
@@ -284,3 +309,9 @@ export function age(dob: string, date = new Date()) {
 }
 export const money = (v: number) =>
   new Intl.NumberFormat("ko-KR").format(v) + "원";
+
+export const productCategory = (p: Product): "미용" | "보험" =>
+  p.careCategory ||
+  (/보험|lunula|루눌라|invt/i.test(p.category + " " + p.name)
+    ? "보험"
+    : "미용");

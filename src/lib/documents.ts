@@ -107,19 +107,36 @@ export async function consultationPDF(
       height: signature.height * scale,
     });
   }
-  for (const image of images) {
-    const embedded =
-      image.type === "image/png"
-        ? await pdf.embedPng(image.bytes)
-        : await pdf.embedJpg(image.bytes);
-    const scale = Math.min(505 / embedded.width, 650 / embedded.height);
-    const h = embedded.height * scale;
-    page = pdf.addPage([595, 842]);
+  const columns = Math.max(1, Math.min(4, c.photoColumns || 2));
+  const cellWidth = (505 - (columns - 1) * 10) / columns;
+  const cellHeight = columns === 1 ? 620 : Math.min(225, cellWidth * 0.85);
+  const rows = Math.max(1, Math.floor(720 / (cellHeight + 28)));
+  const perPage = columns * rows;
+  for (let i = 0; i < images.length; i++) {
+    if (i % perPage === 0) page = pdf.addPage([595, 842]);
+    const image = images[i],
+      embedded =
+        image.type === "image/png"
+          ? await pdf.embedPng(image.bytes)
+          : await pdf.embedJpg(image.bytes);
+    const position = i % perPage,
+      x = 45 + (position % columns) * (cellWidth + 10),
+      top = 795 - Math.floor(position / columns) * (cellHeight + 28);
+    const scale = Math.min(
+      cellWidth / embedded.width,
+      cellHeight / embedded.height,
+    );
     page.drawImage(embedded, {
-      x: 45,
-      y: 790 - h,
+      x: x + (cellWidth - embedded.width * scale) / 2,
+      y: top - embedded.height * scale,
       width: embedded.width * scale,
-      height: h,
+      height: embedded.height * scale,
+    });
+    page.drawText(`${i + 1}`, {
+      x,
+      y: top - cellHeight - 14,
+      font: f,
+      size: 9,
     });
   }
   return new Blob([(await pdf.save()) as BlobPart], {

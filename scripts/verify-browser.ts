@@ -34,6 +34,10 @@ await page
   .getByRole("heading", { name: patientName + " 님", exact: true })
   .waitFor();
 await page.getByRole("button", { name: "새 상담 시작" }).click();
+await page
+  .getByRole("dialog", { name: "새 상담 시작" })
+  .getByRole("button", { name: "상담 시작", exact: true })
+  .click();
 await page.getByRole("heading", { name: patientName + " 님의 상담" }).waitFor();
 const fixture = await page.evaluate(() => {
   const c = document.createElement("canvas");
@@ -58,7 +62,14 @@ await page
     mimeType: "image/png",
     buffer: Buffer.from(fixture, "base64"),
   });
-await page.getByRole("button", { name: /1\. 검증사진/ }).waitFor();
+await page
+  .getByRole("button", { name: "검증사진.png 선택", exact: true })
+  .waitFor();
+await page
+  .locator(".thumbnail-card")
+  .first()
+  .getByRole("button", { name: "편집", exact: true })
+  .click();
 const canvas = page.locator(".photo-editor canvas").first();
 await page.waitForFunction(() => {
   const c = document.querySelector(".photo-editor canvas") as HTMLCanvasElement;
@@ -72,7 +83,7 @@ await page.mouse.move(box.x + box.width * 0.65, box.y + box.height * 0.55, {
   steps: 10,
 });
 await page.mouse.up();
-await page.getByRole("button", { name: "90° 회전", exact: true }).click();
+await page.getByRole("button", { name: "↷ 우 90°", exact: true }).click();
 await page.getByRole("button", { name: "실행취소", exact: true }).click();
 await page.getByRole("button", { name: "다시실행", exact: true }).click();
 const inverseError = await page.evaluate(async () => {

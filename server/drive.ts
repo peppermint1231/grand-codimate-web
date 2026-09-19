@@ -46,6 +46,7 @@ export async function exchange(
   };
 }
 export class Drive {
+  private knownFolders = new Map<string, number>();
   constructor(private token: () => Promise<string>) {}
   async request(path: string, init: RequestInit = {}) {
     const r = await fetch("https://graph.microsoft.com/v1.0" + path, {
@@ -73,6 +74,11 @@ export class Drive {
     const parts = path.split("/").filter(Boolean);
     let parent = "";
     for (const name of parts) {
+      const current = parent ? parent + "/" + name : name;
+      if ((this.knownFolders.get(current) || 0) > Date.now()) {
+        parent = current;
+        continue;
+      }
       const url = parent
         ? `/me/drive/root:/${parent.split("/").map(encodeURIComponent).join("/")}:/children`
         : "/me/drive/root/children";
@@ -90,8 +96,20 @@ export class Drive {
       });
       if (!r.ok && r.status !== 409)
         throw new Error(`OneDrive 폴더 생성 실패 (${r.status})`);
-      parent = parent ? parent + "/" + name : name;
+      parent = current;
+      this.knownFolders.set(current, Date.now() + 300000);
     }
+  }
+  async exists(path: string) {
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/root:/" +
+        path.split("/").map(encodeURIComponent).join("/") +
+        "?$select=id,name,size",
+      { headers: { Authorization: "Bearer " + (await this.token()) } },
+    );
+    if (r.status === 404) return undefined;
+    if (!r.ok) throw new Error(`OneDrive 파일 확인 실패 (${r.status})`);
+    return (await r.json()) as { id: string; name: string; size: number };
   }
   async put(path: string, data: BodyInit, mime = "application/octet-stream") {
     await this.folders(path.slice(0, path.lastIndexOf("/")));

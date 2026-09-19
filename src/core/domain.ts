@@ -1,6 +1,8 @@
+import { safeName } from "./storagePaths";
 import { z } from "zod";
 import {
   allowed,
+  productCategory,
   emptyQuote,
   latestCatalog,
   type State,
@@ -216,7 +218,15 @@ const photoSchema = z.object({
   name: z.string().max(200),
   mediaId: z.string().min(1),
   selected: z.boolean(),
-  rotation: z.number().int().multipleOf(90),
+  rotation: z.number().finite().min(-360).max(360),
+  capturedAt: z.string().datetime().optional(),
+  thumbnail: z
+    .string()
+    .max(60000)
+    .regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/)
+    .optional(),
+  sourceConsultationId: z.string().optional(),
+  sourcePhotoId: z.string().optional(),
   crop: z
     .object({
       x: z.number().min(0).max(1),
@@ -229,7 +239,7 @@ const photoSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        tool: z.enum(["pen", "arrow", "rect", "ellipse", "text"]),
+        tool: z.enum(["pen", "arrow", "rect", "ellipse", "text", "mosaic"]),
         points: z
           .array(
             z.object({
@@ -242,6 +252,9 @@ const photoSchema = z.object({
         width: z.number().min(1).max(30),
         text: z.string().max(500).optional(),
         authorId: z.string(),
+        dashed: z.boolean().optional(),
+        opacity: z.number().min(0).max(1).optional(),
+        font: z.enum(["sans", "serif", "mono"]).optional(),
       }),
     )
     .max(1000),
@@ -256,6 +269,10 @@ export function validateCatalog(c: Catalog, posting = false) {
   );
   const ids = new Set<string>();
   for (const p of c.products) {
+    ensure(
+      !p.careCategory || ["미용", "보험"].includes(p.careCategory),
+      "상담 구분을 확인하세요",
+    );
     ensure(
       typeof p.id === "string" &&
         p.id &&
@@ -367,7 +384,16 @@ export async function applyCommand(
         d.dob <= now.slice(0, 10) && !isNaN(Date.parse(d.dob)),
         "생년월일을 확인하세요",
       );
-      s.patients.push({ ...base, ...d, ownerId: user.id });
+      const number = String(
+        Math.max(0, ...s.patients.map((x) => Number(x.number) || 0)) + 1,
+      ).padStart(6, "0");
+      s.patients.push({
+        ...base,
+        ...d,
+        number,
+        storageName: safeName(`${number}${d.sex}${d.name}`),
+        ownerId: user.id,
+      });
       patientId = id;
       text = "환자 등록";
       break;
@@ -375,6 +401,7 @@ export async function applyCommand(
     case "patient.update": {
       need("patient.edit");
       const x = find(s.patients);
+      x.storageName ||= safeName(`${x.number || x.id}${x.sex}${x.name}`);
       Object.assign(x, patientSchema.parse(p));
       touch(x);
       patientId = id;
@@ -441,6 +468,49 @@ export async function applyCommand(
       patientSchema.parse(patient);
       const cat = latestCatalog(s);
       const category = z.enum(["미용", "보험"]).parse(p.category);
+      const kind = z
+        .enum(["initial", "interim", "renewal"])
+        .parse(p.kind || "initial");
+      const source = p.sourceConsultationId
+        ? s.consultations.find((x) => x.id === p.sourceConsultationId)
+        : undefined;
+      if (p.sourceConsultationId || kind !== "initial")
+        ensure(
+          source &&
+            source.patientId === patient.id &&
+            source.category === category &&
+            !source.cancelled,
+          "같은 환자·구분의 이전 상담을 선택하세요",
+        );
+      if (kind === "renewal")
+        ensure(source?.status === "P", "성공 확정한 기존 상담을 선택하세요");
+      let quote = emptyQuote();
+      if (kind === "renewal" && source) {
+        const lines = source.quote.lines.map((old, index) => {
+          const product = cat?.products.find(
+            (x) => x.id === old.productId && x.active,
+          );
+          const option = product?.options.find(
+            (x) => x.id === old.optionId && !x.review && x.price !== null,
+          );
+          ensure(
+            product && option && productCategory(product) === category,
+            `${old.name}: 현재 판매 단가·상담 구분을 검토·게시한 뒤 연장하세요`,
+          );
+          return {
+            ...old,
+            id: `${id}-${index}`,
+            name: product.name,
+            label: option.label,
+            price: option.price!,
+            tax: option.tax,
+            description: product.description,
+            composition: product.composition,
+            discount: { kind: "amount" as const, value: 0 },
+          };
+        });
+        quote = calculate(lines, quote.discount, source.quote.vat);
+      }
       s.consultations.push({
         ...base,
         patientId: patient.id,
@@ -455,16 +525,33 @@ export async function applyCommand(
         category,
         status: "H",
         cancelled: false,
+        kind,
+        sourceConsultationId: source?.id,
+        photoColumns: 2,
         catalogVersion: cat?.version || "",
-        quote: emptyQuote(),
+        quote,
         memo: "",
-        photos: [],
+        photos: source
+          ? source.photos.map((ph, index) => ({
+              ...ph,
+              id: `${id}-history-${index}`,
+              selected: false,
+              capturedAt: ph.capturedAt || source.createdAt,
+              sourceConsultationId: source.id,
+              sourcePhotoId: ph.id,
+            }))
+          : [],
         appointment: "",
         attendance: "미정",
         documents: [],
       });
       patientId = patient.id;
-      text = "보류 상담 시작";
+      text =
+        kind === "interim"
+          ? "중간상담 시작"
+          : kind === "renewal"
+            ? "연장상담 시작 · 현재 단가 적용"
+            : "보류 상담 시작";
       break;
     }
     case "consultation.annotate": {
@@ -504,6 +591,11 @@ export async function applyCommand(
           x.status === "published" &&
           x.version === (p.catalogVersion || c.catalogVersion),
       );
+      if (c.kind === "interim")
+        ensure(
+          !((p.lines || []) as unknown[]).length,
+          "중간상담에는 견적을 추가하지 않습니다",
+        );
       const raw = z
         .array(
           z.object({
@@ -530,7 +622,7 @@ export async function applyCommand(
           "검증·게시된 상품만 담을 수 있습니다",
         );
         ensure(
-          (product.category.includes("보험") ? "보험" : "미용") === c.category,
+          productCategory(product) === c.category,
           "다른 상담 구분의 상품입니다",
         );
         return {
@@ -566,9 +658,19 @@ export async function applyCommand(
         .parse(p.photos || []) as Photo[];
       for (const ph of photos)
         for (const a of ph.annotations) {
-          const old = c.photos
-            .find((x) => x.id === ph.id)
-            ?.annotations.find((x) => x.id === a.id);
+          const original =
+            c.photos.find((x) => x.id === ph.id) ||
+            s.consultations
+              .find(
+                (x) =>
+                  x.id === ph.sourceConsultationId &&
+                  x.patientId === c.patientId &&
+                  x.category === c.category,
+              )
+              ?.photos.find(
+                (x) => x.id === ph.sourcePhotoId && x.mediaId === ph.mediaId,
+              );
+          const old = original?.annotations.find((x) => x.id === a.id);
           ensure(
             a.authorId === user.id ||
               user.role === "admin" ||
@@ -592,7 +694,17 @@ export async function applyCommand(
               403,
             );
         }
+      ensure(
+        new Set(photos.map((x) => x.id)).size === photos.length,
+        "사진 ID가 중복됩니다",
+      );
       c.photos = photos;
+      c.photoColumns = z
+        .number()
+        .int()
+        .min(1)
+        .max(4)
+        .parse(p.photoColumns || c.photoColumns || 2);
       c.documents = [];
       c.reason = String(p.reason || "");
       touch(c);
@@ -605,10 +717,10 @@ export async function applyCommand(
       ensure(c.status === "H", "이미 확정된 상담입니다", 409);
       const status = z.enum(["P", "F"]).parse(p.status);
       ensure(
-        status !== "P" || c.quote.lines.length > 0,
+        status !== "P" || c.kind === "interim" || c.quote.lines.length > 0,
         "성공 확정에는 견적이 필요합니다",
       );
-      const docs = z.array(z.string()).min(1).parse(p.documents);
+      const docs = z.array(z.string()).parse(p.documents || []);
       for (const signature of s.signatures.filter(
         (x) => x.consultationId === c.id,
       )) {
@@ -631,8 +743,32 @@ export async function applyCommand(
       }
       c.documents = docs;
       c.status = status;
+      if (c.kind !== "interim" && status === "P")
+        c.packageProgress = { complete: false };
+      if (c.kind === "renewal" && c.sourceConsultationId) {
+        const source = s.consultations.find(
+          (x) => x.id === c.sourceConsultationId,
+        )!;
+        // The renewed consultation becomes the current package. A declined renewal closes the previous package.
+        source.packageProgress = { complete: true };
+        touch(source);
+      }
       touch(c);
       text = status === "P" ? "계약·예약 성공 확정" : "상담 실패 확정";
+      break;
+    }
+    case "consultation.package": {
+      need("followup.edit");
+      const c = consultation();
+      ensure(
+        c.status === "P" && !c.cancelled && c.kind !== "interim",
+        "성공 확정한 시술 상담에서 패키지를 관리하세요",
+      );
+      c.packageProgress = { complete: z.boolean().parse(p.complete) };
+      touch(c);
+      text = c.packageProgress.complete
+        ? "패키지 완료로 전환"
+        : "패키지 진행 중으로 전환";
       break;
     }
     case "consultation.cancel": {

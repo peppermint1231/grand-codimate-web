@@ -6,10 +6,13 @@ import { spawn } from "node:child_process";
 const config = JSON.parse(
   await readFile(join(homedir(), ".codex/keys/codimate/signing.json"), "utf8"),
 );
-const versionName = process.env.VERSION_NAME || "0.1.0";
-const versionCode = process.env.VERSION_CODE || "1";
-if (!/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(versionName) ||
-    !/^[1-9][0-9]*$/.test(versionCode) || Number(versionCode) > 2100000000)
+const versionName = process.env.VERSION_NAME || "0.2.0";
+const versionCode = process.env.VERSION_CODE || "3";
+if (
+  !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(versionName) ||
+  !/^[1-9][0-9]*$/.test(versionCode) ||
+  Number(versionCode) > 2100000000
+)
   throw new Error("유효한 APK 버전 이름·코드를 지정하세요.");
 const args = ["-p", "android", "assembleRelease", "--console=plain"];
 if (process.env.CODIMATE_AAPT2)

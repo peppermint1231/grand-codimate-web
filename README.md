@@ -1,5 +1,7 @@
 # 코디메이트
 
+[0.2.0 사진 비교·중간/연장상담 업데이트](docs/RELEASE-0.2.0.md)
+
 안드로이드 태블릿과 PC 웹에서 사용하는 병원 상담 통합 개발판. 실제 사용 전 [구현·검증 현황](docs/IMPLEMENTATION.md)과 [운영·복구 안내](docs/OPERATIONS.md)를 확인한다.
 
 Cloudflare·Microsoft 계정 등록부터 시작하려면 [최초 연결 안내](docs/CLOUD-SETUP.md)를 따른다.

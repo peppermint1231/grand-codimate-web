@@ -1,24 +1,32 @@
 import { useEffect, useRef, useState } from "react";
 import type { Photo, Annotation } from "../core/model";
 import { mediaUrl } from "../lib/api";
+import { rotatedSize, annotationHit } from "../core/photoGeometry";
+const fonts = {
+  sans: "Codimate, sans-serif",
+  serif: 'Georgia, "Noto Serif KR", serif',
+  mono: "monospace",
+};
 export function paintPhoto(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
   photo: Photo,
   annotations = true,
+  view = { zoom: 1, x: 0, y: 0 },
 ) {
   const w = ctx.canvas.width,
-    h = ctx.canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  const crop = photo.crop || { x: 0, y: 0, width: 1, height: 1 };
-  const r = ((photo.rotation % 360) + 360) % 360;
+    h = ctx.canvas.height,
+    crop = photo.crop || { x: 0, y: 0, width: 1, height: 1 };
   const cw = img.width * crop.width,
-    ch = img.height * crop.height;
-  const rotated = r === 90 || r === 270;
-  const scale = Math.min(w / (rotated ? ch : cw), h / (rotated ? cw : ch));
+    ch = img.height * crop.height,
+    bounds = rotatedSize(cw, ch, photo.rotation);
+  const fit = Math.min(w / bounds.width, h / bounds.height),
+    scale = fit * view.zoom;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, w, h);
   ctx.save();
-  ctx.translate(w / 2, h / 2);
-  ctx.rotate((r * Math.PI) / 180);
+  ctx.translate(w / 2 + view.x, h / 2 + view.y);
+  ctx.rotate((photo.rotation * Math.PI) / 180);
   ctx.scale(scale, scale);
   ctx.translate(-cw / 2, -ch / 2);
   ctx.beginPath();
@@ -29,21 +37,42 @@ export function paintPhoto(
   const transform = ctx.getTransform();
   if (annotations)
     for (const a of photo.annotations) {
-      ctx.strokeStyle = a.color;
-      ctx.fillStyle = a.color;
-      ctx.lineWidth = a.width / scale;
-      ctx.lineCap = "round";
-      const points = a.points.map((p) => ({
+      const ps = a.points.map((p) => ({
         x: p.x * img.width,
         y: p.y * img.height,
       }));
-      if (!points.length) continue;
-      const p = points[0],
-        q = points.at(-1)!;
+      if (!ps.length) continue;
+      const p = ps[0],
+        q = ps.at(-1)!;
+      // A fixed reference size keeps annotations identical in previews and exports.
+      const unit = Math.max(img.width, img.height) / 1000;
+      ctx.save();
+      ctx.globalAlpha = a.opacity ?? 1;
+      ctx.strokeStyle = a.color;
+      ctx.fillStyle = a.color;
+      ctx.lineWidth = a.width * unit;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.setLineDash(a.dashed ? [a.width * unit * 3, a.width * unit * 2] : []);
       ctx.beginPath();
       if (a.tool === "text") {
-        ctx.font = `${24 / scale}px sans-serif`;
+        ctx.font = `${(18 + a.width * 2) * unit}px ${fonts[a.font || "sans"]}`;
         ctx.fillText(a.text || "", p.x, p.y);
+      } else if (a.tool === "mosaic") {
+        const x = Math.min(p.x, q.x),
+          y = Math.min(p.y, q.y),
+          mw = Math.abs(p.x - q.x),
+          mh = Math.abs(p.y - q.y);
+        if (mw > 0 && mh > 0) {
+          const tile = document.createElement("canvas");
+          tile.width = Math.max(1, Math.ceil(mw / (12 * unit)));
+          tile.height = Math.max(1, Math.ceil(mh / (12 * unit)));
+          tile
+            .getContext("2d")!
+            .drawImage(img, x, y, mw, mh, 0, 0, tile.width, tile.height);
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(tile, 0, 0, tile.width, tile.height, x, y, mw, mh);
+        }
       } else if (a.tool === "rect")
         ctx.strokeRect(p.x, p.y, q.x - p.x, q.y - p.y);
       else if (a.tool === "ellipse") {
@@ -59,16 +88,17 @@ export function paintPhoto(
         ctx.stroke();
       } else {
         ctx.moveTo(p.x, p.y);
-        for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
+        for (const pt of ps.slice(1)) ctx.lineTo(pt.x, pt.y);
         if (a.tool === "arrow") {
           const t = Math.atan2(q.y - p.y, q.x - p.x),
-            n = 18 / scale;
+            n = 18 * unit;
           ctx.moveTo(q.x - n * Math.cos(t - 0.5), q.y - n * Math.sin(t - 0.5));
           ctx.lineTo(q.x, q.y);
           ctx.lineTo(q.x - n * Math.cos(t + 0.5), q.y - n * Math.sin(t + 0.5));
         }
         ctx.stroke();
       }
+      ctx.restore();
     }
   ctx.restore();
   return transform;
@@ -79,46 +109,130 @@ export async function annotatedBlob(photo: Photo) {
     const img = new Image();
     img.src = url;
     await img.decode();
-    const canvas = document.createElement("canvas");
-    const odd = Math.abs(photo.rotation % 180) === 90;
     const crop = photo.crop || { width: 1, height: 1 };
-    canvas.width = odd ? img.height * crop.height : img.width * crop.width;
-    canvas.height = odd ? img.width * crop.width : img.height * crop.height;
-    const scale = Math.min(1, 1800 / Math.max(canvas.width, canvas.height));
-    canvas.width *= scale;
-    canvas.height *= scale;
-    paintPhoto(canvas.getContext("2d")!, img, photo);
-    return await new Promise<Blob>((r) =>
-      canvas.toBlob((b) => r(b!), "image/jpeg", 0.9),
+    const size = rotatedSize(
+        img.width * crop.width,
+        img.height * crop.height,
+        photo.rotation,
+      ),
+      scale = Math.min(1, 1800 / Math.max(size.width, size.height));
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.ceil(size.width * scale));
+    c.height = Math.max(1, Math.ceil(size.height * scale));
+    paintPhoto(c.getContext("2d")!, img, photo);
+    return await new Promise<Blob>((resolve, reject) =>
+      c.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("사진 출력 실패"))),
+        "image/jpeg",
+        0.9,
+      ),
     );
   } finally {
     URL.revokeObjectURL(url);
   }
 }
+export function PhotoPreview({ photo }: { photo: Photo }) {
+  const ref = useRef<HTMLCanvasElement>(null),
+    img = useRef<HTMLImageElement | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true,
+      url = "";
+    setError("");
+    img.current = null;
+    mediaUrl(photo.mediaId)
+      .then(async (u) => {
+        url = u;
+        const i = new Image();
+        i.src = u;
+        await i.decode();
+        if (live) {
+          img.current = i;
+          if (ref.current) paintPhoto(ref.current.getContext("2d")!, i, photo);
+        }
+      })
+      .catch((e) => live && setError(e.message));
+    return () => {
+      live = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photo.mediaId]);
+  useEffect(() => {
+    if (img.current && ref.current)
+      paintPhoto(ref.current.getContext("2d")!, img.current, photo);
+  }, [photo]);
+  return error ? (
+    <span role="alert">{error}</span>
+  ) : (
+    <canvas
+      ref={ref}
+      width={800}
+      height={700}
+      aria-label={photo.name + " 주석 포함 사진"}
+    />
+  );
+}
+type Tool = Annotation["tool"] | "crop" | "erase" | "pan";
+const toolNames: [Tool, string, string][] = [
+  ["pen", "펜", "P"],
+  ["arrow", "화살표", "A"],
+  ["rect", "사각형", "R"],
+  ["ellipse", "원", "O"],
+  ["text", "글자", "T"],
+  ["mosaic", "모자이크", "M"],
+  ["erase", "지우개", "E"],
+  ["pan", "이동", "H"],
+];
 export function PhotoEditor({
   photo,
   onChange,
   userId,
   readonly = false,
+  canEraseAll = false,
 }: {
   photo: Photo;
   onChange: (p: Photo) => void;
   userId: string;
   readonly?: boolean;
+  canEraseAll?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null),
-    image = useRef<HTMLImageElement>(null),
-    transform = useRef<DOMMatrix>(new DOMMatrix()),
-    drawing = useRef<Annotation | null>(null);
-  const [tool, setTool] = useState<Annotation["tool"] | "crop">("pen"),
+    image = useRef<HTMLImageElement | null>(null),
+    transform = useRef(new DOMMatrix());
+  const drawing = useRef<Annotation | null>(null),
+    pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null),
+    space = useRef(false),
+    erasing = useRef<Photo | null>(null);
+  const [tool, setTool] = useState<Tool>("pen"),
     [width, setWidth] = useState(3),
+    [color, setColor] = useState("#e76555"),
+    [opacity, setOpacity] = useState(100),
+    [dashed, setDashed] = useState(false),
+    [font, setFont] = useState<Annotation["font"]>("sans");
+  const [hidden, setHidden] = useState(false),
     [ownOnly, setOwnOnly] = useState(false),
     [undo, setUndo] = useState<Photo[]>([]),
-    [color, setColor] = useState("#e76555"),
-    [hidden, setHidden] = useState(false),
     [redo, setRedo] = useState<Photo[]>([]),
-    [zoom, setZoom] = useState(1),
+    [zoom, setZoom] = useState(25),
+    [offset, setOffset] = useState({ x: 0, y: 0 }),
     [error, setError] = useState("");
+  const stage = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = stage.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setZoom((z) => Math.min(100, Math.max(0, z - (e.deltaY > 0 ? 3 : -3))));
+      } else if (tool === "pan" || space.current) {
+        e.preventDefault();
+        setOffset((p) => ({ x: p.x - e.deltaX, y: p.y - e.deltaY }));
+      }
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, [tool]);
+  const scale = Math.max(0.05, zoom / 25);
   const draw = (p = photo) => {
     if (canvas.current && image.current)
       transform.current = paintPhoto(
@@ -131,61 +245,146 @@ export function PhotoEditor({
             }
           : p,
         !hidden,
+        { zoom: scale, ...offset },
       );
   };
   useEffect(() => {
     let live = true,
-      u = "";
+      url = "";
+    image.current = null;
+    setError("");
     mediaUrl(photo.mediaId)
-      .then(async (url) => {
-        u = url;
-        const img = new Image();
-        img.src = url;
-        await img.decode();
+      .then(async (u) => {
+        url = u;
+        const i = new Image();
+        i.src = u;
+        await i.decode();
         if (live) {
-          image.current = img;
+          image.current = i;
           draw();
         }
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => live && setError(e.message));
     return () => {
       live = false;
-      if (u) URL.revokeObjectURL(u);
+      if (url) URL.revokeObjectURL(url);
     };
   }, [photo.mediaId]);
-  useEffect(() => draw(), [photo, hidden, ownOnly]);
+  useEffect(() => draw(), [photo, hidden, ownOnly, zoom, offset]);
   useEffect(() => {
     setUndo([]);
     setRedo([]);
+    setZoom(25);
+    setOffset({ x: 0, y: 0 });
+    drawing.current = null;
   }, [photo.id]);
   const commit = (next: Photo) => {
-    setUndo([...undo.slice(-49), photo]);
+    if (readonly) return;
+    setUndo((x) => [...x.slice(-49), photo]);
     setRedo([]);
     onChange(next);
   };
+  const undoOne = () => {
+    if (readonly || !undo.length) return;
+    setRedo((x) => [...x, photo]);
+    onChange(undo.at(-1)!);
+    setUndo((x) => x.slice(0, -1));
+  };
+  const redoOne = () => {
+    if (readonly || !redo.length) return;
+    setUndo((x) => [...x, photo]);
+    onChange(redo.at(-1)!);
+    setRedo((x) => x.slice(0, -1));
+  };
+  const resetView = () => {
+    setZoom(25);
+    setOffset({ x: 0, y: 0 });
+  };
   const point = (e: React.PointerEvent) => {
     const c = canvas.current!,
-      rect = c.getBoundingClientRect();
-    const pos = new DOMPoint(
-      ((e.clientX - rect.left) * c.width) / rect.width,
-      ((e.clientY - rect.top) * c.height) / rect.height,
+      r = c.getBoundingClientRect();
+    const p = new DOMPoint(
+      ((e.clientX - r.left) * c.width) / r.width,
+      ((e.clientY - r.top) * c.height) / r.height,
     ).matrixTransform(transform.current.inverse());
     return {
-      x: Math.max(0, Math.min(1, pos.x / (image.current?.width || 1))),
-      y: Math.max(0, Math.min(1, pos.y / (image.current?.height || 1))),
+      x: Math.max(0, Math.min(1, p.x / (image.current?.width || 1))),
+      y: Math.max(0, Math.min(1, p.y / (image.current?.height || 1))),
     };
   };
+  const erase = (e: React.PointerEvent) => {
+    const p = point(e),
+      img = image.current!;
+    const source = erasing.current || photo;
+    const radius = ((8 + width) * img.width) / 1000 / scale;
+    const hit = [...source.annotations]
+      .reverse()
+      .find(
+        (a) =>
+          (canEraseAll || a.authorId === userId) &&
+          annotationHit(a, p, img.width, img.height, radius),
+      );
+    if (hit) {
+      erasing.current = {
+        ...source,
+        annotations: source.annotations.filter((a) => a.id !== hit.id),
+      };
+      draw(erasing.current);
+    }
+  };
+  const rotate = (degrees: number) =>
+    commit({
+      ...photo,
+      rotation: ((((degrees + 180) % 360) + 360) % 360) - 180,
+    });
   return (
-    <div className="photo-editor">
+    <div
+      className="photo-editor"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if ((e.target as HTMLElement).matches("input,textarea,select")) return;
+        const key = e.key.toLowerCase();
+        if (key === " ") {
+          space.current = true;
+          e.preventDefault();
+        }
+        if ((e.ctrlKey || e.metaKey) && key === "z") {
+          e.preventDefault();
+          e.shiftKey ? redoOne() : undoOne();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && key === "y") {
+          e.preventDefault();
+          redoOne();
+          return;
+        }
+        const found = toolNames.find((x) => x[2].toLowerCase() === key);
+        if (found) {
+          setTool(found[0]);
+          e.preventDefault();
+        }
+        if (key === "+" || key === "=") setZoom((z) => Math.min(100, z + 5));
+        if (key === "-") setZoom((z) => Math.max(0, z - 5));
+        if (key === "0") resetView();
+      }}
+      onKeyUp={(e) => {
+        if (e.key === " ") space.current = false;
+      }}
+      onBlur={() => {
+        space.current = false;
+      }}
+    >
       <div className="editor-tools">
-        {(["pen", "arrow", "rect", "ellipse", "text"] as const).map((t, i) => (
+        {toolNames.map(([value, name, key]) => (
           <button
-            disabled={readonly}
-            className={tool === t ? "selected" : ""}
-            key={t}
-            onClick={() => setTool(t)}
+            key={value}
+            disabled={readonly && value !== "pan"}
+            aria-pressed={tool === value}
+            title={`${name} (${key})`}
+            className={tool === value ? "selected" : ""}
+            onClick={() => setTool(value)}
           >
-            {["펜", "화살표", "사각형", "원", "글자"][i]}
+            {name}
           </button>
         ))}
         <input
@@ -194,139 +393,218 @@ export function PhotoEditor({
           value={color}
           onChange={(e) => setColor(e.target.value)}
         />
-        <button onClick={() => setHidden(!hidden)}>
-          {hidden ? "주석 표시" : "원본 보기"}
-        </button>
         <label>
-          굵기{" "}
+          선
+          <select
+            aria-label="선 종류"
+            value={dashed ? "dashed" : "solid"}
+            onChange={(e) => setDashed(e.target.value === "dashed")}
+          >
+            <option value="solid">실선</option>
+            <option value="dashed">점선</option>
+          </select>
+        </label>
+        <label>
+          폰트
+          <select
+            aria-label="주석 폰트"
+            value={font}
+            onChange={(e) => setFont(e.target.value as Annotation["font"])}
+          >
+            <option value="sans">고딕</option>
+            <option value="serif">명조</option>
+            <option value="mono">고정폭</option>
+          </select>
+        </label>
+        <label>
+          굵기
           <input
             aria-label="주석 굵기"
             type="range"
             min={1}
-            max={15}
+            max={30}
             value={width}
-            onChange={(e) => setWidth(Number(e.target.value))}
+            onChange={(e) => setWidth(+e.target.value)}
           />
         </label>
-        <button onClick={() => setOwnOnly(!ownOnly)}>
-          {ownOnly ? "전체 주석" : "내 주석만"}
-        </button>
-        <button onClick={() => setZoom(zoom === 1 ? 1.6 : 1)}>확대</button>
+        <label>
+          투명도 {100 - opacity}%
+          <input
+            aria-label="주석 투명도"
+            type="range"
+            min={0}
+            max={100}
+            value={100 - opacity}
+            onChange={(e) => setOpacity(100 - Number(e.target.value))}
+          />
+        </label>
       </div>
-      <div className="photo-stage">
+      <div
+        ref={stage}
+        className={"photo-stage tool-" + tool}
+        onContextMenu={(e) => e.preventDefault()}
+      >
         {error ? (
-          <p>{error}</p>
+          <p role="alert">{error}</p>
         ) : (
           <canvas
-            width={1000}
-            height={750}
             ref={canvas}
-            style={{ width: `${zoom * 100}%` }}
+            width={1200}
+            height={900}
+            aria-label="사진 편집 캔버스"
             onPointerDown={(e) => {
-              if (readonly || !image.current) return;
+              if (!image.current) return;
+              e.currentTarget.closest<HTMLElement>(".photo-editor")?.focus();
               e.currentTarget.setPointerCapture(e.pointerId);
+              if (
+                tool === "pan" ||
+                space.current ||
+                e.button === 1 ||
+                e.button === 2
+              ) {
+                pan.current = {
+                  x: e.clientX,
+                  y: e.clientY,
+                  ox: offset.x,
+                  oy: offset.y,
+                };
+                return;
+              }
+              if (readonly) return;
+              if (tool === "erase") {
+                erasing.current = photo;
+                erase(e);
+                return;
+              }
               const a: Annotation = {
                 id: crypto.randomUUID(),
                 tool: tool === "crop" ? "rect" : tool,
                 color,
                 width,
+                opacity: opacity / 100,
+                dashed,
+                font,
                 authorId: userId,
                 points: [point(e)],
               };
               if (tool === "text") {
                 a.text = window.prompt("주석 내용") || "";
                 if (a.text)
-                  commit({
-                    ...photo,
-                    annotations: [...photo.annotations, a],
-                  });
+                  commit({ ...photo, annotations: [...photo.annotations, a] });
                 return;
               }
               drawing.current = a;
             }}
             onPointerMove={(e) => {
+              if (pan.current) {
+                const r = e.currentTarget.getBoundingClientRect();
+                setOffset({
+                  x:
+                    pan.current.ox +
+                    ((e.clientX - pan.current.x) * 1200) / r.width,
+                  y:
+                    pan.current.oy +
+                    ((e.clientY - pan.current.y) * 900) / r.height,
+                });
+                return;
+              }
+              if (erasing.current) {
+                erase(e);
+                return;
+              }
               const a = drawing.current;
               if (!a) return;
               if (a.tool === "pen") a.points.push(point(e));
               else a.points = [a.points[0], point(e)];
               draw({ ...photo, annotations: [...photo.annotations, a] });
             }}
-            onPointerCancel={() => {
-              drawing.current = null;
-              draw();
-            }}
             onPointerUp={(e) => {
-              if (drawing.current) {
-                const a = drawing.current;
-                if (tool === "crop") {
-                  const p = a.points[0],
-                    q = point(e),
-                    width = Math.abs(q.x - p.x),
-                    height = Math.abs(q.y - p.y);
-                  if (width > 0.01 && height > 0.01)
-                    commit({
-                      ...photo,
-                      crop: {
-                        x: Math.min(p.x, q.x),
-                        y: Math.min(p.y, q.y),
-                        width,
-                        height,
-                      },
-                    });
-                  setTool("pen");
-                } else
+              pan.current = null;
+              if (erasing.current) {
+                if (erasing.current !== photo) commit(erasing.current);
+                erasing.current = null;
+              }
+              const a = drawing.current;
+              drawing.current = null;
+              if (!a) return;
+              if (tool === "crop") {
+                const p = a.points[0],
+                  q = point(e),
+                  width = Math.abs(q.x - p.x),
+                  height = Math.abs(q.y - p.y);
+                if (width > 0.01 && height > 0.01)
                   commit({
                     ...photo,
-                    annotations: [...photo.annotations, drawing.current],
+                    crop: {
+                      x: Math.min(p.x, q.x),
+                      y: Math.min(p.y, q.y),
+                      width,
+                      height,
+                    },
                   });
-                drawing.current = null;
-                setRedo([]);
-              }
+                setTool("pen");
+              } else
+                commit({ ...photo, annotations: [...photo.annotations, a] });
+            }}
+            onPointerCancel={() => {
+              pan.current = null;
+              drawing.current = null;
+              erasing.current = null;
+              draw();
             }}
           />
         )}
       </div>
       <div className="editor-tools">
-        <button
-          disabled={readonly || !undo.length}
-          onClick={() => {
-            setRedo([...redo, photo]);
-            onChange(undo.at(-1)!);
-            setUndo(undo.slice(0, -1));
-          }}
-        >
+        <label>
+          확대·축소 {zoom}
+          <input
+            aria-label="확대 축소"
+            type="range"
+            min={0}
+            max={100}
+            value={zoom}
+            onChange={(e) => setZoom(+e.target.value)}
+          />
+        </label>
+        <button onClick={resetView}>화면 맞춤</button>
+        <button onClick={() => setHidden(!hidden)}>
+          {hidden ? "주석 표시" : "원본 보기"}
+        </button>
+        <button onClick={() => setOwnOnly(!ownOnly)}>
+          {ownOnly ? "전체 주석" : "내 주석만"}
+        </button>
+        <button disabled={readonly || !undo.length} onClick={undoOne}>
           실행취소
         </button>
-        <button
-          disabled={readonly || !redo.length}
-          onClick={() => {
-            setUndo([...undo, photo]);
-            onChange(redo.at(-1)!);
-            setRedo(redo.slice(0, -1));
-          }}
-        >
+        <button disabled={readonly || !redo.length} onClick={redoOne}>
           다시실행
         </button>
+        <button disabled={readonly} onClick={() => rotate(photo.rotation - 90)}>
+          ↶ 좌 90°
+        </button>
+        <button disabled={readonly} onClick={() => rotate(photo.rotation + 90)}>
+          ↷ 우 90°
+        </button>
+        <label>
+          자유회전 {photo.rotation}°
+          <input
+            aria-label="자유회전"
+            disabled={readonly}
+            type="range"
+            min={-180}
+            max={180}
+            value={photo.rotation}
+            onChange={(e) => commit({ ...photo, rotation: +e.target.value })}
+          />
+        </label>
         <button
           disabled={readonly}
           onClick={() =>
-            commit({ ...photo, rotation: (photo.rotation + 90) % 360 })
+            photo.crop ? commit({ ...photo, crop: undefined }) : setTool("crop")
           }
         >
-          90° 회전
-        </button>
-        <button
-          disabled={readonly}
-          onClick={() => {
-            if (photo.crop) commit({ ...photo, crop: undefined });
-            else setTool("crop");
-          }}
-        >
-          {photo.crop
-            ? "자르기 해제"
-            : tool === "crop"
-              ? "사진에서 자를 영역을 드래그"
-              : "영역 자르기"}
+          {photo.crop ? "자르기 해제" : "영역 자르기"}
         </button>
         <button
           onClick={() => canvas.current?.parentElement?.requestFullscreen?.()}
@@ -334,6 +612,19 @@ export function PhotoEditor({
           크게 보기
         </button>
       </div>
+      <details className="shortcut-help">
+        <summary>PC 단축키·마우스 사용법</summary>
+        <p>
+          P 펜 · A 화살표 · R 사각형 · O 원 · T 글자 · M 모자이크 · E 지우개 · H
+          이동
+          <br />
+          Space+드래그 / 마우스 가운데·오른쪽 버튼: 이동 · Ctrl+휠 / + −:
+          확대·축소 · 0: 화면 맞춤
+          <br />
+          Ctrl/Cmd+Z: 실행취소 · Ctrl/Cmd+Shift+Z: 다시실행. 편집 화면을 누른 뒤
+          사용하세요. 지우개는 주석 한 개씩 지웁니다.
+        </p>
+      </details>
     </div>
   );
 }

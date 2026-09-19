@@ -30,6 +30,22 @@ export const setToken = (s: string) => {
   }
   token = s;
 };
+export async function rememberLogin(value: string) {
+  if (native)
+    localStorage.setItem(
+      "codimate-login",
+      (await NativeClinic.seal({ value })).value,
+    );
+}
+export async function restoreLogin() {
+  if (!native) return; // Web sessions stay in the HttpOnly server cookie.
+  const value = localStorage.getItem("codimate-login");
+  if (value) setToken((await NativeClinic.open({ value })).value);
+}
+export function forgetLogin() {
+  localStorage.removeItem("codimate-login");
+  setToken("");
+}
 export async function api<T = any>(
   path: string,
   init: RequestInit = {},

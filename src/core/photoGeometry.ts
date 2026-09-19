@@ -1,4 +1,5 @@
 import type { Annotation } from "./model";
+import { annotationBox } from "./annotationText";
 export function rotatedSize(width: number, height: number, degrees: number) {
   const r = (degrees * Math.PI) / 180,
     c = Math.abs(Math.cos(r)),
@@ -33,12 +34,15 @@ export function annotationHit(
       tolerance
     );
   };
-  if (a.tool === "text")
+  if (a.tool === "text" || a.tool === "stamp") {
+    const b = annotationBox(a, width, height);
     return (
-      p.x >= first.x - tolerance &&
-      p.x <= first.x + Math.max(30, (a.text?.length || 1) * 20) + tolerance &&
-      Math.abs(p.y - first.y) < 40 + tolerance
+      p.x >= b.x * width - tolerance &&
+      p.x <= (b.x + b.width) * width + tolerance &&
+      p.y >= b.y * height - tolerance &&
+      p.y <= (b.y + b.height) * height + tolerance
     );
+  }
   if (a.tool === "mosaic")
     return (
       p.x >= Math.min(first.x, last.x) - tolerance &&

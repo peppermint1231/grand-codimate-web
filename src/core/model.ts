@@ -113,10 +113,12 @@ export interface Quote {
 }
 export interface Annotation {
   id: string;
-  tool: "pen" | "arrow" | "rect" | "ellipse" | "text" | "mosaic";
+  tool: "pen" | "arrow" | "rect" | "ellipse" | "text" | "mosaic" | "stamp";
   dashed?: boolean;
   opacity?: number;
-  font?: "sans" | "serif" | "mono";
+  font?: "sans" | "serif" | "mono" | "gaegu" | "jua" | "pen";
+  fontSize?: number;
+  box?: { width: number; height: number };
   points: { x: number; y: number }[];
   color: string;
   width: number;

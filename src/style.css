@@ -1132,7 +1132,8 @@ details p {
     cursor: row-resize;
   }
   .consult-layout:not(.photo-only) .photo-panel {
-    max-height: var(--photo-height, 50vh);
+    height: var(--photo-height, 50vh);
+    max-height: none;
     overflow: auto;
   }
   .photo-panel,
@@ -1566,4 +1567,161 @@ details p {
 }
 .android-update-notice .release-notes {
   white-space: pre-wrap;
+}
+.app-shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+.app-shell.sidebar-collapsed .workspace {
+  margin-left: 0;
+  width: 100%;
+}
+.sidebar-toggle {
+  flex: 0 0 auto;
+  padding: 10px;
+}
+.patient-actions {
+  flex-wrap: nowrap;
+}
+.patient-actions button {
+  padding: 7px 10px;
+}
+.duplicate-link {
+  padding: 3px 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a561b;
+}
+.duplicate-summary {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  margin: 12px 0;
+}
+.thumbnail-strip .thumbnail-card {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  flex-basis: 140px;
+}
+.thumbnail-strip .thumbnail-toggle {
+  display: block;
+  position: relative;
+}
+.thumbnail-strip .thumbnail-card img {
+  height: 116px;
+  border-radius: 9px;
+}
+.thumbnail-strip .photo-selection-mark {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  color: white;
+  background: #154e43b8;
+  padding: 2px 7px;
+  border-radius: 20px;
+  font-size: 18px;
+}
+.thumbnail-strip .thumb-actions {
+  position: absolute;
+  bottom: 5px;
+  left: 4px;
+  right: 4px;
+  gap: 2px;
+}
+.thumbnail-strip .thumb-actions button,
+.photo-overlay-actions button {
+  background: #fff9;
+  backdrop-filter: blur(3px);
+  padding: 4px 8px;
+  min-width: 38px;
+  min-height: 40px;
+  color: #133e34;
+  border: 1px solid #ffffff60;
+}
+.thumbnail-strip .upload-state {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: #ffffffad;
+  border-radius: 8px;
+  padding: 3px;
+}
+.comparison-grid figure {
+  position: relative;
+}
+.comparison-grid .photo-overlay-actions {
+  position: absolute;
+  inset: 6px 6px auto 6px;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 0;
+}
+.photo-index {
+  margin-right: auto;
+  background: #174f43a6;
+  color: white;
+  border-radius: 20px;
+  padding: 4px 10px;
+  align-self: center;
+}
+.photo-info-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  background: #0006;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.photo-info-overlay .card {
+  width: min(460px, 100%);
+  overflow-wrap: anywhere;
+}
+@font-face {
+  font-family: CodimateGaegu;
+  src: url("/fonts/Gaegu-Regular.ttf");
+  font-display: swap;
+}
+@font-face {
+  font-family: CodimateJua;
+  src: url("/fonts/Jua-Regular.ttf");
+  font-display: swap;
+}
+@font-face {
+  font-family: CodimatePen;
+  src: url("/fonts/NanumPenScript-Regular.ttf");
+  font-display: swap;
+}
+@font-face {
+  font-family: CodimateSerif;
+  src: url("/fonts/GowunBatang-Regular.ttf");
+  font-display: swap;
+}
+.stamp-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 10px 0;
+}
+.stamp-picker button {
+  font-family: "Noto Color Emoji", "Segoe UI Emoji", sans-serif;
+  font-size: 26px;
+  padding: 5px;
+  min-width: 44px;
+}
+.text-annotation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0;
+}
+.text-annotation-controls textarea {
+  flex: 1 1 230px;
+  min-height: 70px;
+}
+.photo-stage canvas {
+  touch-action: none;
 }

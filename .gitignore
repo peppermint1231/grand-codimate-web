@@ -1,5 +1,6 @@
 node_modules/
 public/fonts/NotoSansKR.ttf
+public/fonts/*-Regular.ttf
 dist/
 .wrangler/
 .dev.vars*

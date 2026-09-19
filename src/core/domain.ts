@@ -182,8 +182,12 @@ export function duplicates(
     (x) =>
       !x.mergedInto &&
       !x.archived &&
-      ((x.name === p.name && x.dob === p.dob) ||
-        x.phone === p.phone.replace(/\D/g, "")),
+      ((!!p.name.trim() &&
+        !!p.dob &&
+        x.name.replace(/\s/g, "") === p.name.replace(/\s/g, "") &&
+        x.dob === p.dob) ||
+        (!!p.phone.replace(/\D/g, "") &&
+          x.phone.replace(/\D/g, "") === p.phone.replace(/\D/g, ""))),
   );
 }
 export function patientFor(s: State, id: string) {
@@ -239,7 +243,15 @@ const photoSchema = z.object({
     .array(
       z.object({
         id: z.string(),
-        tool: z.enum(["pen", "arrow", "rect", "ellipse", "text", "mosaic"]),
+        tool: z.enum([
+          "pen",
+          "arrow",
+          "rect",
+          "ellipse",
+          "text",
+          "mosaic",
+          "stamp",
+        ]),
         points: z
           .array(
             z.object({
@@ -254,7 +266,16 @@ const photoSchema = z.object({
         authorId: z.string(),
         dashed: z.boolean().optional(),
         opacity: z.number().min(0).max(1).optional(),
-        font: z.enum(["sans", "serif", "mono"]).optional(),
+        font: z
+          .enum(["sans", "serif", "mono", "gaegu", "jua", "pen"])
+          .optional(),
+        fontSize: z.number().min(6).max(500).optional(),
+        box: z
+          .object({
+            width: z.number().positive().max(1),
+            height: z.number().positive().max(1),
+          })
+          .optional(),
       }),
     )
     .max(1000),
@@ -408,6 +429,17 @@ export async function applyCommand(
       text = "환자정보 수정";
       break;
     }
+    case "patient.archive": {
+      admin();
+      const x = find(s.patients);
+      ensure(!x.mergedInto, "병합된 환자는 변경할 수 없습니다");
+      ensure(typeof p.archived === "boolean", "삭제·복원 상태를 확인하세요");
+      x.archived = p.archived;
+      touch(x);
+      patientId = id;
+      text = p.archived ? "환자 목록에서 삭제 (기록 보존)" : "환자 목록 복원";
+      break;
+    }
     case "patient.merge": {
       admin();
       const from = find(s.patients),
@@ -416,15 +448,28 @@ export async function applyCommand(
         target &&
           !target.mergedInto &&
           target.id !== from.id &&
-          !from.mergedInto,
+          !from.mergedInto &&
+          !from.archived &&
+          !target.archived,
         "병합 대상이 올바르지 않습니다",
       );
       ensure(String(p.reason || "").trim(), "병합 사유를 입력하세요");
+      ensure(
+        (p.targetRev === undefined || p.targetRev === target.rev),
+        "병합 대상이 다른 기기에서 수정되었습니다. 다시 확인하세요.",
+        409,
+      );
       from.mergedInto = target.id;
       touch(from);
-      for (const list of [s.consultations, s.notes, s.ledger, s.events])
+      touch(target);
+      for (const list of [s.consultations, s.notes, s.ledger])
         for (const x of list)
-          if (x.patientId === from.id) x.patientId = target.id;
+          if (x.patientId === from.id) {
+            x.patientId = target.id;
+            touch(x);
+          }
+      for (const x of s.events)
+        if (x.patientId === from.id) x.patientId = target.id;
       patientId = target.id;
       text = `환자 병합: ${String(p.reason)}`;
       break;

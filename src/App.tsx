@@ -27,6 +27,8 @@ import {
   ChevronRight,
   HeartHandshake,
   Bell,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import {
   emptyState,
@@ -61,6 +63,9 @@ import {
   makeCommand,
   setToken,
   unlockVault,
+  rememberLogin,
+  restoreLogin,
+  forgetLogin,
   lockVault,
   vaultRead,
   vaultWrite,
@@ -159,6 +164,11 @@ export function App() {
     [modal, setModal] = useState(""),
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
+  const [restoring, setRestoring] = useState(!needsServer);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
+  );
+  const restoreNeeded = useRef(true);
   const workInFlight = useRef(false);
   useEffect(() => {
     const beforeInstall = (event: Event) => {
@@ -347,6 +357,8 @@ export function App() {
     )
       return;
     api("/logout", { method: "POST" }).catch(() => {});
+    restoreNeeded.current = false;
+    forgetLogin();
     lockVault();
     setUser(null);
     setState(emptyState());
@@ -355,29 +367,52 @@ export function App() {
     setPatientId("");
   };
   useEffect(() => {
-    if (!user) return;
-    let timer: ReturnType<typeof setTimeout>;
-    const reset = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        api("/logout", { method: "POST" }).catch(() => {});
-        lockVault();
-        setUser(null);
-        setState(emptyState());
-        setPending([]);
-        setConsultId("");
-        setPatientId("");
-      }, 15 * 60000);
+    if (needsServer) return;
+    let live = true,
+      checking = false;
+    let controller: AbortController | undefined;
+    const restore = async () => {
+      if (checking || !restoreNeeded.current) return;
+      checking = true;
+      controller = new AbortController();
+      const timeout = setTimeout(() => controller?.abort(), 15000);
+      try {
+        await restoreLogin();
+        const d = await api("/state", { signal: controller.signal });
+        if (live) {
+          restoreNeeded.current = false;
+          setUser(d.user);
+          setState(d.state);
+          setHealth((h: any) => ({ ...h, ...d }));
+        }
+      } catch (e: any) {
+        if (live && e.status === 401) {
+          restoreNeeded.current = false;
+          forgetLogin();
+        }
+      } finally {
+        clearTimeout(timeout);
+        checking = false;
+        if (live) setRestoring(false);
+      }
     };
-    window.addEventListener("pointerdown", reset);
-    window.addEventListener("keydown", reset);
-    reset();
+    void restore();
+    const online = () => {
+      void restore();
+    };
+    window.addEventListener("online", online);
     return () => {
-      clearTimeout(timer);
-      window.removeEventListener("pointerdown", reset);
-      window.removeEventListener("keydown", reset);
+      live = false;
+      controller?.abort();
+      window.removeEventListener("online", online);
     };
-  }, [user, pending.length]);
+  }, []);
+  if (restoring)
+    return (
+      <div className="login-page" role="status">
+        로그인을 복원하고 있습니다…
+      </div>
+    );
   if (needsServer)
     return (
       <div className="login-page">
@@ -502,7 +537,9 @@ export function App() {
                     method: "POST",
                     body: JSON.stringify({ username, password }),
                   });
+                  restoreNeeded.current = false;
                   setToken(d.token);
+                  await rememberLogin(d.token);
                   if (data.get("trusted")) {
                     await unlockVault(
                       d.user.id,
@@ -626,8 +663,10 @@ export function App() {
       </div>
     );
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div
+      className={"app-shell" + (sidebarCollapsed ? " sidebar-collapsed" : "")}
+    >
+      <aside className="sidebar" id="main-navigation">
         <div className="logo">
           <HeartHandshake />
           <div>
@@ -644,6 +683,8 @@ export function App() {
         ].map(([key, label, Icon]: any) => (
           <button
             key={key}
+            aria-label={label}
+            title={label}
             className={"nav-item " + (page === key ? "active" : "")}
             onClick={() => {
               setPage(key);
@@ -674,6 +715,23 @@ export function App() {
       </aside>
       <main className="workspace">
         <header className="topbar">
+          <button
+            className="sidebar-toggle"
+            aria-label={sidebarCollapsed ? "메뉴 펼치기" : "메뉴 접기"}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="main-navigation"
+            onClick={() => {
+              const next = !sidebarCollapsed;
+              setSidebarCollapsed(next);
+              localStorage.setItem("codimate-sidebar-collapsed", String(next));
+            }}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen size={22} />
+            ) : (
+              <PanelLeftClose size={22} />
+            )}
+          </button>
           <div>
             <span className="small">GRAND 아름다운의원</span>
             <span className="today">
@@ -770,6 +828,9 @@ export function App() {
                 user={user}
                 select={setPatientId}
                 create={() => setModal("patient")}
+                send={(...args: Parameters<typeof send>) =>
+                  work(() => send(...args))
+                }
               />
             ))}
           {page === "consultations" && (
@@ -843,14 +904,44 @@ export function App() {
               <Empty>통계 열람 권한이 필요합니다.</Empty>
             ))}
           {page === "settings" && (
-            <SettingsView
-              state={state}
-              user={user}
-              send={send}
-              work={work}
-              refresh={refresh}
-              health={health}
-            />
+            <>
+              <div className="card">
+                <h3>이 기기의 오프라인 보관</h3>
+                <p>
+                  {vaultEnabled()
+                    ? "암호화 기기 보관이 활성화되어 있습니다."
+                    : "로그인 유지와 별도로, 기기 보관 암호로 초안·미전송 자료를 열 수 있습니다."}
+                </p>
+                {!vaultEnabled() && (
+                  <button
+                    onClick={() =>
+                      work(async () => {
+                        const pass =
+                          window.prompt("기기 보관 암호 (12자 이상)");
+                        if (!pass) return;
+                        await unlockVault(user.id, pass);
+                        setPending(
+                          (await vaultRead<Command[]>("pending")) || [],
+                        );
+                        setNotice(
+                          "기기 보관을 열었습니다. 미전송 자료가 있으면 재시도하세요.",
+                        );
+                      })
+                    }
+                  >
+                    기기 보관 잠금 해제·설정
+                  </button>
+                )}
+              </div>
+              <SettingsView
+                state={state}
+                user={user}
+                send={send}
+                work={work}
+                refresh={refresh}
+                health={health}
+              />
+            </>
           )}
         </div>
       </main>
@@ -948,11 +1039,18 @@ function Patients({
   user,
   select,
   create,
+  send,
 }: {
   state: State;
   user: User;
   select: (id: string) => void;
   create: () => void;
+  send: (
+    type: string,
+    payload: Record<string, unknown>,
+    id?: string,
+    rev?: number,
+  ) => Promise<unknown>;
 }) {
   const [search, setSearch] = useState(""),
     [grade, setGrade] = useState(""),
@@ -961,8 +1059,35 @@ function Patients({
     [owner, setOwner] = useState(""),
     [consultStatus, setConsultStatus] = useState(""),
     [since, setSince] = useState("");
+  const [editing, setEditing] = useState<Patient | null>(null);
+  const [duplicateId, setDuplicateId] = useState("");
+  const [mergePair, setMergePair] = useState<{
+    from: string;
+    to: string;
+  } | null>(null);
+  const [archived, setArchived] = useState(false),
+    [duplicateOnly, setDuplicateOnly] = useState(false);
+  const candidates = (p: Patient) =>
+    duplicates(state, p).filter((x) => x.id !== p.id);
+  const duplicatePatient = state.patients.find((p) => p.id === duplicateId);
+  const archive = async (p: Patient) => {
+    if (
+      !window.confirm(
+        p.archived
+          ? `${p.name} 환자를 목록에 복원할까요?`
+          : `${p.name} 환자를 목록에서 삭제할까요? 상담·수납·사진 기록은 보존되며 삭제 목록에서 복원할 수 있습니다.`,
+      )
+    )
+      return;
+    await send("patient.archive", { archived: !p.archived }, p.id, p.rev);
+  };
   const ps = state.patients
-    .filter((p) => !p.mergedInto && !p.archived)
+    .filter(
+      (p) =>
+        !p.mergedInto &&
+        !!p.archived === archived &&
+        (!duplicateOnly || candidates(p).length > 0),
+    )
     .map((p) => ({
       p,
       m: metrics(state, p.id),
@@ -1006,7 +1131,7 @@ function Patients({
       <div className="summary-grid">
         <Summary
           label="전체 환자"
-          value={`${state.patients.filter((p) => !p.mergedInto).length}명`}
+          value={`${state.patients.filter((p) => !p.mergedInto && !p.archived).length}명`}
           detail="함께하고 있는 환자"
         />
         <Summary
@@ -1030,6 +1155,24 @@ function Patients({
       </div>
       <div className="card">
         <div className="table-toolbar">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={duplicateOnly}
+              onChange={(e) => setDuplicateOnly(e.target.checked)}
+            />
+            중복 의심만
+          </label>
+          {user.role === "admin" && (
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={archived}
+                onChange={(e) => setArchived(e.target.checked)}
+              />
+              삭제된 환자
+            </label>
+          )}
           <div className="search">
             <Search size={19} />
             <input
@@ -1109,7 +1252,7 @@ function Patients({
                 <th>기여매출</th>
                 <th>미수금</th>
                 <th>등급</th>
-                <th />
+                <th>관리</th>
               </tr>
             </thead>
             <tbody>
@@ -1118,13 +1261,30 @@ function Patients({
                   key={p.id}
                   onClick={() => select(p.id)}
                   tabIndex={0}
-                  onKeyDown={(e) => e.key === "Enter" && select(p.id)}
+                  onKeyDown={(e) =>
+                    e.target === e.currentTarget &&
+                    e.key === "Enter" &&
+                    select(p.id)
+                  }
                 >
                   <td>
                     <div className="person">
                       <span className="patient-avatar">{p.name[0]}</span>
                       <span>
                         <b>{p.name}</b>
+                        <small>환자번호 {p.number || p.id}</small>
+                        {!!candidates(p).length && (
+                          <button
+                            className="duplicate-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDuplicateId(p.id);
+                              setMergePair(null);
+                            }}
+                          >
+                            중복 의심 {candidates(p).length}명 · 비교
+                          </button>
+                        )}
                         {(["미용", "보험"] as const).map(
                           (category) =>
                             cs.some(
@@ -1164,8 +1324,25 @@ function Patients({
                       {g.name}
                     </span>
                   </td>
-                  <td>
-                    <ChevronRight size={18} />
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <div className="button-row patient-actions">
+                      {allowed(user, "patient.edit") && !p.archived && (
+                        <button
+                          aria-label={`${p.name} 환자 수정`}
+                          onClick={() => setEditing(p)}
+                        >
+                          수정
+                        </button>
+                      )}
+                      {user.role === "admin" && (
+                        <button
+                          aria-label={`${p.name} 환자 ${p.archived ? "복원" : "삭제"}`}
+                          onClick={() => void archive(p)}
+                        >
+                          {p.archived ? "복원" : "삭제"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1178,6 +1355,141 @@ function Patients({
           </Empty>
         )}
       </div>
+      {editing && (
+        <Modal title="환자정보 수정" close={() => setEditing(null)}>
+          <PatientForm
+            state={state}
+            patient={editing}
+            save={async (d) => {
+              if (await send("patient.update", d, editing.id, editing.rev))
+                setEditing(null);
+            }}
+          />
+        </Modal>
+      )}
+      {duplicatePatient && (
+        <Modal
+          title="중복 의심 환자 비교·병합"
+          close={() => {
+            setDuplicateId("");
+            setMergePair(null);
+          }}
+        >
+          <p>
+            이름·생년월일 또는 전화번호가 같습니다. 가족 연락처와 동명이인을
+            확인한 뒤 같은 환자일 때만 병합하세요.
+          </p>
+          <div className="duplicate-summary">
+            <b>현재 환자: {duplicatePatient.name}</b>
+            <p>
+              {duplicatePatient.number || duplicatePatient.id} ·{" "}
+              {duplicatePatient.dob} · {duplicatePatient.phone}
+            </p>
+          </div>
+          {candidates(duplicatePatient).map((candidate) => (
+            <div className="duplicate-summary" key={candidate.id}>
+              <b>{candidate.name}</b>
+              <p>
+                {candidate.number || candidate.id} · {candidate.dob} ·{" "}
+                {candidate.phone}
+              </p>
+              <p>
+                {candidate.address} · 상담{" "}
+                {
+                  state.consultations.filter(
+                    (c) => c.patientId === candidate.id,
+                  ).length
+                }
+                건
+              </p>
+              <div className="button-row">
+                <button
+                  onClick={() => {
+                    setDuplicateId("");
+                    select(candidate.id);
+                  }}
+                >
+                  이 환자 기록 열기
+                </button>
+                {user.role === "admin" && (
+                  <>
+                    <button
+                      onClick={() =>
+                        setMergePair({
+                          from: duplicatePatient.id,
+                          to: candidate.id,
+                        })
+                      }
+                    >
+                      이 환자를 남기고 병합
+                    </button>
+                    <button
+                      onClick={() =>
+                        setMergePair({
+                          from: candidate.id,
+                          to: duplicatePatient.id,
+                        })
+                      }
+                    >
+                      현재 환자를 남기고 병합
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+          {!candidates(duplicatePatient).length && (
+            <p>현재 중복 의심 환자가 없습니다.</p>
+          )}
+          {user.role !== "admin" && <p>병합은 관리자가 할 수 있습니다.</p>}
+          {mergePair && (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const from = state.patients.find(
+                    (p) => p.id === mergePair.from,
+                  )!,
+                  to = state.patients.find((p) => p.id === mergePair.to)!;
+                const reason = new FormData(e.currentTarget).get("reason");
+                if (
+                  !window.confirm(
+                    `${from.name} (${from.number || from.id})의 기록을 ${to.name} (${to.number || to.id})에게 연결합니다. 진행할까요?`,
+                  )
+                )
+                  return;
+                if (
+                  await send(
+                    "patient.merge",
+                    { targetId: to.id, targetRev: to.rev, reason },
+                    from.id,
+                    from.rev,
+                  )
+                ) {
+                  setDuplicateId("");
+                  setMergePair(null);
+                  select(to.id);
+                }
+              }}
+            >
+              <p>
+                <strong>
+                  남길 환자번호:{" "}
+                  {state.patients.find((p) => p.id === mergePair.to)?.number ||
+                    mergePair.to}
+                </strong>
+              </p>
+              <p>
+                상담·수납·사진 연결을 보존합니다. 실제 중복 수납은 별도로
+                정정하세요.
+              </p>
+              <Field label="병합 사유">
+                <input name="reason" required />
+              </Field>
+              <button className="primary">병합 확정</button>
+            </form>
+          )}
+        </Modal>
+      )}
     </>
   );
 }
@@ -1727,7 +2039,13 @@ function PatientDetail({
                   )
                     send(
                       "patient.merge",
-                      { targetId: d.get("targetId"), reason: d.get("reason") },
+                      {
+                        targetId: d.get("targetId"),
+                        targetRev: s.patients.find(
+                          (x) => x.id === d.get("targetId"),
+                        )?.rev,
+                        reason: d.get("reason"),
+                      },
                       p.id,
                       p.rev,
                     );
@@ -2218,17 +2536,6 @@ function ConsultationView({
                 setDraft((d) => ({ ...d, photoColumns }))
               }
             />
-            {tab === "consult" && (
-              <Field label="사진·장바구니 비율">
-                <input
-                  type="range"
-                  min={25}
-                  max={75}
-                  value={ratio}
-                  onChange={(e) => setRatio(Number(e.target.value))}
-                />
-              </Field>
-            )}
           </section>
           {tab === "consult" && c.kind !== "interim" && (
             <div
@@ -2240,30 +2547,46 @@ function ConsultationView({
               aria-valuemin={25}
               aria-valuemax={75}
               onKeyDown={(e) => {
+                if (
+                  ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(
+                    e.key,
+                  )
+                )
+                  e.preventDefault();
                 if (["ArrowLeft", "ArrowUp"].includes(e.key))
                   setRatio(Math.max(25, ratio - 5));
                 if (["ArrowRight", "ArrowDown"].includes(e.key))
                   setRatio(Math.min(75, ratio + 5));
               }}
-              onPointerDown={(e) =>
-                e.currentTarget.setPointerCapture(e.pointerId)
-              }
-              onPointerMove={(e) => {
-                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
-                const parent = e.currentTarget.parentElement!;
-                const r = parent.getBoundingClientRect();
+              onPointerDown={(e) => {
+                const el = e.currentTarget,
+                  parent = el.parentElement!;
                 const vertical =
                   getComputedStyle(parent).flexDirection === "column";
+                el.dataset.vertical = String(vertical);
+                el.dataset.start = String(vertical ? e.clientY : e.clientX);
+                el.dataset.ratio = String(ratio);
+                el.dataset.extent = String(
+                  vertical
+                    ? window.innerHeight
+                    : parent.getBoundingClientRect().width,
+                );
+                el.setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                const el = e.currentTarget;
+                if (!el.hasPointerCapture(e.pointerId)) return;
+                const at =
+                  el.dataset.vertical === "true" ? e.clientY : e.clientX;
                 setRatio(
                   Math.round(
                     Math.max(
                       25,
                       Math.min(
                         75,
-                        100 *
-                          (vertical
-                            ? (e.clientY - r.top) / r.height
-                            : (e.clientX - r.left) / r.width),
+                        Number(el.dataset.ratio) +
+                          ((at - Number(el.dataset.start)) * 100) /
+                            Number(el.dataset.extent),
                       ),
                     ),
                   ),

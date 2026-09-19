@@ -6,6 +6,17 @@ const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const page = await browser.newPage({ viewport: { width: 1500, height: 1080 } });
 page.setDefaultTimeout(20000);
 const login = async () => {
+  await expect(
+    page
+      .getByRole("heading", { name: "환자목록", exact: true })
+      .or(page.getByRole("button", { name: "로그인", exact: true })),
+  ).toBeVisible();
+  if (
+    await page
+      .getByRole("heading", { name: "환자목록", exact: true })
+      .isVisible()
+  )
+    return;
   await page.getByLabel("아이디", { exact: true }).fill(creds.username);
   await page.getByLabel("비밀번호", { exact: true }).fill(creds.password);
   await page.getByRole("button", { name: "로그인", exact: true }).click();
@@ -175,8 +186,9 @@ try {
     .getByRole("button", { name: "test-1.png 순서 이동", exact: true })
     .focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page.locator(".thumbnail-toggle").first()).toContainText(
-    "test-2.png",
+  await expect(page.locator(".thumbnail-toggle").first()).toHaveAttribute(
+    "aria-label",
+    "test-2.png 선택",
   );
   await page
     .getByRole("button", { name: "test-5.png 선택", exact: true })
@@ -188,7 +200,7 @@ try {
   await page
     .locator(".thumbnail-card")
     .first()
-    .getByRole("button", { name: "편집", exact: true })
+    .getByRole("button", { name: "test-2.png 편집", exact: true })
     .click();
   await page.waitForFunction(() => {
     const c = document.querySelector(
@@ -217,6 +229,8 @@ try {
   await page.getByLabel("주석 폰트").selectOption("serif");
   await page.getByRole("button", { name: "글자", exact: true }).click();
   await canvas.click({ position: { x: 100, y: 100 } });
+  await page.getByLabel("텍스트 내용").fill("주석 시험");
+  await page.getByRole("button", { name: "글자 적용", exact: true }).click();
   await page.getByLabel("자유회전").fill("35");
   await page.getByRole("button", { name: "↶ 좌 90°", exact: true }).click();
   await page.getByRole("button", { name: "↷ 우 90°", exact: true }).click();

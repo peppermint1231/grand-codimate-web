@@ -1,0 +1,22 @@
+[
+  {
+    "file": "Gaegu-Regular.ttf",
+    "sha256": "aa52c98336f7c62e2896fc8b12b56a75d5b476d88a2f104b0980f4f7ce0adfc3",
+    "url": "https://raw.githubusercontent.com/google/fonts/4efc2774c63917927efe769ca845def6bd6debae/ofl/gaegu/Gaegu-Regular.ttf"
+  },
+  {
+    "file": "Jua-Regular.ttf",
+    "sha256": "3080d35028a655cf20b6dbd0714fa8170605b933e4a211c1ae2e4f442039faf6",
+    "url": "https://raw.githubusercontent.com/google/fonts/4efc2774c63917927efe769ca845def6bd6debae/ofl/jua/Jua-Regular.ttf"
+  },
+  {
+    "file": "NanumPenScript-Regular.ttf",
+    "sha256": "6f0d1ab29c7894010dc88831fb7a0a51edb79136e450344183de5b1a8b52bd43",
+    "url": "https://raw.githubusercontent.com/google/fonts/4efc2774c63917927efe769ca845def6bd6debae/ofl/nanumpenscript/NanumPenScript-Regular.ttf"
+  },
+  {
+    "file": "GowunBatang-Regular.ttf",
+    "sha256": "466c593e7147412e748af4856d5ad14709b5a860bdf62b9c2546f2c5874e9849",
+    "url": "https://raw.githubusercontent.com/google/fonts/4efc2774c63917927efe769ca845def6bd6debae/ofl/gowunbatang/GowunBatang-Regular.ttf"
+  }
+]

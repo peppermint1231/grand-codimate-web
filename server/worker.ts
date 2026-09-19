@@ -250,7 +250,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.2.1",
+        version: "0.3.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -323,12 +323,12 @@ export class Clinic extends DurableObject<Env> {
       const token = crypto.randomUUID() + crypto.randomUUID();
       await this.setSecret("session:" + (await sha(token)), {
         id: a!.id,
-        expires: Date.now() + 12 * 3600000,
+        expires: Date.now() + 30 * 24 * 3600000,
       });
       const response = json({ token, user });
       response.headers.set(
         "Set-Cookie",
-        `codimate=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=43200${this.env.APP_ORIGIN.startsWith("https") ? "; Secure" : ""}`,
+        `codimate=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=2592000${this.env.APP_ORIGIN.startsWith("https") ? "; Secure" : ""}`,
       );
       return response;
     }

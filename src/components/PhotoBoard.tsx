@@ -49,11 +49,13 @@ export function PhotoBoard({
 }) {
   const [editing, setEditing] = useState<string | null>(null),
     [, update] = useState(0),
-    [large, setLarge] = useState(false);
+    [large, setLarge] = useState(false),
+    [infoId, setInfoId] = useState<string | null>(null);
   const dragged = useRef<string | null>(null);
   useEffect(() => watchUploads(() => update((v) => v + 1)), []);
   const selected = photos.filter((p) => p.selected),
-    edit = photos.find((p) => p.id === editing);
+    edit = photos.find((p) => p.id === editing),
+    info = photos.find((p) => p.id === infoId);
   const move = (id: string, target: string) => {
     if (readonly || id === target) return;
     const next = [...photos],
@@ -94,23 +96,24 @@ export function PhotoBoard({
           }}
         >
           <PhotoPreview photo={p} />
-          <figcaption>
-            <b>
-              {i + 1}. {p.name}
-            </b>
-            <small>
-              {p.capturedAt
-                ? new Date(p.capturedAt).toLocaleString("ko-KR")
-                : ""}
-              {p.sourceConsultationId ? " · 이전 상담" : ""}
-            </small>
+          <figcaption className="photo-overlay-actions">
+            <span className="photo-index">{i + 1}</span>
             <button
+              aria-label={`${p.name} 상세정보`}
+              title="상세정보"
+              onClick={() => setInfoId(p.id)}
+            >
+              ℹ
+            </button>
+            <button
+              aria-label={`${p.name} 편집·확대`}
+              title="편집·확대"
               onClick={() => {
                 setLarge(false);
                 setEditing(p.id);
               }}
             >
-              편집·확대
+              ✎
             </button>
           </figcaption>
         </figure>
@@ -147,25 +150,33 @@ export function PhotoBoard({
               onClick={() => toggle(p)}
             >
               <Thumbnail photo={p} />
-              <span>{p.name}</span>
-              <b>{p.selected ? "✓ 포함" : "선택"}</b>
+              <span className="photo-selection-mark" aria-hidden="true">
+                {p.selected ? "✓" : "○"}
+              </span>
             </button>
-            <small>
-              {p.capturedAt
-                ? new Date(p.capturedAt).toLocaleDateString("ko-KR")
-                : ""}
-              {p.sourceConsultationId ? " · 이전 상담" : ""}
-            </small>
             {uploadState(p.mediaId) && (
-              <small role="status" className="upload-state">
-                {uploadState(p.mediaId)}
-              </small>
+              <span
+                className="upload-state"
+                role="status"
+                title={uploadState(p.mediaId)}
+              >
+                ⏳
+              </span>
             )}
             <div className="thumb-actions">
               <button
+                aria-label={`${p.name} 편집`}
+                title="편집"
                 onClick={() => setEditing(editing === p.id ? null : p.id)}
               >
-                편집
+                ✎
+              </button>
+              <button
+                aria-label={`${p.name} 상세정보`}
+                title="상세정보"
+                onClick={() => setInfoId(p.id)}
+              >
+                ℹ
               </button>
               <button
                 className="photo-reorder"
@@ -251,6 +262,42 @@ export function PhotoBoard({
             }
           />
         </section>
+      )}
+      {info && (
+        <div
+          className="photo-info-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="사진 상세정보"
+          onClick={() => setInfoId(null)}
+        >
+          <div className="card" onClick={(e) => e.stopPropagation()}>
+            <div className="section-title">
+              <h3>사진 상세정보</h3>
+              <button autoFocus onClick={() => setInfoId(null)}>
+                닫기
+              </button>
+            </div>
+            <p>{info.name}</p>
+            <p>
+              {info.capturedAt
+                ? new Date(info.capturedAt).toLocaleString("ko-KR")
+                : "촬영 날짜 정보 없음"}
+            </p>
+            <p>
+              {info.sourceConsultationId
+                ? "이전 상담에서 가져온 사진"
+                : "이 상담에서 추가한 사진"}
+            </p>
+            <p>
+              {info.selected ? "상담·출력에 포함" : "상담·출력에서 제외"} · 주석{" "}
+              {info.annotations.length}개
+            </p>
+            {uploadState(info.mediaId) && (
+              <p role="status">{uploadState(info.mediaId)}</p>
+            )}
+          </div>
+        </div>
       )}
       {large && (
         <div

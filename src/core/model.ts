@@ -134,6 +134,8 @@ export interface Photo {
   name: string;
   mediaId: string;
   selected: boolean;
+  representative?: boolean;
+  viewportCrop?: { x: number; y: number; width: number; height: number };
   rotation: number;
   crop?: { x: number; y: number; width: number; height: number };
   annotations: Annotation[];

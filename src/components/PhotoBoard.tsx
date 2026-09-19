@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Photo } from "../core/model";
 import { PhotoPreview, PhotoEditor } from "./PhotoEditor";
 import { mediaUrl, uploadState, watchUploads } from "../lib/api";
-function Thumbnail({ photo }: { photo: Photo }) {
+import { useAppBack } from "../lib/navigation";
+export function Thumbnail({ photo }: { photo: Photo }) {
   const [url, setUrl] = useState(photo.thumbnail || "");
   useEffect(() => {
     if (photo.thumbnail) {
@@ -28,6 +29,14 @@ function Thumbnail({ photo }: { photo: Photo }) {
     <span className="thumbnail-placeholder">사진</span>
   );
 }
+export function ConsultationCover({ photos }: { photos: Photo[] }) {
+  const cover = photos.find((p) => p.representative);
+  return cover ? (
+    <span className="consultation-cover">
+      <PhotoPreview photo={cover} />
+    </span>
+  ) : null;
+}
 export function PhotoBoard({
   photos,
   columns,
@@ -51,11 +60,58 @@ export function PhotoBoard({
     [, update] = useState(0),
     [large, setLarge] = useState(false),
     [infoId, setInfoId] = useState<string | null>(null);
-  const dragged = useRef<string | null>(null);
+  const [drag, setDrag] = useState<{
+    id: string;
+    x: number;
+    y: number;
+    target?: string;
+  } | null>(null);
+  const strip = useRef<HTMLDivElement>(null),
+    editor = useRef<HTMLElement>(null);
+  const positions = useRef(new Map<string, DOMRect>());
   useEffect(() => watchUploads(() => update((v) => v + 1)), []);
+  useLayoutEffect(() => {
+    const next = new Map<string, DOMRect>();
+    strip.current
+      ?.querySelectorAll<HTMLElement>(".thumbnail-card")
+      .forEach((el) => {
+        const id = el.dataset.photoId!,
+          rect = el.getBoundingClientRect(),
+          prev = positions.current.get(id);
+        if (prev && (prev.x !== rect.x || prev.y !== rect.y))
+          el.animate(
+            [
+              {
+                transform: `translate(${prev.x - rect.x}px, ${prev.y - rect.y}px)`,
+              },
+              { transform: "translate(0, 0)" },
+            ],
+            { duration: 220, easing: "ease-out" },
+          );
+        next.set(id, rect);
+      });
+    positions.current = next;
+  }, [photos.map((p) => p.id).join(",")]);
   const selected = photos.filter((p) => p.selected),
-    edit = photos.find((p) => p.id === editing),
+    edit = photos.find((p) => p.id === editing) || selected[0],
     info = photos.find((p) => p.id === infoId);
+  const mayLeave = () =>
+    window.dispatchEvent(
+      new Event("codimate:before-photo-leave", { cancelable: true }),
+    );
+  const openEditor = (id: string) => {
+    if (id !== edit?.id && !mayLeave()) return;
+    setLarge(false);
+    setEditing(id);
+    requestAnimationFrame(() =>
+      editor.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+  useAppBack(
+    large || !!info,
+    () => (info ? setInfoId(null) : setLarge(false)),
+    60,
+  );
   const move = (id: string, target: string) => {
     if (readonly || id === target) return;
     const next = [...photos],
@@ -73,6 +129,7 @@ export function PhotoBoard({
         ),
       );
   };
+  const stopDrag = () => setDrag(null);
   const grid = (
     <div
       className="comparison-grid"
@@ -80,38 +137,19 @@ export function PhotoBoard({
       data-columns={columns}
     >
       {selected.map((p, i) => (
-        <figure
-          key={p.id}
-          data-photo-id={p.id}
-          draggable={!readonly}
-          onDragStart={(e) => {
-            dragged.current = p.id;
-            e.dataTransfer.setData("text/plain", p.id);
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => {
-            e.preventDefault();
-            move(dragged.current || e.dataTransfer.getData("text/plain"), p.id);
-            dragged.current = null;
-          }}
-        >
+        <figure key={p.id} data-photo-id={p.id}>
           <PhotoPreview photo={p} />
           <figcaption className="photo-overlay-actions">
             <span className="photo-index">{i + 1}</span>
             <button
               aria-label={`${p.name} 상세정보`}
-              title="상세정보"
               onClick={() => setInfoId(p.id)}
             >
               ℹ
             </button>
             <button
               aria-label={`${p.name} 편집·확대`}
-              title="편집·확대"
-              onClick={() => {
-                setLarge(false);
-                setEditing(p.id);
-              }}
+              onClick={() => openEditor(p.id)}
             >
               ✎
             </button>
@@ -123,24 +161,39 @@ export function PhotoBoard({
   return (
     <div className="photo-board">
       <p className="small">
-        썸네일을 누르면 상담·출력에 포함됩니다. 다시 누르면 제외됩니다. 순서
-        손잡이를 끌어 배치를 바꾸세요.
+        썸네일을 눌러 상담·출력 사진을 선택하세요. ☆ 대표사진 · ⠿ 끌어서 순서
+        이동
       </p>
-      <div className="thumbnail-strip">
+      <div
+        className="thumbnail-strip"
+        ref={strip}
+        onPointerMove={(e) => {
+          if (!drag) return;
+          const target = document
+            .elementFromPoint(e.clientX, e.clientY)
+            ?.closest<HTMLElement>(".thumbnail-card")?.dataset.photoId;
+          setDrag({ id: drag.id, x: e.clientX, y: e.clientY, target });
+          if (target && target !== drag.id) move(drag.id, target);
+          const r = strip.current?.getBoundingClientRect();
+          if (r && strip.current) {
+            if (e.clientX > r.right - 32) strip.current.scrollLeft += 15;
+            else if (e.clientX < r.left + 32) strip.current.scrollLeft -= 15;
+          }
+        }}
+        onPointerUp={stopDrag}
+        onPointerCancel={stopDrag}
+        onLostPointerCapture={stopDrag}
+      >
         {photos.map((p, i) => (
           <div
-            className={"thumbnail-card " + (p.selected ? "is-selected" : "")}
+            className={
+              "thumbnail-card " +
+              (p.selected ? "is-selected " : "") +
+              (drag?.id === p.id ? "is-dragging " : "") +
+              (drag?.target === p.id ? "drop-target" : "")
+            }
             key={p.id}
             data-photo-id={p.id}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              move(
-                dragged.current || e.dataTransfer.getData("text/plain"),
-                p.id,
-              );
-              dragged.current = null;
-            }}
           >
             <button
               className="thumbnail-toggle"
@@ -154,6 +207,24 @@ export function PhotoBoard({
                 {p.selected ? "✓" : "○"}
               </span>
             </button>
+            <button
+              className={
+                "photo-cover-toggle " + (p.representative ? "is-cover" : "")
+              }
+              aria-label={`${p.name} 대표사진`}
+              aria-pressed={!!p.representative}
+              disabled={readonly}
+              onClick={() =>
+                onChange(
+                  photos.map((x) => ({
+                    ...x,
+                    representative: x.id === p.id && !p.representative,
+                  })),
+                )
+              }
+            >
+              {p.representative ? "★" : "☆"}
+            </button>
             {uploadState(p.mediaId) && (
               <span
                 className="upload-state"
@@ -163,11 +234,33 @@ export function PhotoBoard({
                 ⏳
               </span>
             )}
+            <button
+              className="photo-delete"
+              aria-label={`${p.name} 삭제`}
+              title="이 상담에서 사진 삭제"
+              disabled={
+                readonly ||
+                (!admin && p.annotations.some((a) => a.authorId !== userId))
+              }
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "이 사진을 현재 상담에서 삭제할까요? 상담 저장 시 반영됩니다.",
+                  )
+                )
+                  return;
+                if (edit?.id === p.id && !mayLeave()) return;
+                onChange(photos.filter((x) => x.id !== p.id));
+                if (editing === p.id) setEditing(null);
+              }}
+            >
+              ×
+            </button>
             <div className="thumb-actions">
               <button
                 aria-label={`${p.name} 편집`}
                 title="편집"
-                onClick={() => setEditing(editing === p.id ? null : p.id)}
+                onClick={() => openEditor(p.id)}
               >
                 ✎
               </button>
@@ -183,26 +276,10 @@ export function PhotoBoard({
                 disabled={readonly}
                 aria-label={`${p.name} 순서 이동`}
                 title="끌어서 이동 · 좌우 화살표로 이동"
-                draggable={!readonly}
-                onDragStart={(e) => {
-                  dragged.current = p.id;
-                  e.dataTransfer.setData("text/plain", p.id);
-                }}
                 onPointerDown={(e) => {
-                  if (e.pointerType !== "mouse") {
-                    dragged.current = p.id;
-                    e.currentTarget.setPointerCapture(e.pointerId);
-                  }
-                }}
-                onPointerUp={(e) => {
-                  if (e.pointerType !== "mouse" && dragged.current) {
-                    const target = document
-                      .elementFromPoint(e.clientX, e.clientY)
-                      ?.closest<HTMLElement>("[data-photo-id]")
-                      ?.dataset.photoId;
-                    if (target) move(p.id, target);
-                    dragged.current = null;
-                  }
+                  e.preventDefault();
+                  strip.current?.setPointerCapture(e.pointerId);
+                  setDrag({ id: p.id, x: e.clientX, y: e.clientY });
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "ArrowLeft" && i > 0) {
@@ -221,48 +298,63 @@ export function PhotoBoard({
           </div>
         ))}
       </div>
+      {drag && (
+        <div
+          className="photo-drag-ghost"
+          style={{ left: drag.x + 12, top: drag.y + 12 }}
+        >
+          <Thumbnail photo={photos.find((p) => p.id === drag.id)!} />
+          <span>이 위치로 이동</span>
+        </div>
+      )}
       <div className="comparison-toolbar">
         <strong>선택한 사진 {selected.length}장</strong>
-        <div className="button-row">
-          {[1, 2, 3, 4].map((n) => (
+        <button disabled={!selected.length} onClick={() => setLarge(true)}>
+          비교 크게 보기
+        </button>
+      </div>
+      <div className="photo-edit-workspace">
+        <aside className="selected-photo-rail" aria-label="선택한 사진 목록">
+          {selected.map((p) => (
             <button
-              key={n}
-              aria-pressed={columns === n}
-              className={columns === n ? "selected" : ""}
-              disabled={readonly}
-              onClick={() => onColumns(n)}
+              key={p.id}
+              className={edit?.id === p.id ? "selected" : ""}
+              aria-label={`${p.name} 바로 편집`}
+              aria-pressed={edit?.id === p.id}
+              onClick={() => openEditor(p.id)}
             >
-              {n}열
+              <Thumbnail photo={p} />
             </button>
           ))}
-          <button disabled={!selected.length} onClick={() => setLarge(true)}>
-            비교 크게 보기
-          </button>
-        </div>
-      </div>
-      {selected.length ? (
-        grid
-      ) : (
-        <div className="empty">비교할 사진의 썸네일을 선택하세요.</div>
-      )}
-      {edit && (
-        <section className="active-photo-editor">
-          <div className="section-title">
+        </aside>
+        {edit ? (
+          <section className="active-photo-editor" ref={editor}>
             <h3>{edit.name}</h3>
-            <button onClick={() => setEditing(null)}>편집 닫기</button>
-          </div>
-          <PhotoEditor
-            key={edit.id}
-            photo={edit}
-            userId={userId}
-            readonly={!canAnnotate}
-            canEraseAll={admin}
-            onChange={(p) =>
-              onChange(photos.map((x) => (x.id === p.id ? p : x)))
-            }
-          />
-        </section>
-      )}
+            <PhotoEditor
+              key={edit.id}
+              photo={edit}
+              userId={userId}
+              readonly={!canAnnotate}
+              canEraseAll={admin}
+              onChange={(p) =>
+                onChange(
+                  photos.map((x) =>
+                    x.id === p.id
+                      ? {
+                          ...p,
+                          selected: x.selected,
+                          representative: x.representative,
+                        }
+                      : x,
+                  ),
+                )
+              }
+            />
+          </section>
+        ) : (
+          <div className="empty">사진을 선택하거나 ✎ 편집을 누르세요.</div>
+        )}
+      </div>
       {info && (
         <div
           className="photo-info-overlay"
@@ -309,13 +401,24 @@ export function PhotoBoard({
             if (e.key === "Escape") setLarge(false);
           }}
         >
-          <button
-            autoFocus
-            className="lightbox-close"
-            onClick={() => setLarge(false)}
-          >
-            닫기 (Esc)
-          </button>
+          <div className="lightbox-toolbar">
+            <strong>사진 비교</strong>
+            <div className="button-row">
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  aria-pressed={columns === n}
+                  className={columns === n ? "selected" : ""}
+                  onClick={() => onColumns(n)}
+                >
+                  {n}열
+                </button>
+              ))}
+              <button autoFocus onClick={() => setLarge(false)}>
+                닫기 (Esc)
+              </button>
+            </div>
+          </div>
           {grid}
         </div>
       )}

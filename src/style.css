@@ -1725,3 +1725,378 @@ details p {
 .photo-stage canvas {
   touch-action: none;
 }
+/* Photo workspace 0.4: direct editing and screen-aligned crop frames. */
+.photo-edit-workspace {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.selected-photo-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 72vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  position: sticky;
+  top: 12px;
+}
+.selected-photo-rail button {
+  padding: 2px;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+  overflow: hidden;
+}
+.selected-photo-rail button.selected {
+  border-color: #167264;
+}
+.selected-photo-rail img {
+  width: 100%;
+  height: 78px;
+  display: block;
+  object-fit: cover;
+  border-radius: 5px;
+}
+.photo-edit-workspace .active-photo-editor {
+  min-width: 0;
+  margin-top: 0;
+  padding: 10px;
+  scroll-margin-top: 20px;
+}
+.active-photo-editor h3 {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin: 0 0 10px;
+}
+.thumbnail-card {
+  transition:
+    border-color 0.18s,
+    opacity 0.18s,
+    box-shadow 0.18s;
+}
+.thumbnail-card.is-dragging {
+  opacity: 0.4;
+  border-style: dashed;
+}
+.thumbnail-card.drop-target {
+  box-shadow: -5px 0 #167264;
+}
+.photo-drag-ghost {
+  position: fixed;
+  z-index: 5000;
+  width: 115px;
+  pointer-events: none;
+  transform: rotate(4deg);
+  border: 3px solid #167264;
+  background: #fff;
+  box-shadow: 0 8px 24px #0005;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.photo-drag-ghost img {
+  width: 100%;
+  height: 85px;
+  object-fit: cover;
+}
+.photo-drag-ghost span {
+  display: block;
+  font-size: 11px;
+  padding: 3px;
+  text-align: center;
+}
+.photo-cover-toggle,
+.photo-delete {
+  position: absolute;
+  z-index: 2;
+  top: 5px;
+  background: #163b32b3;
+  color: white;
+  border: 0;
+  border-radius: 50%;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 29px;
+}
+.photo-cover-toggle {
+  left: 5px;
+}
+.photo-cover-toggle.is-cover {
+  color: #ffd758;
+}
+.photo-delete {
+  right: 5px;
+}
+.thumbnail-strip .photo-selection-mark {
+  right: 39px;
+}
+.consultation-cover {
+  width: 62px;
+  height: 62px;
+  overflow: hidden;
+  border-radius: 8px;
+  flex: 0 0 62px;
+  background: #163b32;
+}
+.consultation-cover canvas {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-lightbox {
+  padding: 70px 8px 12px;
+}
+.lightbox-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1002;
+  min-height: 58px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: #f2f5f2f5;
+  padding: 8px 16px;
+  box-shadow: 0 1px 8px #0002;
+}
+.lightbox-toolbar .selected {
+  background: #155e59;
+  color: white;
+}
+.photo-lightbox .comparison-grid {
+  gap: 6px;
+  max-width: none;
+}
+.photo-lightbox .comparison-grid canvas {
+  width: 100%;
+  max-height: none;
+  height: auto;
+}
+.photo-lightbox .comparison-grid figure {
+  border: 0;
+  border-radius: 3px;
+  cursor: default;
+}
+.annotation-selection-actions {
+  position: absolute;
+  display: flex;
+  gap: 3px;
+  transform: translateY(-100%);
+  z-index: 3;
+}
+.annotation-selection-actions button {
+  padding: 2px;
+  width: 32px;
+  height: 30px;
+  background: #fff;
+  color: #164d40;
+  box-shadow: 0 1px 6px #0004;
+  font-size: 20px;
+}
+.annotation-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: #081c26a8;
+  display: grid;
+  place-items: center;
+  z-index: 3000;
+  padding: 16px;
+}
+.annotation-dialog {
+  background: white;
+  color: #183b34;
+  border-radius: 16px;
+  width: min(460px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 22px;
+  box-shadow: 0 16px 60px #0005;
+  display: grid;
+  gap: 14px;
+}
+.annotation-dialog textarea {
+  min-height: 100px;
+  width: 100%;
+}
+.annotation-dialog label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.annotation-dialog label input[type="number"] {
+  width: 100px;
+}
+.crop-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.crop-frame {
+  position: absolute;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 2000px #0009;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+}
+.crop-thirds {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to right,
+      transparent 33.2%,
+      #ffffff70 33.2%,
+      #ffffff70 33.4%,
+      transparent 33.4%,
+      transparent 66.5%,
+      #ffffff70 66.5%,
+      #ffffff70 66.7%,
+      transparent 66.7%
+    ),
+    linear-gradient(
+      to bottom,
+      transparent 33.2%,
+      #ffffff70 33.2%,
+      #ffffff70 33.4%,
+      transparent 33.4%,
+      transparent 66.5%,
+      #ffffff70 66.5%,
+      #ffffff70 66.7%,
+      transparent 66.7%
+    );
+}
+.crop-handle {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-color: #fff;
+  border-style: solid;
+  border-width: 0;
+}
+.handle-nw {
+  left: -2px;
+  top: -2px;
+  border-left-width: 3px;
+  border-top-width: 3px;
+  cursor: nwse-resize;
+}
+.handle-ne {
+  right: -2px;
+  top: -2px;
+  border-right-width: 3px;
+  border-top-width: 3px;
+  cursor: nesw-resize;
+}
+.handle-sw {
+  left: -2px;
+  bottom: -2px;
+  border-left-width: 3px;
+  border-bottom-width: 3px;
+  cursor: nesw-resize;
+}
+.handle-se {
+  right: -2px;
+  bottom: -2px;
+  border-right-width: 3px;
+  border-bottom-width: 3px;
+  cursor: nwse-resize;
+}
+.handle-n,
+.handle-s {
+  left: calc(50% - 13px);
+  height: 20px;
+  border-top-width: 3px;
+  cursor: ns-resize;
+}
+.handle-n {
+  top: -2px;
+}
+.handle-s {
+  bottom: -2px;
+  border-top: 0;
+  border-bottom-width: 3px;
+}
+.handle-e,
+.handle-w {
+  top: calc(50% - 13px);
+  width: 20px;
+  cursor: ew-resize;
+}
+.handle-e {
+  right: -2px;
+  border-right-width: 3px;
+}
+.handle-w {
+  left: -2px;
+  border-left-width: 3px;
+}
+@media (max-width: 700px) {
+  .photo-edit-workspace {
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 5px;
+  }
+  .selected-photo-rail img {
+    height: 58px;
+  }
+  .photo-edit-workspace .active-photo-editor {
+    padding: 5px;
+  }
+  .photo-lightbox {
+    padding: 76px 4px 10px;
+  }
+  .lightbox-toolbar {
+    padding: 8px;
+  }
+  .lightbox-toolbar strong {
+    display: none;
+  }
+}
+.photo-cover-toggle,
+.photo-delete {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  line-height: 36px;
+}
+.thumbnail-strip .photo-selection-mark {
+  right: 46px;
+}
+.thumbnail-strip .upload-state {
+  top: 43px;
+  left: 7px;
+  pointer-events: none;
+}
+.top-actions button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media (max-width: 1100px) {
+  .topbar {
+    height: auto;
+    min-height: 78px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 16px;
+  }
+  .top-actions {
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .top-actions button {
+    padding: 8px;
+    font-size: 13px;
+  }
+}
+.photo-editor .photo-stage { min-height: 0; }

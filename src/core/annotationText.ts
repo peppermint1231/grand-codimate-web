@@ -96,6 +96,18 @@ export async function loadPhotoFonts(photo: Photo) {
   );
 }
 export function annotationBox(a: Annotation, width: number, height: number) {
+  if (a.tool !== "text" && a.tool !== "stamp") {
+    const xs = a.points.map((p) => p.x),
+      ys = a.points.map((p) => p.y);
+    const x = Math.min(...xs),
+      y = Math.min(...ys);
+    return {
+      x,
+      y,
+      width: Math.max(0.001, Math.max(...xs) - x),
+      height: Math.max(0.001, Math.max(...ys) - y),
+    };
+  }
   const p = a.points[0] || { x: 0, y: 0 },
     unit = Math.max(width, height) / 1000;
   const size = (a.fontSize || 18 + a.width * 2) * unit;
@@ -125,6 +137,14 @@ export function resizeAnnotation(
       (1 - box.y) / box.height,
     ),
   );
+  if (a.tool !== "text" && a.tool !== "stamp")
+    return {
+      ...a,
+      points: a.points.map((p) => ({
+        x: box.x + (p.x - box.x) * f,
+        y: box.y + (p.y - box.y) * f,
+      })),
+    };
   return {
     ...a,
     points: [{ x: box.x, y: box.y }],
@@ -161,4 +181,24 @@ export function pinchView(
     x: current.cx - width / 2 - (start.cx - width / 2 - start.x) * f,
     y: current.cy - height / 2 - (start.cy - height / 2 - start.y) * f,
   };
+}
+
+export function moveAnnotation(
+  a: Annotation,
+  dx: number,
+  dy: number,
+  width: number,
+  height: number,
+): Annotation {
+  const b = annotationBox(a, width, height);
+  dx = Math.max(-b.x, Math.min(1 - b.x - b.width, dx));
+  dy = Math.max(-b.y, Math.min(1 - b.y - b.height, dy));
+  if (a.tool === "text" || a.tool === "stamp")
+    return {
+      ...a,
+      points: [{ x: b.x + dx, y: b.y + dy }],
+      box: { width: b.width, height: b.height },
+      fontSize: a.fontSize || 18 + a.width * 2,
+    };
+  return { ...a, points: a.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
 }

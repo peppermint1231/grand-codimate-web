@@ -231,6 +231,19 @@ const photoSchema = z.object({
     .optional(),
   sourceConsultationId: z.string().optional(),
   sourcePhotoId: z.string().optional(),
+  representative: z.boolean().optional(),
+  viewportCrop: z
+    .object({
+      x: z.number().min(0).max(1),
+      y: z.number().min(0).max(1),
+      width: z.number().positive().max(1),
+      height: z.number().positive().max(1),
+    })
+    .refine(
+      (b) => b.x + b.width <= 1.000001 && b.y + b.height <= 1.000001,
+      "자르기 영역을 확인하세요",
+    )
+    .optional(),
   crop: z
     .object({
       x: z.number().min(0).max(1),
@@ -455,7 +468,7 @@ export async function applyCommand(
       );
       ensure(String(p.reason || "").trim(), "병합 사유를 입력하세요");
       ensure(
-        (p.targetRev === undefined || p.targetRev === target.rev),
+        p.targetRev === undefined || p.targetRev === target.rev,
         "병합 대상이 다른 기기에서 수정되었습니다. 다시 확인하세요.",
         409,
       );
@@ -742,6 +755,10 @@ export async function applyCommand(
       ensure(
         new Set(photos.map((x) => x.id)).size === photos.length,
         "사진 ID가 중복됩니다",
+      );
+      ensure(
+        photos.filter((ph) => ph.representative).length <= 1,
+        "대표사진은 한 장만 선택하세요",
       );
       c.photos = photos;
       c.photoColumns = z

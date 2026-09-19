@@ -1,10 +1,20 @@
 # 코디메이트 개발 인계
 
+## 2026-09-19 사진 편집 흐름 개선 — 0.4.0
+
+등록 아이디 선택, 새로고침/Android 앱 내 뒤로가기, 편집기 스크롤/좌측 선택 사진, 비교 전용 열 설정·화면 채움, 애니메이션 순서 변경, 텍스트 설정창, 모든 주석 선택/이동/수정, 사진별 저장 분리, 점선/고정 프레임 크롭, 대표사진·사진 삭제를 구현했습니다. 사용법과 실기기 체크리스트는 [0.4.0 변경 기록](RELEASE-0.4.0.md)을 참고합니다. 51개 테스트 및 최신 브라우저 시험 통과. APK 빌드·서명 검증 완료(versionCode 6). 기존 0.3.0과 서명 인증서 일치 및 내장 웹 파일 46개 일치. 원격 배포를 이어갑니다.
+
 ## 2026-09-19 UI·환자 관리·로그인 유지 — 0.3.0
 
 사용자 요청 9개를 구현했습니다. [0.3.0 사용법·체크리스트](RELEASE-0.3.0.md)를 참고합니다. 15분 무활동 로그아웃을 제거하고 30일 세션 및 Android 암호화 토큰 복원을 추가했습니다. 환자 삭제는 기록 보존/복원, 병합은 관리자 승인·상담/수납/사진 연결 유지 방식입니다. 메뉴 접기, 썸네일 오버레이, 두 손가락 제스처, 이동/확대 가능한 텍스트 박스, 한글 폰트, Noto 이모지, 0도 복귀, 구분선 조절을 포함합니다.
 
-46개 테스트와 `verify-workspace-030.ts`, `verify-login-restore.ts`, 기존 사진 흐름 회귀를 검증했습니다. Android versionCode 5입니다. 최종 APK 재빌드와 원격 배포를 이어갑니다. 공개 배포 정보 갱신 전까지 사용자 앱에는 이전 버전이 안내됩니다.
+46개 테스트, 타입 검사·웹 빌드·Worker dry-run과 `verify-workspace-030.ts`, `verify-login-restore.ts`, 기존 사진 흐름 회귀가 통과했습니다. 실제 브라우저의 두 손가락 이벤트, 텍스트 이동/크기 조절, 스탬프 이미지 출력, 가로/세로 구분선 이동을 확인했습니다. Android 로그인 복원은 브리지 모의 시험으로 확인했습니다.
+
+- 웹 main `de7002f75f34fd795df144251311e6b9d2e30102`, Worker `e579b79c-634d-49c4-a3ff-778be96e1142` 배포 완료. GitHub/Cloudflare 검사 성공, 실제 HTML·JS·CSS·대표 폰트/스탬프가 로컬 빌드와 일치합니다. health는 0.3.0 / onedrive / configured=true / needsSetup=false입니다.
+- [APK 0.3.0 다운로드](https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.3.0.apk): versionCode 5, 17,524,985 bytes, SHA-256 `23d7a0af8a3ca9da22d3f0eeb7a89d08d24bad70084118880d61524d9c024714`. 기존 0.2.1과 서명 인증서 일치, 서명 검증 및 내장 웹 자산 46개 일치, 실제 HTTPS 다운로드 해시를 확인했습니다. 공개 업데이트 API도 이 APK를 안내합니다.
+- 설치 후 한 번 로그인해야 새 30일 세션과 Android 암호화 자격 증명 보관이 적용됩니다. 웹은 HttpOnly 쿠키, Android는 기존 Keystore seal/open을 사용합니다. 오프라인 보관 암호는 저장하지 않으며 설정에서 별도 잠금 해제할 수 있습니다.
+- 실제 태블릿의 백그라운드 복귀/핀치/Keystore, 실제 병원 OneDrive 환자 병합은 추가 실기기 시험이 필요합니다. 환자 삭제는 복원 가능한 보관 처리이고, 병합은 관리자만 가능하며 원본 사진 파일은 이동/삭제하지 않고 상담 연결을 유지합니다.
+- 배포 증거: `artifacts/deployment-0.3.0.json`, 브라우저 증거: `artifacts/workspace-030-verification.json`, `artifacts/login-restore-verification.json`. Android 원격 저장소는 별도 게시하지 않았습니다.
 
 ## 2026-09-19 Android 자동 업데이트 — 0.2.1
 

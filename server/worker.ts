@@ -250,7 +250,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.3.0",
+        version: "0.4.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -294,6 +294,15 @@ export class Clinic extends DurableObject<Env> {
       };
       await this.setSecret("user:" + a.id, a);
       return json({ ok: true });
+    }
+    if (path === "/api/login-ids" && req.method === "GET") {
+      const s = await this.state();
+      return json({
+        usernames: s.users
+          .filter((u) => u.active)
+          .map((u) => u.username)
+          .sort(),
+      });
     }
     if (path === "/api/login" && req.method === "POST") {
       const b = await body();

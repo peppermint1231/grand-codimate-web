@@ -1,5 +1,10 @@
+import { appBack, useAppBack } from "./lib/navigation";
 import { AddressSearch } from "./components/AddressSearch";
-import { PhotoBoard, HistoryPhotoPicker } from "./components/PhotoBoard";
+import {
+  PhotoBoard,
+  HistoryPhotoPicker,
+  ConsultationCover,
+} from "./components/PhotoBoard";
 import { consultationKind, packageActive, productCategory } from "./core/model";
 import { native, takePhoto, printPage } from "./lib/native";
 import { requestAndroidUpdate } from "./components/AndroidUpdateNotice";
@@ -131,6 +136,7 @@ function Modal({
   children: ReactNode;
   close: () => void;
 }) {
+  useAppBack(true, close, 80);
   return (
     <div className="overlay" onClick={close}>
       <section
@@ -168,6 +174,63 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
   );
+  const [loginIds, setLoginIds] = useState<string[]>([]);
+  const [loginName, setLoginName] = useState("");
+  useEffect(() => {
+    if (user || needsServer) return;
+    let active = true;
+    api("/login-ids")
+      .then((d) => {
+        if (active) setLoginIds(d.usernames);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user, health.needsSetup]);
+  const routes = useRef<
+    { page: string; patientId: string; consultId: string; tab: string }[]
+  >([]);
+  const route = useRef({ page, patientId, consultId, tab });
+  const returning = useRef(false);
+  useEffect(() => {
+    const next = { page, patientId, consultId, tab };
+    if (JSON.stringify(next) !== JSON.stringify(route.current)) {
+      if (!returning.current) routes.current.push(route.current);
+      route.current = next;
+      returning.current = false;
+    }
+  }, [page, patientId, consultId, tab]);
+  useAppBack(
+    true,
+    () => {
+      if (modal) {
+        setModal("");
+        return;
+      }
+      if (guest) {
+        setGuest(false);
+        return;
+      }
+      if (
+        !window.dispatchEvent(
+          new Event("codimate:before-photo-leave", { cancelable: true }),
+        )
+      )
+        return;
+      const previous = routes.current.pop();
+      if (previous) {
+        returning.current = true;
+        setPage(previous.page);
+        setPatientId(previous.patientId);
+        setConsultId(previous.consultId);
+        setTab(previous.tab);
+      } else {
+        setNotice("첫 화면입니다.");
+      }
+    },
+    0,
+  );
   const restoreNeeded = useRef(true);
   const workInFlight = useRef(false);
   useEffect(() => {
@@ -193,9 +256,22 @@ export function App() {
       setBusy(false);
     }
   };
-  const refresh = async () => {
+  const refresh = async (preserveConsult = false) => {
     const d = await api("/state");
-    setState(d.state);
+    setState((previous) => {
+      const open =
+        preserveConsult && page === "consult"
+          ? previous.consultations.find((c) => c.id === consultId)
+          : undefined;
+      return open
+        ? {
+            ...d.state,
+            consultations: d.state.consultations.map((c: Consultation) =>
+              c.id === open.id ? open : c,
+            ),
+          }
+        : d.state;
+    });
     setHealth((h: any) => ({ ...h, ...d }));
     if (vaultEnabled())
       await vaultWrite("session", {
@@ -568,8 +644,26 @@ export function App() {
                   </Field>
                 </>
               )}
+              {!health.needsSetup && loginIds.length > 0 && (
+                <Field label="등록된 아이디 선택">
+                  <select
+                    aria-label="등록된 아이디 선택"
+                    value={loginIds.includes(loginName) ? loginName : ""}
+                    onChange={(e) => setLoginName(e.target.value)}
+                  >
+                    <option value="">직접 입력</option>
+                    {loginIds.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label="아이디">
                 <input
+                  value={loginName}
+                  onChange={(e) => setLoginName(e.target.value)}
                   name="username"
                   required
                   autoComplete="username"
@@ -687,6 +781,14 @@ export function App() {
             title={label}
             className={"nav-item " + (page === key ? "active" : "")}
             onClick={() => {
+              if (
+                !window.dispatchEvent(
+                  new Event("codimate:before-photo-leave", {
+                    cancelable: true,
+                  }),
+                )
+              )
+                return;
               setPage(key);
               setConsultId("");
               setPatientId("");
@@ -743,6 +845,22 @@ export function App() {
             </span>
           </div>
           <div className="top-actions">
+            <button aria-label="뒤로가기" onClick={appBack}>
+              ← 뒤로
+            </button>
+            <button
+              disabled={busy}
+              onClick={() =>
+                work(async () => {
+                  await refresh(true);
+                  setNotice(
+                    "최신 자료를 불러왔습니다. 작업 중인 상담은 유지됩니다.",
+                  );
+                })
+              }
+            >
+              새로고침
+            </button>
             <button onClick={() => setModal("recovery")}>복구 자료</button>
             <button
               onClick={() =>
@@ -1835,6 +1953,7 @@ function PatientDetail({
                     key={c.id}
                     onClick={() => open(c)}
                   >
+                    <ConsultationCover photos={c.photos} />
                     <span>
                       <b>
                         {c.category} · {consultationKind(c)}
@@ -2240,7 +2359,7 @@ function ConsultationView({
               : "서버에 새 버전이 있습니다. 기기 초안을 열어 비교할까요? 저장 시 충돌 검사를 진행합니다.",
           )
         )
-          setDraft(saved);
+          setDraft({ ...saved, photos: c.photos });
         setDraftReady(true);
       })
       .catch(() => setDraftReady(true));
@@ -2252,7 +2371,9 @@ function ConsultationView({
     if (!draftReady || !vaultEnabled()) return;
     setLocalSaved(false);
     const t = setTimeout(() => {
-      vaultWrite("draft:" + c.id, draft).then(() => setLocalSaved(true));
+      vaultWrite("draft:" + c.id, { ...draft, photos: c.photos }).then(() =>
+        setLocalSaved(true),
+      );
     }, 350);
     return () => clearTimeout(t);
   }, [draft, draftReady]);
@@ -2270,6 +2391,12 @@ function ConsultationView({
   const updateQuote = (patch: Partial<typeof draft.quote>) =>
     setDraft({ ...draft, quote: { ...draft.quote, ...patch } });
   const save = () => {
+    if (
+      !window.dispatchEvent(
+        new Event("codimate:before-consult-save", { cancelable: true }),
+      )
+    )
+      throw new Error("편집기에서 ‘사진 편집 저장’을 먼저 눌러주세요.");
     if (quoteError) throw new Error(quoteError);
     return send(
       "consultation.save",
@@ -2516,6 +2643,7 @@ function ConsultationView({
                           ...p,
                           id: crypto.randomUUID(),
                           selected: true,
+                          representative: false,
                         })),
                       ],
                     }));

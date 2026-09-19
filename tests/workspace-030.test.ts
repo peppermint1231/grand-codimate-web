@@ -318,6 +318,9 @@ it("keeps server sessions for 30 days and revokes explicitly logged-out sessions
         })
       ).status,
     ).toBe(200);
+    const ids = await req("/login-ids");
+    expect(await ids.json()).toEqual({ usernames: ["sessiontest"] });
+    expect((await req("/state")).status).toBe(401);
     const login = await req("/login", {
       username: "sessiontest",
       password: "test-password-1234",

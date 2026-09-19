@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0",
-  "versionCode": 5,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.3.0.apk",
-  "sha256": "23d7a0af8a3ca9da22d3f0eeb7a89d08d24bad70084118880d61524d9c024714",
-  "notes": "메뉴 접기 · 환자 수정/삭제/중복 병합 · 로그인 유지 · 간결한 썸네일 · 두 손가락 확대/이동 · 텍스트 박스와 한글 폰트 · 이모지 스탬프 · 0도 복귀 · 구분선 비율 조절"
+  "version": "0.4.0",
+  "versionCode": 6,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.4.0.apk",
+  "sha256": "4f15927368b37608a70f7d4f7de723ce808ed5689abecaefe7082e630678f13d",
+  "notes": "등록 아이디 선택 · 앱 내 뒤로가기 · 편집기 좌측 사진목록 · 비교 크게보기 · 텍스트 설정창 · 모든 주석 선택 · 사진별 저장 · 포트레이트 크롭 · 대표사진 · 사진 삭제"
 }

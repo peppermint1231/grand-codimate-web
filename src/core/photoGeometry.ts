@@ -1,4 +1,4 @@
-import type { Annotation } from "./model";
+import type { Annotation, Photo } from "./model";
 import { annotationBox } from "./annotationText";
 export function rotatedSize(width: number, height: number, degrees: number) {
   const r = (degrees * Math.PI) / 180,
@@ -75,4 +75,32 @@ export function annotationHit(
   return ps.length === 1
     ? segment(first, first)
     : ps.slice(1).some((q, i) => segment(ps[i], q));
+}
+
+export function photoOutputSize(width: number, height: number, photo: Photo) {
+  const c = photo.crop || { width: 1, height: 1 };
+  const b = rotatedSize(width * c.width, height * c.height, photo.rotation);
+  return {
+    width: b.width * (photo.viewportCrop?.width || 1),
+    height: b.height * (photo.viewportCrop?.height || 1),
+  };
+}
+export function frameToCrop(
+  frame: { x: number; y: number; width: number; height: number },
+  bounds: { x: number; y: number; width: number; height: number },
+) {
+  const x = Math.max(0, Math.min(0.99, (frame.x - bounds.x) / bounds.width)),
+    y = Math.max(0, Math.min(0.99, (frame.y - bounds.y) / bounds.height));
+  return {
+    x,
+    y,
+    width: Math.max(
+      0.01,
+      Math.min(1, (frame.x + frame.width - bounds.x) / bounds.width) - x,
+    ),
+    height: Math.max(
+      0.01,
+      Math.min(1, (frame.y + frame.height - bounds.y) / bounds.height) - y,
+    ),
+  };
 }

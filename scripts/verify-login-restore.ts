@@ -2,10 +2,11 @@ import { chromium, expect } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 const creds = JSON.parse(await readFile("private/local-setup.json", "utf8"));
+const release = JSON.parse(await readFile("releases/android-latest.json", "utf8"));
 const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const context = await browser.newContext();
 const page = await context.newPage();
-await page.addInitScript(() => {
+await page.addInitScript((release) => {
   const w = window as any;
   w.__name = (f: unknown) => f;
   localStorage.setItem("codimate-server", location.origin);
@@ -21,14 +22,15 @@ await page.addInitScript(() => {
       },
     ],
     nativePromise: async (_plugin: string, method: string, options: any) => {
-      if (method === "appInfo") return { version: "0.3.0", versionCode: 5 };
+      if (method === "appInfo")
+        return { version: release.version, versionCode: release.versionCode };
       if (method === "seal")
         return { value: "mock-sealed:" + btoa(options.value) };
       if (method === "open")
         return { value: atob(options.value.replace("mock-sealed:", "")) };
     },
   };
-});
+}, release);
 let restoredBearer = false;
 page.on("request", (req) => {
   if (

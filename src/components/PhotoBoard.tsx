@@ -99,6 +99,12 @@ export function PhotoBoard({
     window.dispatchEvent(
       new Event("codimate:before-photo-leave", { cancelable: true }),
     );
+  const changeSelectionOrOrder = (next: Photo[]) => {
+    const nextEdit =
+      next.find((p) => p.id === editing) || next.find((p) => p.selected);
+    if (nextEdit?.id !== edit?.id && !mayLeave()) return;
+    onChange(next);
+  };
   const openEditor = (id: string) => {
     if (id !== edit?.id && !mayLeave()) return;
     setLarge(false);
@@ -119,11 +125,11 @@ export function PhotoBoard({
       to = next.findIndex((p) => p.id === target);
     if (from < 0 || to < 0) return;
     next.splice(to, 0, next.splice(from, 1)[0]);
-    onChange(next);
+    changeSelectionOrOrder(next);
   };
   const toggle = (p: Photo) => {
     if (!readonly)
-      onChange(
+      changeSelectionOrOrder(
         photos.map((x) =>
           x.id === p.id ? { ...x, selected: !x.selected } : x,
         ),

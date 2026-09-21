@@ -1,4 +1,4 @@
-import { chromium, expect } from "@playwright/test";
+import { chromium, expect, type Dialog } from "@playwright/test";
 import { readFile, writeFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 const creds = JSON.parse(await readFile("private/local-setup.json", "utf8"));
@@ -13,7 +13,8 @@ await page.addInitScript(() => {
 });
 const errors: string[] = [];
 page.on("pageerror", (e) => errors.push(e.message));
-page.on("dialog", (d) => d.accept());
+const acceptDialog = (d: Dialog) => d.accept();
+page.on("dialog", acceptDialog);
 const uid = Date.now().toString().slice(-8),
   name = "편집시험" + uid;
 const button = (name: string) =>
@@ -154,6 +155,33 @@ try {
   );
   await button("새로고침").click();
   await open();
+  // The initially displayed photo has no explicit editing ID yet. Selection
+  // and reordering must still protect its unsaved edits before switching it.
+  await button("↶ 좌 90°").click();
+  const editedRotation = await page.getByLabel("자유회전").inputValue();
+  page.off("dialog", acceptDialog);
+  let discardPrompts = 0;
+  const dismissDiscard = async (d: Dialog) => {
+    discardPrompts++;
+    await d.dismiss();
+  };
+  page.on("dialog", dismissDiscard);
+  await button("photo1.png 선택").click();
+  await expect(button("photo1.png 선택")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("자유회전")).toHaveValue(editedRotation);
+  assert.equal(discardPrompts, 1);
+  await button("photo1.png 순서 이동").press("ArrowRight");
+  await expect(page.locator(".active-photo-editor h3")).toHaveText("photo1.png");
+  await expect(page.getByLabel("자유회전")).toHaveValue(editedRotation);
+  assert.equal(discardPrompts, 2);
+  page.off("dialog", dismissDiscard);
+  page.on("dialog", acceptDialog);
+  await button("photo1.png 선택").click();
+  await expect(page.locator(".active-photo-editor h3")).toHaveText("photo2.png");
+  await button("photo1.png 선택").click();
+  await expect(page.locator(".active-photo-editor h3")).toHaveText("photo1.png");
+  await expect(page.getByLabel("자유회전")).toHaveValue("0");
+  await expect(button("사진 편집 저장")).toBeDisabled();
   await expect(page.locator(".selected-photo-rail button")).toHaveCount(5);
   await expect(button("1열")).toHaveCount(0);
   const rail = (await page.locator(".selected-photo-rail").boundingBox())!,
@@ -458,6 +486,7 @@ try {
           "cover",
           "thumbnail deletion",
           "photo save isolation",
+          "unsaved edits protected during selection and reordering",
         ],
         output,
       },

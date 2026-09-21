@@ -1,7 +1,7 @@
 {
-  "version": "0.4.0",
-  "versionCode": 6,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.4.0.apk",
-  "sha256": "4f15927368b37608a70f7d4f7de723ce808ed5689abecaefe7082e630678f13d",
-  "notes": "등록 아이디 선택 · 앱 내 뒤로가기 · 편집기 좌측 사진목록 · 비교 크게보기 · 텍스트 설정창 · 모든 주석 선택 · 사진별 저장 · 포트레이트 크롭 · 대표사진 · 사진 삭제"
+  "version": "0.4.1",
+  "versionCode": 7,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.4.1.apk",
+  "sha256": "cb29ff668bd1b205feb7fdc84b15397423f2a97b5d81b637f8bb2231ed482b10",
+  "notes": "사진 선택 해제·순서 변경 시 미저장 편집 유실 방지"
 }

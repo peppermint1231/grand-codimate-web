@@ -1,5 +1,17 @@
 import { useAppBack } from "../lib/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  PenLine,
+  MoveUpRight,
+  RectangleHorizontal,
+  Circle,
+  Type,
+  Stamp,
+  MousePointer2,
+  Grid2X2,
+  Eraser,
+  Hand,
+} from "lucide-react";
 import type { Photo, Annotation } from "../core/model";
 import { mediaUrl } from "../lib/api";
 import {
@@ -240,6 +252,19 @@ const toolNames: [Tool, string, string][] = [
   ["erase", "지우개", "E"],
   ["pan", "이동", "H"],
 ];
+const toolIcons = {
+  pen: PenLine,
+  arrow: MoveUpRight,
+  rect: RectangleHorizontal,
+  ellipse: Circle,
+  text: Type,
+  stamp: Stamp,
+  select: MousePointer2,
+  mosaic: Grid2X2,
+  erase: Eraser,
+  pan: Hand,
+  crop: RectangleHorizontal,
+};
 export function PhotoEditor({
   photo: savedPhoto,
   onChange: savePhoto,
@@ -598,8 +623,8 @@ export function PhotoEditor({
       },
     };
   };
-  const applyText = () => {
-    if (!textDraft.trim() || !image.current || !fontReady || readonly) return;
+  const textCandidate = (sample = false) => {
+    if (!image.current || !canvas.current) return;
     const editing =
       selected?.tool === "text" && (canEraseAll || selected.authorId === userId)
         ? selected
@@ -607,23 +632,67 @@ export function PhotoEditor({
     const anchor = editing
       ? annotationBox(editing, image.current.width, image.current.height)
       : textAnchor;
-    if (!anchor) {
-      setError("사진에서 글자를 넣을 위치를 먼저 눌러주세요.");
-      return;
-    }
-    const a = boxed({
+    if (!anchor) return;
+    return boxed({
       ...(editing || {}),
-      id: editing?.id || crypto.randomUUID(),
+      id: editing?.id || "text-preview",
       tool: "text",
       authorId: editing?.authorId || userId,
       points: [{ x: anchor.x, y: anchor.y }],
-      text: textDraft,
+      text: sample && !textDraft.trim() ? "미리보기" : textDraft,
       width,
       color,
       opacity: opacity / 100,
       font,
       fontSize,
     });
+  };
+  const textPreview = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!textOpen || !fontReady || !textPreview.current || !image.current)
+      return;
+    const candidate = textCandidate(true);
+    if (!candidate) return;
+    paintPhoto(
+      textPreview.current.getContext("2d")!,
+      image.current,
+      {
+        ...photo,
+        annotations: [
+          ...photo.annotations.filter((a) => a.id !== candidate.id),
+          candidate,
+        ],
+      },
+      true,
+      { zoom: scale, ...offset },
+    );
+  }, [
+    textOpen,
+    textDraft,
+    font,
+    fontSize,
+    color,
+    opacity,
+    width,
+    fontReady,
+    photo,
+    textAnchor,
+    selectedId,
+    zoom,
+    offset,
+  ]);
+  const applyText = () => {
+    if (!textDraft.trim() || !image.current || !fontReady || readonly) return;
+    const candidate = textCandidate();
+    if (!candidate) {
+      setError("사진에서 글자를 넣을 위치를 먼저 눌러주세요.");
+      return;
+    }
+    const editing =
+      selected?.tool === "text" && (canEraseAll || selected.authorId === userId)
+        ? selected
+        : null;
+    const a = { ...candidate, id: editing?.id || crypto.randomUUID() };
     commit({
       ...photo,
       annotations: editing
@@ -981,22 +1050,28 @@ export function PhotoEditor({
       }}
     >
       <div className="editor-tools">
-        {toolNames.map(([value, name, key]) => (
-          <button
-            key={value}
-            disabled={!!frame || (readonly && value !== "pan")}
-            aria-pressed={tool === value}
-            title={`${name} (${key})`}
-            className={tool === value ? "selected" : ""}
-            onClick={() => {
-              setTool(value);
-              if (!["text", "stamp", "select"].includes(value))
-                setSelectedId(null);
-            }}
-          >
-            {name}
-          </button>
-        ))}
+        {toolNames.map(([value, name, key]) => {
+          const Icon = toolIcons[value];
+          return (
+            <button
+              key={value}
+              disabled={!!frame || (readonly && value !== "pan")}
+              aria-pressed={tool === value}
+              aria-label={name}
+              title={`${name} (${key})`}
+              className={
+                "editor-tool-icon " + (tool === value ? "selected" : "")
+              }
+              onClick={() => {
+                setTool(value);
+                if (!["text", "stamp", "select"].includes(value))
+                  setSelectedId(null);
+              }}
+            >
+              <Icon size={23} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          );
+        })}
         <input
           aria-label="주석 색상"
           type="color"
@@ -1073,146 +1148,168 @@ export function PhotoEditor({
             }
           }}
         >
-          <div className="annotation-dialog">
-            <h3>{textOpen ? "텍스트 박스 설정" : "주석 설정"}</h3>
+          <div
+            className={
+              "annotation-dialog" + (textOpen ? " text-settings-dialog" : "")
+            }
+          >
             {textOpen && (
-              <>
-                <textarea
-                  autoFocus
-                  aria-label="텍스트 내용"
-                  placeholder="글자를 입력하세요"
-                  maxLength={500}
-                  value={textDraft}
-                  onChange={(e) => setTextDraft(e.target.value)}
+              <div className="text-preview-panel">
+                <strong>사진 위 미리보기</strong>
+                <canvas
+                  ref={textPreview}
+                  width={1200}
+                  height={900}
+                  aria-label="텍스트 사진 미리보기"
                 />
-                <label>
-                  폰트
-                  <select
-                    aria-label="주석 폰트"
-                    value={font}
-                    onChange={(e) =>
-                      setFont(e.target.value as Annotation["font"])
-                    }
-                  >
-                    {Object.entries(annotationFonts).map(([key, f]) => (
-                      <option key={key} value={key}>
-                        {f.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label>
-                  글자 크기
-                  <input
-                    aria-label="글자 크기"
-                    type="number"
-                    min={6}
-                    max={500}
-                    value={fontSize}
-                    onChange={(e) =>
-                      setFontSize(Math.max(6, Math.min(500, +e.target.value)))
-                    }
-                  />
-                </label>
-              </>
-            )}
-            {styleOpen && selected?.tool === "stamp" && (
-              <div className="stamp-picker">
-                {stamps.map((v) => (
-                  <button
-                    key={v}
-                    aria-label={`변경 스탬프 ${v}`}
-                    aria-pressed={stamp === v}
-                    onClick={() => setStamp(v)}
-                  >
-                    <img src={stampUrl(v)} alt="" width={30} height={30} />
-                  </button>
-                ))}
+                <p className="small">
+                  폰트·크기·색상·투명도가 바로 반영됩니다. 글자 적용을 누르면
+                  사진에 추가됩니다.
+                </p>
+                {!fontReady && <p role="status">폰트 준비 중…</p>}
               </div>
             )}
-            <label>
-              색상
-              <input
-                aria-label="설정 색상"
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-              />
-            </label>
-            <label>
-              투명도
-              <input
-                aria-label="설정 투명도"
-                type="range"
-                min={0}
-                max={100}
-                value={100 - opacity}
-                onChange={(e) => setOpacity(100 - Number(e.target.value))}
-              />
-            </label>
-            {styleOpen && (
-              <>
-                <label>
-                  굵기
-                  <input
-                    aria-label="설정 굵기"
-                    type="range"
-                    min={1}
-                    max={30}
-                    value={width}
-                    onChange={(e) => setWidth(+e.target.value)}
+            <div className="annotation-settings-fields">
+              <h3>{textOpen ? "텍스트 박스 설정" : "주석 설정"}</h3>
+              {textOpen && (
+                <>
+                  <textarea
+                    autoFocus
+                    aria-label="텍스트 내용"
+                    placeholder="글자를 입력하세요"
+                    maxLength={500}
+                    value={textDraft}
+                    onChange={(e) => setTextDraft(e.target.value)}
                   />
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={dashed}
-                    onChange={(e) => setDashed(e.target.checked)}
-                  />
-                  점선
-                </label>
-              </>
-            )}
-            <div className="button-row">
-              <button
-                onClick={() => {
-                  setTextOpen(false);
-                  setStyleOpen(false);
-                }}
-              >
-                취소
-              </button>
-              <button
-                className="primary"
-                disabled={!fontReady || (textOpen && !textDraft.trim())}
-                onClick={() => {
-                  if (textOpen) applyText();
-                  else if (
-                    selected &&
-                    (canEraseAll || selected.authorId === userId)
-                  ) {
-                    commit({
-                      ...photo,
-                      annotations: photo.annotations.map((a) =>
-                        a.id === selected.id
-                          ? {
-                              ...a,
-                              color,
-                              width,
-                              dashed,
-                              opacity: opacity / 100,
-                              ...(a.tool === "stamp" ? { text: stamp } : {}),
-                            }
-                          : a,
-                      ),
-                    });
+                  <label>
+                    폰트
+                    <select
+                      aria-label="주석 폰트"
+                      value={font}
+                      onChange={(e) =>
+                        setFont(e.target.value as Annotation["font"])
+                      }
+                    >
+                      {Object.entries(annotationFonts).map(([key, f]) => (
+                        <option key={key} value={key}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label>
+                    글자 크기
+                    <input
+                      aria-label="글자 크기"
+                      type="number"
+                      min={6}
+                      max={500}
+                      value={fontSize}
+                      onChange={(e) =>
+                        setFontSize(Math.max(6, Math.min(500, +e.target.value)))
+                      }
+                    />
+                  </label>
+                </>
+              )}
+              {styleOpen && selected?.tool === "stamp" && (
+                <div className="stamp-picker">
+                  {stamps.map((v) => (
+                    <button
+                      key={v}
+                      aria-label={`변경 스탬프 ${v}`}
+                      aria-pressed={stamp === v}
+                      onClick={() => setStamp(v)}
+                    >
+                      <img src={stampUrl(v)} alt="" width={30} height={30} />
+                    </button>
+                  ))}
+                </div>
+              )}
+              <label>
+                색상
+                <input
+                  aria-label="설정 색상"
+                  type="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                />
+              </label>
+              <label>
+                투명도
+                <input
+                  aria-label="설정 투명도"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={100 - opacity}
+                  onChange={(e) => setOpacity(100 - Number(e.target.value))}
+                />
+              </label>
+              {styleOpen && (
+                <>
+                  <label>
+                    굵기
+                    <input
+                      aria-label="설정 굵기"
+                      type="range"
+                      min={1}
+                      max={30}
+                      value={width}
+                      onChange={(e) => setWidth(+e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={dashed}
+                      onChange={(e) => setDashed(e.target.checked)}
+                    />
+                    점선
+                  </label>
+                </>
+              )}
+              <div className="button-row">
+                <button
+                  onClick={() => {
+                    setTextOpen(false);
                     setStyleOpen(false);
-                  }
-                }}
-              >
-                {textOpen ? "글자 적용" : "주석 적용"}
-              </button>
+                  }}
+                >
+                  취소
+                </button>
+                <button
+                  className="primary"
+                  disabled={!fontReady || (textOpen && !textDraft.trim())}
+                  onClick={() => {
+                    if (textOpen) applyText();
+                    else if (
+                      selected &&
+                      (canEraseAll || selected.authorId === userId)
+                    ) {
+                      commit({
+                        ...photo,
+                        annotations: photo.annotations.map((a) =>
+                          a.id === selected.id
+                            ? {
+                                ...a,
+                                color,
+                                width,
+                                dashed,
+                                opacity: opacity / 100,
+                                ...(a.tool === "stamp" ? { text: stamp } : {}),
+                              }
+                            : a,
+                        ),
+                      });
+                      setStyleOpen(false);
+                    }
+                  }}
+                >
+                  {textOpen ? "글자 적용" : "주석 적용"}
+                </button>
+              </div>
             </div>
           </div>
         </div>

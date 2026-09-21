@@ -1,7 +1,7 @@
 {
-  "version": "0.4.1",
-  "versionCode": 7,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.4.1.apk",
-  "sha256": "cb29ff668bd1b205feb7fdc84b15397423f2a97b5d81b637f8bb2231ed482b10",
-  "notes": "사진 선택 해제·순서 변경 시 미저장 편집 유실 방지"
+  "version": "0.5.0",
+  "versionCode": 8,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.5.0.apk",
+  "sha256": "b3bd079daf21f7b93ae50fe6a758af08d6e9b08804ad089b839b3d4a9b706ab0",
+  "notes": "전체화면 사진 편집·아이콘 도구·텍스트 미리보기·비교 맞춤·안정적인 순서 변경·여러 대표사진"
 }

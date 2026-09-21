@@ -756,10 +756,6 @@ export async function applyCommand(
         new Set(photos.map((x) => x.id)).size === photos.length,
         "사진 ID가 중복됩니다",
       );
-      ensure(
-        photos.filter((ph) => ph.representative).length <= 1,
-        "대표사진은 한 장만 선택하세요",
-      );
       c.photos = photos;
       c.photoColumns = z
         .number()

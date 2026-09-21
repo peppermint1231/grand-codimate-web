@@ -121,7 +121,7 @@ const payload = (photos: Photo[]) => ({
   memo: "",
   photos,
 });
-it("round-trips the cover and rotated crop, rejects duplicate covers and invalid frames", async () => {
+it("round-trips multiple covers and rotated crops, rejects invalid frames", async () => {
   const s = await fixture();
   const next = await applyCommand(
     s,
@@ -129,18 +129,35 @@ it("round-trips the cover and rotated crop, rejects duplicate covers and invalid
     cmd("consultation.save", payload([photo]), "c", 1),
   );
   expect(next.consultations[0].photos[0]).toEqual(photo);
-  await expect(
-    applyCommand(
-      s,
-      admin,
-      cmd(
-        "consultation.save",
-        payload([photo, { ...photo, id: "second" }]),
-        "c",
-        1,
-      ),
+  const multiple = await applyCommand(
+    s,
+    admin,
+    cmd(
+      "consultation.save",
+      payload([photo, { ...photo, id: "second" }]),
+      "c",
+      1,
     ),
-  ).rejects.toThrow("대표사진");
+  );
+  expect(
+    multiple.consultations[0].photos.filter((p) => p.representative),
+  ).toHaveLength(2);
+  const deselected = await applyCommand(
+    multiple,
+    admin,
+    cmd(
+      "consultation.save",
+      payload([
+        { ...photo, representative: false },
+        { ...photo, id: "second" },
+      ]),
+      "c",
+      2,
+    ),
+  );
+  expect(
+    deselected.consultations[0].photos.map((p) => p.representative),
+  ).toEqual([false, true]);
   await expect(
     applyCommand(
       s,

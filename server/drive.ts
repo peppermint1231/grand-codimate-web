@@ -162,6 +162,18 @@ export class Drive {
     );
     return (await r.json()) as { id: string; size: number; eTag: string };
   }
+  async remove(id: string) {
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/items/" +
+        encodeURIComponent(id),
+      {
+        method: "DELETE",
+        headers: { Authorization: "Bearer " + (await this.token()) },
+      },
+    );
+    if (!r.ok && r.status !== 404)
+      throw new Error(`OneDrive 접수 삭제 실패 (${r.status})`);
+  }
   async get(id: string) {
     return this.request(
       "/me/drive/items/" + encodeURIComponent(id) + "/content",

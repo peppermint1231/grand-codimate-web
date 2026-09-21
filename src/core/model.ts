@@ -64,6 +64,8 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  folderId?: string;
+  publicVisible?: boolean;
   careCategory?: "미용" | "보험";
   category: string;
   name: string;
@@ -74,6 +76,8 @@ export interface Product extends Base {
   sources: Source[];
 }
 export interface Catalog extends Base {
+  book?: CatalogBook;
+  folders?: CatalogFolder[];
   schemaVersion: 1;
   version: string;
   status: "draft" | "published";
@@ -87,6 +91,8 @@ export interface Discount {
   value: number;
 }
 export interface Line {
+  catalogVersion?: string;
+  book?: CatalogBook;
   description?: string;
   composition?: string;
   id: string;
@@ -141,6 +147,13 @@ export interface Photo {
   annotations: Annotation[];
 }
 export interface Consultation extends Base {
+  intakeSource?: {
+    receiptId: string;
+    receivedAt: string;
+    consentVersion: string;
+    personalConsent: boolean;
+    sensitiveConsent: boolean;
+  };
   kind?: "initial" | "interim" | "renewal";
   sourceConsultationId?: string;
   sourceRev?: number;
@@ -153,6 +166,7 @@ export interface Consultation extends Base {
   status: "H" | "P" | "F";
   cancelled: boolean;
   catalogVersion: string;
+  catalogVersions?: Partial<Record<CatalogBook, string>>;
   quote: Quote;
   memo: string;
   photos: Photo[];
@@ -260,12 +274,25 @@ export const emptyQuote = (): Quote => ({
   vatAmount: 0,
   total: 0,
 });
-export const latestCatalog = (s: State) =>
+export const catalogBooks = ["미용", "보험", "이벤트"] as const;
+export type CatalogBook = (typeof catalogBooks)[number];
+export interface CatalogFolder {
+  id: string;
+  parentId: string;
+  name: string;
+}
+export const catalogBook = (catalog: Catalog): CatalogBook =>
+  catalog.book || "미용";
+export const latestCatalog = (s: State, book: CatalogBook = "미용") =>
   s.catalogs
-    .filter((c) => c.status === "published")
+    .filter((c) => c.status === "published" && catalogBook(c) === book)
     .sort((a, b) =>
       (b.publishedAt || "").localeCompare(a.publishedAt || ""),
     )[0];
+export const latestCatalogs = (s: State) =>
+  catalogBooks
+    .map((book) => latestCatalog(s, book))
+    .filter((c): c is Catalog => !!c);
 export const consultationKind = (c: Consultation) =>
   c.kind === "interim"
     ? "중간상담"

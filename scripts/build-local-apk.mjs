@@ -6,8 +6,8 @@ import { spawn } from "node:child_process";
 const config = JSON.parse(
   await readFile(join(homedir(), ".codex/keys/codimate/signing.json"), "utf8"),
 );
-const versionName = process.env.VERSION_NAME || "0.7.2";
-const versionCode = process.env.VERSION_CODE || "13";
+const versionName = process.env.VERSION_NAME || "0.8.0";
+const versionCode = process.env.VERSION_CODE || "14";
 if (
   !/^[0-9A-Za-z][0-9A-Za-z._-]*$/.test(versionName) ||
   !/^[1-9][0-9]*$/.test(versionCode) ||

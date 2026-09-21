@@ -1,3 +1,10 @@
+import { Inquiries } from "./inquiries";
+import {
+  inquiryInput,
+  publicProducts,
+  type Inquiry,
+} from "../src/core/discovery";
+import { concerns } from "../src/core/concerns";
 import {
   DEFAULT_STORAGE_ROOT,
   validStorageRoot,
@@ -10,6 +17,8 @@ import { latestRelease, parseRelease } from "../src/core/appRelease";
 import { DurableObject } from "cloudflare:workers";
 import {
   emptyState,
+  latestCatalogs,
+  catalogBook,
   emptyQuote,
   allowed,
   permissions,
@@ -84,7 +93,7 @@ export class Clinic extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec(
-      "CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);",
+      "CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);",
     );
   }
   private async secret<T>(id: string) {
@@ -156,6 +165,63 @@ export class Clinic extends DurableObject<Env> {
     const u = await this.account(session.id);
     ensure(u?.active, "계정이 비활성화되었습니다", 401);
     return u;
+  }
+  private async inquiryStore() {
+    return new Inquiries(
+      this.sql,
+      this.env.ENCRYPTION_KEY,
+      this.env.REQUIRE_ONEDRIVE === "true" ? this.drive() : undefined,
+      await this.storageRoot(),
+    );
+  }
+  async alarm() {
+    const run = this.queue.then(async () => {
+      try {
+        if (await this.secret("restore-required")) return;
+        await this.settleStorageRename();
+        const store = await this.inquiryStore();
+        await store.purge();
+        await store.flush();
+      } finally {
+        await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+      }
+    });
+    this.queue = run.catch(() => undefined);
+    await run;
+  }
+  private async catalogState() {
+    const state = emptyState();
+    for (const row of this.sql
+      .exec<{ value: string }>(
+        "SELECT value FROM entities WHERE section='catalogs'",
+      )
+      .toArray())
+      state.catalogs.push(await open(row.value, this.env.ENCRYPTION_KEY));
+    return state;
+  }
+  private async persistChanges(
+    id: string,
+    actor: string,
+    digest: string,
+    changes: Change[],
+  ) {
+    const seq = Date.now().toString().padStart(16, "0");
+    const value = await seal(
+      {
+        changes,
+        operation: { id, actor, digest },
+        path: `${await this.storageRoot()}/_codimate/commits/${seq}_${id}.enc`,
+      },
+      this.env.ENCRYPTION_KEY,
+    );
+    this.sql.exec(
+      "INSERT INTO operations(id,actor,digest,value) VALUES(?,?,?,?)",
+      id,
+      actor,
+      digest,
+      value,
+    );
+    await this.flush();
   }
   private async storageRoot() {
     return (await this.secret<string>("storage-root")) || DEFAULT_STORAGE_ROOT;
@@ -342,7 +408,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.7.2",
+        version: "0.8.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -516,6 +582,132 @@ export class Clinic extends DurableObject<Env> {
       }
       return Response.redirect(this.env.APP_ORIGIN + "/?connected=1", 302);
     }
+    if (path === "/api/public/catalog" && req.method === "GET") {
+      const token = await seal(
+        { id: crypto.randomUUID(), expires: Date.now() + 3600_000 },
+        this.env.ENCRYPTION_KEY,
+      );
+      return json({
+        products: publicProducts(await this.catalogState()),
+        token,
+      });
+    }
+    if (path === "/api/public/inquiries" && req.method === "POST") {
+      ensure(
+        !(await this.secret("restore-required")),
+        "접수 준비 중입니다. 잠시 후 다시 시도하세요",
+        503,
+      );
+      await this.settleStorageRename();
+      const text = await req.text();
+      ensure(text.length < 64_000, "입력 내용이 너무 깁니다", 413);
+      const input = inquiryInput.parse(JSON.parse(text));
+      const ticket = await open<{ id: string; expires: number }>(
+        input.token,
+        this.env.ENCRYPTION_KEY,
+      );
+      ensure(
+        ticket.expires > Date.now() && /^[\w-]{8,100}$/.test(ticket.id),
+        "입력 시간이 만료되었습니다. 새로고침 후 다시 접수하세요",
+        400,
+      );
+      const store = await this.inquiryStore(),
+        digest = await sha(JSON.stringify({ ...input, token: undefined }));
+      const previous =
+        (await store.get(ticket.id)) || (await store.recover(ticket.id));
+      if (previous) {
+        ensure(
+          previous.digest === digest,
+          "이미 접수한 내용입니다. 새 접수를 시작하세요",
+          409,
+        );
+        await store.save(previous);
+        return json({ ok: true, receipt: ticket.id });
+      }
+      const rateKey =
+        "public-rate:" +
+        (await sha(req.headers.get("CF-Connecting-IP") || "local"));
+      const rate = await this.secret<{ count: number; expires: number }>(
+        rateKey,
+      );
+      ensure(
+        !rate || rate.expires < Date.now() || rate.count < 10,
+        "접수가 많습니다. 잠시 후 다시 시도하세요",
+        429,
+      );
+      await this.setSecret(rateKey, {
+        count: rate && rate.expires > Date.now() ? rate.count + 1 : 1,
+        expires:
+          rate && rate.expires > Date.now()
+            ? rate.expires
+            : Date.now() + 600_000,
+      });
+      const available = publicProducts(await this.catalogState());
+      ensure(
+        input.concerns.every((id) => concerns.some((c) => c.id === id)) &&
+          input.answers.every((id) =>
+            concerns.some(
+              (c) =>
+                input.concerns.includes(c.id) &&
+                c.questions.some((q) => q.id === id),
+            ),
+          ),
+        "선택한 고민을 확인하세요",
+      );
+      ensure(
+        input.concerns.length || input.selections.length,
+        "관심 고민 또는 시술을 선택하세요",
+      );
+      const keys = new Set<string>();
+      const selections = input.selections.map((selection) => {
+        const product = available.find(
+            (p) =>
+              p.id === selection.productId &&
+              p.catalogVersion === selection.catalogVersion,
+          ),
+          option = product?.options.find((o) => o.id === selection.optionId);
+        ensure(
+          product && option,
+          "단가표가 갱신되었습니다. 새로고침 후 관심 시술을 다시 선택하세요",
+          409,
+        );
+        const key =
+          selection.catalogVersion +
+          ":" +
+          selection.productId +
+          ":" +
+          selection.optionId;
+        ensure(!keys.has(key), "중복된 시술 선택입니다");
+        keys.add(key);
+        return {
+          ...selection,
+          book: product.book,
+          name: product.name,
+          label: option.label,
+        };
+      });
+      const now = new Date().toISOString();
+      if (!(await this.ctx.storage.getAlarm()))
+        await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+      await store.save({
+        id: ticket.id,
+        createdAt: now,
+        expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
+        status: "new",
+        digest,
+        person: input.person,
+        selections,
+        concerns: input.concerns,
+        answers: input.answers,
+        consent: {
+          personal: true,
+          sensitive: true,
+          version: "2026-09-21",
+          at: now,
+        },
+      });
+      return json({ ok: true, receipt: ticket.id });
+    }
     const user = await this.user(req);
     await this.settleStorageRename();
     const admin = () =>
@@ -536,6 +728,157 @@ export class Clinic extends DurableObject<Env> {
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
         409,
       );
+    if (path === "/api/inquiries" && req.method === "GET")
+      return json({ inquiries: await (await this.inquiryStore()).list() });
+    if (path === "/api/inquiries/convert" && req.method === "POST") {
+      ensure(
+        !(await this.secret("restore-required")),
+        "원본에서 재구축한 뒤 접수를 연결하세요",
+        409,
+      );
+      const b = await body();
+      ensure(typeof b.id === "string", "접수 ID를 확인하세요");
+      await this.flush();
+      const already = (await this.state()).consultations.find(
+        (c) => c.id === "inquiry-" + b.id,
+      );
+      if (already) {
+        await (
+          await this.inquiryStore()
+        ).complete(b.id, already.patientId, already.id);
+        return json({
+          ok: true,
+          patientId: already.patientId,
+          consultationId: already.id,
+        });
+      }
+      const store = await this.inquiryStore(),
+        inquiry = await store.get(b.id);
+      ensure(
+        inquiry && Date.parse(inquiry.expiresAt) > Date.now(),
+        "접수가 없거나 보관 기간이 만료되었습니다",
+        404,
+      );
+      await this.flush();
+      const before = await this.state(),
+        consultationId = "inquiry-" + inquiry.id;
+      let consultation = before.consultations.find(
+        (c) => c.id === consultationId,
+      );
+      if (!consultation) {
+        let after = before;
+        const patientId = b.patientId || "inquiry-" + inquiry.id;
+        if (!b.patientId)
+          after = await applyCommand(after, user, {
+            id: inquiry.id + "-patient",
+            type: "patient.create",
+            entityId: patientId,
+            payload: b.person,
+          });
+        after = await applyCommand(after, user, {
+          id: inquiry.id + "-consult",
+          type: "consultation.create",
+          entityId: consultationId,
+          payload: { patientId, category: b.category },
+        });
+        const current = after.consultations.find(
+          (c) => c.id === consultationId,
+        )!;
+        const lines = inquiry.selections.flatMap((selection) => {
+          const catalog = latestCatalogs(after).find(
+              (c) => catalogBook(c) === selection.book,
+            ),
+            product = catalog?.products.find(
+              (p) => p.id === selection.productId && p.active,
+            ),
+            option = product?.options.find(
+              (o) =>
+                o.id === selection.optionId &&
+                !o.review &&
+                o.price !== null &&
+                o.tax !== "unknown",
+            );
+          return product && option && catalog
+            ? [
+                {
+                  id: crypto.randomUUID(),
+                  productId: product.id,
+                  optionId: option.id,
+                  catalogVersion: catalog.version,
+                  book: catalogBook(catalog),
+                  quantity: 1,
+                  discount: { kind: "amount", value: 0 },
+                },
+              ]
+            : [];
+        });
+        const labels = inquiry.concerns.map(
+          (id) => concerns.find((c) => c.id === id)?.name || id,
+        );
+        const answers = inquiry.answers.map(
+          (id) =>
+            concerns.flatMap((c) => [...c.questions]).find((q) => q.id === id)
+              ?.label || id,
+        );
+        const memo = [
+          "맞춤 시술 찾기 접수",
+          ...labels,
+          ...answers,
+          ...inquiry.selections.map(
+            (x) => `${x.book} · ${x.name} / ${x.label}`,
+          ),
+          "검토되지 않은 옵션은 장바구니에 추가하지 않았습니다. 상담 후 확인하세요.",
+        ].join("\n");
+        after = await applyCommand(after, user, {
+          id: inquiry.id + "-save",
+          type: "consultation.save",
+          entityId: consultationId,
+          baseRev: current.rev,
+          payload: {
+            lines,
+            discount: { kind: "amount", value: 0 },
+            vat: "separate",
+            memo,
+            photos: [],
+            catalogVersions: current.catalogVersions,
+            catalogVersion: current.catalogVersion,
+          },
+        });
+        after.consultations.find((c) => c.id === consultationId)!.intakeSource =
+          {
+            receiptId: inquiry.id,
+            receivedAt: inquiry.createdAt,
+            consentVersion: inquiry.consent.version,
+            personalConsent: inquiry.consent.personal,
+            sensitiveConsent: inquiry.consent.sensitive,
+          };
+        const changes: Change[] = [];
+        for (const section of Object.keys(before) as (keyof State)[]) {
+          if (section === "users") continue;
+          for (const value of after[section])
+            if (
+              JSON.stringify(before[section].find((x) => x.id === value.id)) !==
+              JSON.stringify(value)
+            )
+              changes.push({ section, id: value.id, value });
+        }
+        await this.persistChanges(
+          inquiry.id + "-convert",
+          user.id,
+          await sha(JSON.stringify(b)),
+          changes,
+        );
+        consultation = after.consultations.find(
+          (c) => c.id === consultationId,
+        )!;
+      }
+      await store.complete(inquiry.id, consultation.patientId, consultation.id);
+      return json({
+        ok: true,
+        patientId: consultation.patientId,
+        consultationId: consultation.id,
+      });
+    }
     if (path === "/api/storage" && req.method === "GET") {
       admin();
       const rootFolder = await this.storageRoot();
@@ -701,6 +1044,7 @@ export class Clinic extends DurableObject<Env> {
           .toArray().length,
         driveConnected: !!(await this.secret("drive")),
         storageRoot: await this.storageRoot(),
+        publicUrl: this.env.APP_ORIGIN + "/discover",
         restoreRequired: !!(await this.secret("restore-required")),
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
@@ -894,23 +1238,7 @@ export class Clinic extends DurableObject<Env> {
           )
             changes.push({ section, id: v.id, value: v });
       }
-      const seq = Date.now().toString().padStart(16, "0");
-      const value = await seal(
-        {
-          changes,
-          operation: { id: cmd.id, actor: user.id, digest },
-          path: `${await this.storageRoot()}/_codimate/commits/${seq}_${cmd.id}.enc`,
-        },
-        this.env.ENCRYPTION_KEY,
-      );
-      this.sql.exec(
-        "INSERT INTO operations(id,actor,digest,value) VALUES(?,?,?,?)",
-        cmd.id,
-        user.id,
-        digest,
-        value,
-      );
-      await this.flush();
+      await this.persistChanges(cmd.id, user.id, digest, changes);
       return json({
         ok: true,
         savedTo:
@@ -981,6 +1309,34 @@ export class Clinic extends DurableObject<Env> {
           });
         }
       }
+      const inquiries: {
+        id: string;
+        value: string;
+        expires: number;
+        remoteId: string;
+      }[] = [];
+      await this.drive().folders(
+        `${await this.storageRoot()}/_codimate/inquiries`,
+      );
+      for (const item of await this.drive().listCommits(
+        "inquiries",
+        await this.storageRoot(),
+      )) {
+        const value = await (await this.drive().get(item.id)).text();
+        const record = await open<Inquiry>(value, this.env.ENCRYPTION_KEY);
+        ensure(
+          record.id && Number.isFinite(Date.parse(record.expiresAt)),
+          "접수 복구 기록을 확인하세요",
+        );
+        inquiries.push({
+          id: record.id,
+          value,
+          expires: Date.parse(record.expiresAt),
+          remoteId: item.id,
+        });
+      }
+      if (inquiries.length)
+        await this.ctx.storage.setAlarm(Date.now() + 60_000);
       ensure(
         activeAdmins > 0,
         "원본에 활성 관리자 계정이 없습니다. 기존 서버를 유지합니다.",
@@ -990,6 +1346,15 @@ export class Clinic extends DurableObject<Env> {
         this.sql.exec("DELETE FROM entities");
         this.sql.exec("DELETE FROM operations");
         this.sql.exec("DELETE FROM media");
+        this.sql.exec("DELETE FROM inquiries");
+        for (const row of inquiries)
+          this.sql.exec(
+            "INSERT INTO inquiries VALUES(?,?,?,?)",
+            row.id,
+            row.value,
+            row.expires,
+            row.remoteId,
+          );
         this.sql.exec(
           "DELETE FROM secrets WHERE id LIKE ? OR id LIKE ?",
           "user:%",

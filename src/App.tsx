@@ -1,3 +1,14 @@
+import { DiscoveryDesk } from "./components/Discovery";
+import {
+  CatalogFolders,
+  CatalogProductRows,
+} from "./components/CatalogOrganizer";
+import {
+  inFolder,
+  folderPath,
+  productFolder,
+  rootFolders,
+} from "./core/catalogFolders";
 import { appBack, useAppBack } from "./lib/navigation";
 import { QuoteTotals } from "./components/QuoteTotals";
 import { AddressSearch } from "./components/AddressSearch";
@@ -40,6 +51,10 @@ import {
   emptyState,
   emptyQuote,
   latestCatalog,
+  latestCatalogs,
+  catalogBooks,
+  catalogBook,
+  type CatalogBook,
   allowed,
   age,
   money,
@@ -786,6 +801,7 @@ export function App() {
           ["consultations", "상담이력", ClipboardList],
           ["stats", "통계", BarChart3],
           ["catalog", "단가표 관리", FileSpreadsheet],
+          ["discovery", "맞춤 시술 찾기", HeartHandshake],
           ["settings", "설정", Settings],
         ].map(([key, label, Icon]: any) => (
           <button
@@ -934,6 +950,19 @@ export function App() {
           </div>
         )}
         <div className="content">
+          {page === "patients" && !patient && (
+            <button
+              className="card discovery-home-entry"
+              onClick={() => setPage("discovery")}
+            >
+              <HeartHandshake size={24} />
+              <span>
+                <b>맞춤 시술 찾기</b>
+                <small>환자용 웹 화면 열기 · 새 상담 요청 확인</small>
+              </span>
+              <ChevronRight size={20} />
+            </button>
+          )}
           {page === "patients" &&
             (patient ? (
               <PatientDetail
@@ -1022,6 +1051,20 @@ export function App() {
               clearGuest={() => {
                 guestPhotos.forEach((p) => URL.revokeObjectURL(p.url));
                 setGuestPhotos([]);
+              }}
+            />
+          )}
+          {page === "discovery" && (
+            <DiscoveryDesk
+              state={state}
+              publicUrl={health.publicUrl || location.origin + "/discover"}
+              work={work}
+              openConsult={async (patientId, consultationId) => {
+                await refresh();
+                setPatientId(patientId);
+                setConsultId(consultationId);
+                setPage("consult");
+                setTab("consult");
               }}
             />
           )}
@@ -1760,7 +1803,7 @@ function PatientDetail({
   let renewalError = "";
   if (starting === "renewal" && source) {
     try {
-      renewalPreview = renewalQuote(source, latestCatalog(s), "preview");
+      renewalPreview = renewalQuote(source, latestCatalogs(s), "preview");
     } catch (e) {
       renewalError = (e as Error).message;
     }
@@ -2378,11 +2421,18 @@ function ConsultationView({
     [template, setTemplate] = useState(""),
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
-  const catalog = draft.catalogVersion
+  const [book, setBook] = useState<CatalogBook>(c.category);
+  const bookVersion =
+    draft.catalogVersions?.[book] ||
+    (book === "미용" ? draft.catalogVersion : undefined);
+  const catalog = bookVersion
     ? s.catalogs.find(
-        (x) => x.status === "published" && x.version === draft.catalogVersion,
+        (x) =>
+          x.status === "published" &&
+          x.version === bookVersion &&
+          catalogBook(x) === book,
       )
-    : latestCatalog(s);
+    : latestCatalog(s, book);
   const source = s.consultations.find((x) => x.id === c.sourceConsultationId);
   const sourceInvalid =
     c.kind === "renewal" &&
@@ -2396,13 +2446,11 @@ function ConsultationView({
     user.role === "admin" ||
     (c.status === "H" && !c.cancelled && c.ownerId === user.id)
   );
-  const availableProducts = (catalog?.products || []).filter(
-    (p) => p.active && productCategory(p) === c.category,
-  );
+  const availableProducts = (catalog?.products || []).filter((p) => p.active);
   const query = search.trim().toLocaleLowerCase();
   const products = availableProducts.filter(
     (p) =>
-      (!category || p.category === category) &&
+      (!category || (catalog && inFolder(catalog, p, category))) &&
       [
         p.name,
         p.category,
@@ -2499,6 +2547,7 @@ function ConsultationView({
         photoColumns: draft.photoColumns || 2,
         reason: draft.quote.reason,
         catalogVersion: draft.catalogVersion,
+        catalogVersions: draft.catalogVersions,
       },
       c.id,
       draft.rev,
@@ -2875,6 +2924,24 @@ function ConsultationView({
                     단가표 {catalog?.publishedAt?.slice(0, 10) || "미게시"}
                   </small>
                 </div>
+                <div className="tabs" aria-label="상담 단가표 구분">
+                  {catalogBooks.map((kind) => (
+                    <button
+                      type="button"
+                      key={kind}
+                      className={book === kind ? "active" : ""}
+                      onClick={() => {
+                        setBook(kind);
+                        setCategory("");
+                      }}
+                    >
+                      {kind}
+                    </button>
+                  ))}
+                </div>
+                <p className="small">
+                  세 단가표의 상품을 한 장바구니에 함께 담을 수 있습니다.
+                </p>
                 <div className="search">
                   <Search size={18} />
                   <input
@@ -2890,9 +2957,15 @@ function ConsultationView({
                   onChange={(e) => setCategory(e.target.value)}
                 >
                   <option value="">모든 카테고리</option>
-                  {[...new Set(availableProducts.map((p) => p.category))].map(
-                    (c) => (
-                      <option key={c}>{c}</option>
+                  {[...rootFolders, ...(catalog?.folders || [])].map(
+                    (folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {catalog
+                          ? folderPath(catalog, folder.id)
+                              .map((x) => x.name)
+                              .join(" / ")
+                          : folder.name}
+                      </option>
                     ),
                   )}
                 </select>
@@ -2920,6 +2993,8 @@ function ConsultationView({
                               id: crypto.randomUUID(),
                               productId: p.id,
                               optionId: o.id,
+                              catalogVersion: catalog!.version,
+                              book,
                               name: p.name,
                               description: p.description,
                               composition: p.composition,
@@ -2933,7 +3008,13 @@ function ConsultationView({
                             setDraft({
                               ...draft,
                               catalogVersion:
-                                draft.catalogVersion || catalog!.version,
+                                draft.catalogVersion ||
+                                latestCatalog(s)?.version ||
+                                "",
+                              catalogVersions: {
+                                ...draft.catalogVersions,
+                                [book]: catalog!.version,
+                              },
                               quote: {
                                 ...draft.quote,
                                 lines: [...draft.quote.lines, line],
@@ -2993,7 +3074,7 @@ function ConsultationView({
                   <div className="cart-line" key={l.id}>
                     <b>{l.name}</b>
                     <small>
-                      {l.label} · {money(l.price)} ·{" "}
+                      {l.book || "미용"} · {l.label} · {money(l.price)} ·{" "}
                       {l.tax === "inclusive"
                         ? "VAT 포함"
                         : l.tax === "exempt"
@@ -3161,8 +3242,14 @@ function ConsultationView({
               />
             </Field>
             {c.kind !== "interim" &&
-              latestCatalog(s) &&
-              latestCatalog(s)?.version !== draft.catalogVersion && (
+              latestCatalogs(s).some(
+                (x) =>
+                  x.version !==
+                  (draft.catalogVersions?.[catalogBook(x)] ||
+                    (catalogBook(x) === "미용"
+                      ? draft.catalogVersion
+                      : undefined)),
+              ) && (
                 <button
                   disabled={readonly}
                   onClick={() => {
@@ -3174,6 +3261,12 @@ function ConsultationView({
                       setDraft({
                         ...draft,
                         catalogVersion: latestCatalog(s)?.version || "",
+                        catalogVersions: Object.fromEntries(
+                          latestCatalogs(s).map((x) => [
+                            catalogBook(x),
+                            x.version,
+                          ]),
+                        ),
                         quote: emptyQuote(),
                       });
                   }}
@@ -3557,8 +3650,44 @@ function CatalogView({
   work: (f: () => Promise<any>) => any;
 }) {
   const can = allowed(user, "catalog.edit");
-  const [draft, setDraft] = useState<Catalog | undefined>(undefined),
-    [search, setSearch] = useState(""),
+  const [book, setBook] = useState<CatalogBook>("미용");
+  const [drafts, setDrafts] = useState<Partial<Record<CatalogBook, Catalog>>>(
+    {},
+  );
+  const unsaved = Object.values(drafts).some(
+    (c) =>
+      c &&
+      c.status === "draft" &&
+      JSON.stringify(c) !==
+        JSON.stringify(s.catalogs.find((saved) => saved.id === c.id)),
+  );
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (unsaved) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    const leave = (e: Event) => {
+      if (
+        unsaved &&
+        !window.confirm(
+          "저장하지 않은 단가표 변경이 있습니다. 저장하지 않고 이동할까요?",
+        )
+      )
+        e.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    window.addEventListener("codimate:before-photo-leave", leave);
+    return () => {
+      window.removeEventListener("beforeunload", warn);
+      window.removeEventListener("codimate:before-photo-leave", leave);
+    };
+  }, [unsaved]);
+  const draft = drafts[book];
+  const setDraft = (value: Catalog | undefined) =>
+    setDrafts((previous) => ({ ...previous, [book]: value }));
+  const [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
     [selected, setSelected] = useState(""),
     [includeInactive, setIncludeInactive] = useState(false),
@@ -3568,12 +3697,14 @@ function CatalogView({
     [paste, setPaste] = useState("");
   const current =
     draft ||
-    s.catalogs.filter((c) => c.status === "draft").at(-1) ||
-    latestCatalog(s);
+    s.catalogs
+      .filter((c) => c.status === "draft" && catalogBook(c) === book)
+      .at(-1) ||
+    latestCatalog(s, book);
   const products =
     current?.products.filter(
       (p) =>
-        (!category || p.category === category) &&
+        (!category || (current && inFolder(current, p, category))) &&
         [p.name, p.description, p.composition, ...p.options.map((o) => o.label)]
           .join(" ")
           .toLowerCase()
@@ -3606,7 +3737,7 @@ function CatalogView({
     <>
       <Title
         title="단가표 관리"
-        description="하나의 원본으로 상담 가격과 보기 좋은 엑셀을 함께 관리합니다."
+        description="미용·보험·이벤트별 원본과 게시 버전을 관리합니다. 맞춤 시술 찾기에서도 같은 상품을 사용합니다."
         action={
           <div className="button-row">
             {can && (
@@ -3626,6 +3757,7 @@ function CatalogView({
                           throw new Error("변환된 단가표 JSON을 선택하세요.");
                         setDraft({
                           ...c,
+                          book,
                           id: crypto.randomUUID(),
                           rev: 0,
                           status: "draft",
@@ -3643,7 +3775,10 @@ function CatalogView({
               onClick={() =>
                 work(async () => {
                   await send("audit.export", { format: "catalog-csv" });
-                  download(catalogCSV(current!), "코디메이트_단가표.csv");
+                  download(
+                    catalogCSV(current!),
+                    `코디메이트_${book}_단가표.csv`,
+                  );
                 })
               }
             >
@@ -3658,11 +3793,16 @@ function CatalogView({
                   await send("audit.export", { format: "catalog-xlsx" });
                   await downloadWorkbook(
                     await catalogWorkbook(
-                      current,
-                      category ? [category] : undefined,
+                      {
+                        ...current,
+                        products: current.products.filter(
+                          (p) => !category || inFolder(current, p, category),
+                        ),
+                      },
+                      undefined,
                       includeInactive,
                     ),
-                    "코디메이트_단가표_" + date() + ".xlsx",
+                    `코디메이트_${book}_단가표_${date()}.xlsx`,
                   );
                 })
               }
@@ -3673,6 +3813,38 @@ function CatalogView({
           </div>
         }
       />
+      {editable && (
+        <div className="catalog-save-bar">
+          <span>{book} SSOT 편집 중 · 변경 후 초안을 저장하세요</span>
+          <button
+            className="primary"
+            onClick={() =>
+              work(async () => {
+                if (await save()) setDraft(undefined);
+              })
+            }
+          >
+            초안 저장
+          </button>
+        </div>
+      )}
+      <div className="tabs" aria-label="단가표 구분">
+        {catalogBooks.map((kind) => (
+          <button
+            type="button"
+            key={kind}
+            className={book === kind ? "active" : ""}
+            onClick={() => {
+              setBook(kind);
+              setCategory("");
+              setSelected("");
+              setBulkIds([]);
+            }}
+          >
+            {kind} SSOT
+          </button>
+        ))}
+      </div>
       <div className="card">
         <div className="table-toolbar">
           <select
@@ -3684,11 +3856,13 @@ function CatalogView({
             }}
           >
             <option value="">단가표 선택</option>
-            {s.catalogs.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.status === "draft" ? "초안" : "게시본"} · {c.version}
-              </option>
-            ))}
+            {s.catalogs
+              .filter((c) => catalogBook(c) === book)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.status === "draft" ? "초안" : "게시본"} · {c.version}
+                </option>
+              ))}
             {draft && !s.catalogs.some((c) => c.id === draft.id) && (
               <option value={draft.id}>가져온 새 초안</option>
             )}
@@ -3701,6 +3875,28 @@ function CatalogView({
             />
             비활성 포함 내보내기
           </label>
+          {can && (
+            <button
+              onClick={() => {
+                const now = new Date().toISOString();
+                setDraft({
+                  id: crypto.randomUUID(),
+                  rev: 0,
+                  createdAt: now,
+                  updatedAt: now,
+                  schemaVersion: 1,
+                  book,
+                  version: `${book} 초안`,
+                  status: "draft",
+                  products: [],
+                  folders: [],
+                  references: [],
+                });
+              }}
+            >
+              새 {book} 단가표 작성
+            </button>
+          )}
           {current && can && (
             <button
               onClick={() =>
@@ -3732,24 +3928,17 @@ function CatalogView({
         )}
       </div>
       <div className="catalog-admin">
-        <aside className="card category-list">
-          <h3>카테고리</h3>
-          <button
-            className={!category ? "selected" : ""}
-            onClick={() => setCategory("")}
-          >
-            전체 카테고리
-          </button>
-          {[...new Set(current?.products.map((p) => p.category))].map((c) => (
-            <button
-              key={c}
-              className={c === category ? "selected" : ""}
-              onClick={() => setCategory(c)}
-            >
-              {c}
-            </button>
-          ))}
-        </aside>
+        {current && (
+          <CatalogFolders
+            catalog={current}
+            selected={category}
+            onSelect={setCategory}
+            editable={!!editable}
+            onChange={setDraft}
+            selectedIds={bulkIds}
+            work={work}
+          />
+        )}
         <div className="card">
           <div className="table-toolbar">
             <div className="search">
@@ -3984,30 +4173,16 @@ function CatalogView({
               실제 단가표는 소스코드에 포함하지 않습니다.
             </Empty>
           ) : (
-            <div className="product-admin-list">
-              {products.map((p) => (
-                <button
-                  className={
-                    "list-row " + (selected === p.id ? "selected" : "")
-                  }
-                  key={p.id}
-                  onClick={() => setSelected(p.id)}
-                >
-                  <span>
-                    <b>{p.name}</b>
-                    <small>
-                      {p.category} · 옵션 {p.options.length}개
-                    </small>
-                  </span>
-                  <span className={"badge " + (p.active ? "P" : "H")}>
-                    {p.active ? "판매 중" : "비활성"}
-                  </span>
-                  {p.options.some((o) => o.review) && (
-                    <span className="review-dot">확인 필요</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <CatalogProductRows
+              catalog={current}
+              products={products}
+              editable={!!editable}
+              selectedIds={bulkIds}
+              onSelection={setBulkIds}
+              onChange={setDraft}
+              onEdit={setSelected}
+              work={work}
+            />
           )}
           {current && editable && (
             <div className="button-row">
@@ -4019,7 +4194,12 @@ function CatalogView({
                       rev: 1,
                       createdAt: now,
                       updatedAt: now,
-                      category: category || "새 분류",
+                      category: category
+                        ? folderPath(current, category)
+                            .map((x) => x.name)
+                            .join(" / ")
+                        : "새 분류",
+                      folderId: category || undefined,
                       name: "새 상품",
                       description: "",
                       composition: "",
@@ -4036,8 +4216,7 @@ function CatalogView({
               <button
                 onClick={() =>
                   work(async () => {
-                    await save();
-                    setDraft(undefined);
+                    if (await save()) setDraft(undefined);
                   })
                 }
               >
@@ -4048,7 +4227,7 @@ function CatalogView({
                 onClick={() =>
                   work(async () => {
                     if (draft) {
-                      await save();
+                      if (!(await save())) return;
                       setDraft(undefined);
                       throw new Error(
                         "초안을 저장했습니다. 저장된 내용을 확인하고 다시 게시하세요.",
@@ -4084,14 +4263,23 @@ function CatalogView({
                 onChange={(e) => change({ ...product, name: e.target.value })}
               />
             </Field>
-            <Field label="카테고리">
-              <input
+            <Field label="소속 폴더">
+              <select
                 disabled={!editable}
-                value={product.category}
+                value={productFolder(current!, product)}
                 onChange={(e) =>
-                  change({ ...product, category: e.target.value })
+                  change({ ...product, folderId: e.target.value })
                 }
-              />
+              >
+                {[...rootFolders, ...(current?.folders || [])].map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {folderPath(current!, f.id)
+                      .map((x) => x.name)
+                      .join(" / ")}
+                  </option>
+                ))}
+              </select>
+              <small>원본 분류: {product.category}</small>
             </Field>
           </div>
           <Field label="설명">

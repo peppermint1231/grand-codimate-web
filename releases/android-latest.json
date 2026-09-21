@@ -1,7 +1,7 @@
 {
-  "version": "0.7.2",
-  "versionCode": 13,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.2.apk",
-  "sha256": "7148b84fcb99a9ce6ccde005ff7da2b106d91873b7d5d3fa6200e0b5684aba76",
-  "notes": "설정에서 OneDrive 저장 폴더 이름 변경 · 기존 사진·단가표·복구 자료 유지"
+  "version": "0.8.0",
+  "versionCode": 14,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.0.apk",
+  "sha256": "4d9960c7afbd409011799902eaba9b9921a9725a645ab868f102310479b94da1",
+  "notes": "미용·보험·이벤트 SSOT과 혼합 장바구니 · 3단계 폴더 정리 · 맞춤 시술 찾기 웹 접수와 상담 연결"
 }

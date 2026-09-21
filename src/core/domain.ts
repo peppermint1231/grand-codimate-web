@@ -1,3 +1,4 @@
+import { folderError } from "./catalogFolders";
 import { safeName } from "./storagePaths";
 import { z } from "zod";
 import {
@@ -5,6 +6,9 @@ import {
   productCategory,
   emptyQuote,
   latestCatalog,
+  latestCatalogs,
+  catalogBook,
+  catalogBooks,
   type State,
   type User,
   type Command,
@@ -128,7 +132,7 @@ export function calculate(
 }
 export function renewalQuote(
   source: Consultation,
-  catalog: Catalog | undefined,
+  catalog: Catalog | Catalog[] | undefined,
   id: string,
 ): Quote {
   ensure(
@@ -136,19 +140,36 @@ export function renewalQuote(
     "시술 견적이 있는 기존 상담을 선택하세요",
   );
   const lines = source.quote.lines.map((old, index) => {
-    const product = catalog?.products.find(
+    const catalogs = Array.isArray(catalog)
+      ? catalog
+      : catalog
+        ? [catalog]
+        : [];
+    const matches = catalogs.filter(
+      (c) =>
+        (!old.book || catalogBook(c) === old.book) &&
+        c.products.some((p) => p.id === old.productId && p.active),
+    );
+    ensure(
+      matches.length <= 1,
+      `${old.name}: 같은 상품 ID가 여러 단가표에 있습니다. 상담에서 다시 선택하세요`,
+    );
+    const matchedCatalog = matches[0];
+    const product = matchedCatalog?.products.find(
       (x) => x.id === old.productId && x.active,
     );
     const option = product?.options.find(
       (x) => x.id === old.optionId && !x.review && x.price !== null,
     );
     ensure(
-      product && option && productCategory(product) === source.category,
-      `${old.name}: 현재 판매 단가·상담 구분을 검토·게시한 뒤 연장하세요`,
+      product && option,
+      `${old.name}: 현재 판매 단가·부가세를 검토·게시한 뒤 연장하세요`,
     );
     return {
       ...old,
       id: `${id}-${index}`,
+      catalogVersion: matchedCatalog!.version,
+      book: catalogBook(matchedCatalog!),
       name: product.name,
       label: option.label,
       price: option.price!,
@@ -340,6 +361,9 @@ export function validateCatalog(c: Catalog, posting = false) {
       Array.isArray(c.references),
     "단가표 형식을 확인하세요",
   );
+  ensure(!c.book || catalogBooks.includes(c.book), "단가표 구분을 확인하세요");
+  const error = folderError(c);
+  ensure(!error, error || "폴더를 확인하세요");
   const ids = new Set<string>();
   for (const p of c.products) {
     ensure(
@@ -361,7 +385,8 @@ export function validateCatalog(c: Catalog, posting = false) {
       typeof p.description === "string" &&
         typeof p.composition === "string" &&
         Array.isArray(p.sources) &&
-        typeof p.active === "boolean",
+        typeof p.active === "boolean" &&
+        (p.publicVisible === undefined || typeof p.publicVisible === "boolean"),
       "상품 설명·구성·출처·사용 여부를 확인하세요",
     );
     ensure(Array.isArray(p.options), "옵션이 필요합니다");
@@ -595,7 +620,7 @@ export async function applyCommand(
         ensure(source?.status === "P", "성공 확정한 기존 상담을 선택하세요");
       const quote =
         kind === "renewal" && source
-          ? renewalQuote(source, cat, id)
+          ? renewalQuote(source, latestCatalogs(s), id)
           : emptyQuote();
       s.consultations.push({
         ...base,
@@ -616,6 +641,9 @@ export async function applyCommand(
         sourceRev: source?.rev,
         photoColumns: source?.photoColumns || 2,
         catalogVersion: cat?.version || "",
+        catalogVersions: Object.fromEntries(
+          latestCatalogs(s).map((c) => [catalogBook(c), c.version]),
+        ),
         quote,
         memo: "",
         photos: source
@@ -690,6 +718,8 @@ export async function applyCommand(
             id: z.string(),
             productId: z.string(),
             optionId: z.string(),
+            catalogVersion: z.string().optional(),
+            book: z.enum(catalogBooks).optional(),
             quantity: z.number().positive().max(1000),
             discount: discountSchema,
           }),
@@ -700,16 +730,43 @@ export async function applyCommand(
           raw.every((l) => l.id.trim()),
         "견적 항목 ID가 없거나 중복되었습니다",
       );
+      const catalogVersions = z
+        .record(z.enum(catalogBooks), z.string())
+        .optional()
+        .parse(p.catalogVersions);
+      if (catalogVersions)
+        for (const [book, version] of Object.entries(catalogVersions)) {
+          ensure(
+            s.catalogs.some(
+              (x) =>
+                x.status === "published" &&
+                catalogBook(x) === book &&
+                x.version === version,
+            ),
+            "게시된 단가표 버전을 확인하세요",
+          );
+        }
       const lines: Line[] = raw.map((l) => {
+        const version =
+          l.catalogVersion ||
+          (l.book && catalogVersions?.[l.book]) ||
+          catalog?.version;
+        const lineCatalog = s.catalogs.find(
+          (x) => x.status === "published" && x.version === version,
+        );
+        ensure(
+          !l.book || (lineCatalog && catalogBook(lineCatalog) === l.book),
+          "단가표 구분과 버전이 일치하지 않습니다",
+        );
         const old = c.quote.lines.find(
           (x) =>
             x.id === l.id &&
             x.productId === l.productId &&
             x.optionId === l.optionId,
         );
-        if (old && (!p.catalogVersion || p.catalogVersion === c.catalogVersion))
+        if (old && (old.catalogVersion || c.catalogVersion) === version)
           return { ...old, quantity: l.quantity, discount: l.discount };
-        const product = catalog?.products.find(
+        const product = lineCatalog?.products.find(
             (x) => x.id === l.productId && x.active,
           ),
           o = product?.options.find((x) => x.id === l.optionId);
@@ -717,12 +774,10 @@ export async function applyCommand(
           product && o && o.price !== null && !o.review,
           "검증·게시된 상품만 담을 수 있습니다",
         );
-        ensure(
-          productCategory(product) === c.category,
-          "다른 상담 구분의 상품입니다",
-        );
         return {
           ...l,
+          catalogVersion: lineCatalog!.version,
+          book: catalogBook(lineCatalog!),
           name: product.name,
           description: product.description,
           composition: product.composition,
@@ -744,6 +799,7 @@ export async function applyCommand(
       );
       c.quote = quote;
       c.catalogVersion = String(p.catalogVersion || c.catalogVersion);
+      if (catalogVersions) c.catalogVersions = catalogVersions;
       c.memo = z
         .string()
         .max(20000)
@@ -1089,6 +1145,10 @@ export async function applyCommand(
       if (old) {
         find(s.catalogs);
         ensure(old.status === "draft", "게시본은 변경할 수 없습니다");
+        ensure(
+          catalogBook(old) === catalogBook(catalog),
+          "기존 단가표의 구분은 변경할 수 없습니다",
+        );
         Object.assign(old, catalog, {
           id,
           rev: old.rev + 1,

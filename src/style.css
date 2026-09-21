@@ -1367,7 +1367,7 @@ details p {
   overflow: hidden;
   min-width: 0;
   border: 1px solid #d9e3dd;
-  cursor: grab;
+  cursor: auto;
 }
 .comparison-grid canvas {
   width: 100%;
@@ -2113,7 +2113,7 @@ details p {
 .photo-editor-fullscreen { position: fixed; inset: 0; z-index: 1500; background: #f2f5f2; display: flex; flex-direction: column; padding: 12px; gap: 10px; }
 .fullscreen-editor-header { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .fullscreen-editor-header span { flex: 1; font-size: 13px; color: #52685e; }
-.fullscreen-editor-header button { margin-left: auto; }
+.fullscreen-editor-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .photo-editor-fullscreen .photo-edit-workspace { flex: 1; min-height: 0; grid-template-columns: 100px minmax(0, 1fr); align-items: stretch; }
 .photo-editor-fullscreen .selected-photo-rail { position: static; max-height: none; min-height: 0; overflow: auto; padding: 3px 5px; }
 .editor-rail-photo { position: relative; }

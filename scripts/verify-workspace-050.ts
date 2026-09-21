@@ -21,8 +21,10 @@ const acceptDialog = (d: Dialog) => d.accept();
 page.on("dialog", acceptDialog);
 const uid = Date.now().toString().slice(-8),
   name = "화면시험" + uid;
-const button = (name: string) =>
-  page.getByRole("button", { name, exact: true });
+const button = (name: string) => {
+  const buttons = page.getByRole("button", { name, exact: true });
+  return name === "사진 편집 저장" ? buttons.first() : buttons;
+};
 const back = () =>
   page.evaluate(() => window.dispatchEvent(new Event("codimate:back")));
 const current = () =>
@@ -253,7 +255,21 @@ try {
   await expect(button("펜").locator("svg")).toHaveCount(1);
   assert.equal((await button("펜").innerText()).trim(), "");
   await expect(button("펜")).toHaveAttribute("title", "펜 (P)");
+  const photoSaveButtons = page.getByRole("button", {
+    name: "사진 편집 저장",
+    exact: true,
+  });
+  await expect(photoSaveButtons).toHaveCount(2);
+  for (const b of await photoSaveButtons.all()) await expect(b).toBeDisabled();
+  const topSave = editor
+    .locator(".fullscreen-editor-header")
+    .getByRole("button", { name: "사진 편집 저장", exact: true });
+  const saveBounds = (await topSave.boundingBox())!;
+  const closeBounds = (await button("편집기 닫기").boundingBox())!;
+  assert.ok(saveBounds.x + saveBounds.width <= closeBounds.x);
+  assert.ok(Math.abs(saveBounds.y - closeBounds.y) < 2);
   await button("↶ 좌 90°").click();
+  for (const b of await photoSaveButtons.all()) await expect(b).toBeEnabled();
   const rotation = await page.getByLabel("자유회전").inputValue();
   const rail = page.getByLabel("편집 사진 순서", { exact: true });
   const rb = (await rail.boundingBox())!,
@@ -297,7 +313,24 @@ try {
     preview.evaluate((c: HTMLCanvasElement) => c.toDataURL());
   const beforeText = await pixels();
   await page.getByLabel("주석 폰트").selectOption("jua");
-  await page.getByLabel("글자 크기", { exact: true }).fill("72");
+  const sizeInput = page.getByLabel("글자 크기", { exact: true });
+  const sizeSlider = page.getByLabel("글자 크기 슬라이더", { exact: true });
+  await sizeInput.fill("72");
+  await expect(sizeSlider).toHaveValue("72");
+  const beforeSize = await pixels();
+  await sizeSlider.focus();
+  await sizeSlider.press("ArrowRight");
+  await expect(sizeInput).toHaveValue("73");
+  await expect.poll(pixels).not.toBe(beforeSize);
+  await sizeInput.fill("72");
+  await expect(sizeSlider).toHaveValue("72");
+  const transparency = page.getByLabel("설정 투명도", { exact: true });
+  await transparency.focus();
+  await transparency.press("ArrowRight");
+  await expect(transparency.locator("..")).toContainText("투명도 1%");
+  await transparency.press("Home");
+  await expect(transparency.locator("..")).toContainText("투명도 0%");
+  for (const b of await photoSaveButtons.all()) await expect(b).toBeDisabled();
   await page.getByLabel("설정 색상").fill("#ffff00");
   await expect(button("글자 적용")).toBeEnabled();
   await expect.poll(pixels).not.toBe(beforeText);
@@ -312,7 +345,8 @@ try {
   );
   const projected = await pixels();
   await button("글자 적용").click();
-  await button("사진 편집 저장").click();
+  await topSave.click();
+  for (const b of await photoSaveButtons.all()) await expect(b).toBeDisabled();
   await save();
   saved = await current();
   const photo = saved.photos.find((p: any) => p.name === "photo1.png");
@@ -411,7 +445,53 @@ try {
   await button("전체화면맞춤").click();
   const compare = viewer.getByLabel("비교 사진 순서", { exact: true });
   const compareBefore = await ids(compare);
-  await movePhoto(compare, viewer.locator(".comparison-image").first(), 3);
+  const imageBounds = (await viewer
+    .locator(".comparison-image")
+    .first()
+    .boundingBox())!;
+  await page.mouse.move(
+    imageBounds.x + imageBounds.width / 2,
+    imageBounds.y + imageBounds.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    imageBounds.x + imageBounds.width / 2,
+    imageBounds.y + imageBounds.height / 2 + 200,
+    { steps: 8 },
+  );
+  await page.mouse.up();
+  await expect(page.locator(".photo-drag-ghost")).toHaveCount(0);
+  await expect.poll(() => ids(compare)).toEqual(compareBefore);
+  await button("넓이맞춤").click();
+  const vb = (await viewport.boundingBox())!;
+  const swipeX = vb.x + vb.width / 4;
+  const swipeY = vb.y + Math.min(vb.height - 50, 500);
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [pt(swipeX, swipeY)],
+  });
+  for (let step = 1; step <= 12; step++) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [pt(swipeX, swipeY - step * 25)],
+    });
+    await page.waitForTimeout(20);
+  }
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect
+    .poll(() => viewport.evaluate((e) => e.scrollTop))
+    .toBeGreaterThan(100);
+  await expect.poll(() => ids(compare)).toEqual(compareBefore);
+  await expect(page.locator(".photo-drag-ghost")).toHaveCount(0);
+  await button("전체화면맞춤").click();
+  await movePhoto(
+    compare,
+    viewer.getByRole("button", { name: /비교 순서 이동$/ }).first(),
+    3,
+  );
   await expect.poll(() => ids(compare)).not.toEqual(compareBefore);
   await page.screenshot({
     path: "artifacts/workspace-050-comparison.png",
@@ -494,6 +574,20 @@ try {
         h: el.getBoundingClientRect().height,
       })),
     );
+  const historyRow = page
+    .locator("button.list-row")
+    .filter({ has: page.locator(".consultation-covers") });
+  const descriptionBounds = (await historyRow
+    .locator(":scope > span")
+    .first()
+    .boundingBox())!;
+  const coversBounds = (await historyRow
+    .locator(".consultation-covers")
+    .boundingBox())!;
+  const statusBounds = (await historyRow.locator(".badge").boundingBox())!;
+  assert.ok(
+    descriptionBounds.x < coversBounds.x && coversBounds.x < statusBounds.x,
+  );
   for (const cover of covers) {
     assert.equal(cover.fit, "contain");
     assert.equal(cover.w, cover.h);
@@ -514,6 +608,11 @@ try {
           "pointer cancellation",
           "fullscreen editor",
           "icon toolbar",
+          "header save shares state with bottom save",
+          "font size slider and numeric input synchronize",
+          "transparency percentage",
+          "touch comparison scroll preserves photo order",
+          "history description before covers",
           "unsaved close/switch guards",
           "editor rail reorder preserves edits",
           "text preview equals applied pixels",
@@ -532,7 +631,7 @@ try {
       2,
     ),
   );
-  console.log("Workspace 0.5 browser checks passed");
+  console.log("Workspace 0.5.1 browser checks passed");
 } catch (e) {
   await page.screenshot({
     path: "artifacts/workspace-050-failure.png",

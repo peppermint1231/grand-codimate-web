@@ -1953,13 +1953,13 @@ function PatientDetail({
                     key={c.id}
                     onClick={() => open(c)}
                   >
-                    <ConsultationCover photos={c.photos} />
                     <span>
                       <b>
                         {c.category} · {consultationKind(c)}
                       </b>
                       <small>{c.createdAt.slice(0, 10)}</small>
                     </span>
+                    <ConsultationCover photos={c.photos} />
                     <span className={"badge " + c.status}>{status(c)}</span>
                     <span>{money(c.quote.total)}</span>
                     <ChevronRight size={18} />

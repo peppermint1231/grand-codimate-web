@@ -206,10 +206,7 @@ function PhotoViewer({
           >
             {(p, i) => (
               <figure data-photo-id={p.id}>
-                <div
-                  className="comparison-image"
-                  data-photo-drag={!readonly || undefined}
-                >
+                <div className="comparison-image">
                   <PhotoPreview photo={p} />
                 </div>
                 <figcaption className="photo-overlay-actions">
@@ -272,6 +269,9 @@ export function PhotoBoard({
     [large, setLarge] = useState(false),
     [infoId, setInfoId] = useState<string | null>(null);
   const [fit, setFit] = useState<"width" | "height" | "screen">("screen");
+  const [saveContainer, setSaveContainer] = useState<HTMLDivElement | null>(
+    null,
+  );
   useEffect(() => watchUploads(() => update((v) => v + 1)), []);
   const selected = photos.filter((p) => p.selected),
     edit = photos.find((p) => p.id === editing),
@@ -445,7 +445,10 @@ export function PhotoBoard({
           <header className="fullscreen-editor-header">
             <strong>사진 편집</strong>
             <span>사진 편집 저장 후 상담 저장까지 눌러주세요.</span>
-            <button onClick={closeEditor}>편집기 닫기</button>
+            <div className="fullscreen-editor-actions">
+              <div ref={setSaveContainer} />
+              <button onClick={closeEditor}>편집기 닫기</button>
+            </div>
           </header>
           <div className="photo-edit-workspace">
             <PhotoOrder
@@ -487,6 +490,7 @@ export function PhotoBoard({
                 userId={userId}
                 readonly={!canAnnotate}
                 canEraseAll={admin}
+                saveContainer={saveContainer}
                 onChange={(p) =>
                   onChange(
                     photos.map((x) =>
@@ -512,7 +516,7 @@ export function PhotoBoard({
           close={() => setLarge(false)}
         >
           <header className="lightbox-toolbar">
-            <strong>사진 비교 · 드래그로 순서 변경</strong>
+            <strong>사진 비교 · 이동 손잡이를 끌어 순서 변경</strong>
             <button onClick={() => setLarge(false)}>닫기 (Esc)</button>
           </header>
           {viewerContent()}

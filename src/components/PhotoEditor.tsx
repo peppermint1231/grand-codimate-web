@@ -1,5 +1,6 @@
 import { useAppBack } from "../lib/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   PenLine,
   MoveUpRight,
@@ -271,12 +272,14 @@ export function PhotoEditor({
   userId,
   readonly = false,
   canEraseAll = false,
+  saveContainer,
 }: {
   photo: Photo;
   onChange: (p: Photo) => void;
   userId: string;
   readonly?: boolean;
   canEraseAll?: boolean;
+  saveContainer?: HTMLElement | null;
 }) {
   const [photo, onChange] = useState(savedPhoto);
   const [savedMessage, setSavedMessage] = useState("");
@@ -1003,6 +1006,20 @@ export function PhotoEditor({
       setTool("pen");
     } else commit({ ...photo, annotations: [...photo.annotations, a] });
   };
+  const saveButton = (
+    <button
+      className="primary"
+      disabled={readonly || !dirty || !!frame || textOpen || styleOpen}
+      onClick={() => {
+        savePhoto(photo);
+        setSavedMessage(
+          "현재 사진을 작업 중인 상담에 반영했습니다. 상담 저장을 해야 다시 열 때 유지됩니다.",
+        );
+      }}
+    >
+      사진 편집 저장
+    </button>
+  );
   return (
     <div
       className="photo-editor"
@@ -1049,6 +1066,7 @@ export function PhotoEditor({
         space.current = false;
       }}
     >
+      {saveContainer && createPortal(saveButton, saveContainer)}
       <div className="editor-tools">
         {toolNames.map(([value, name, key]) => {
           const Icon = toolIcons[value];
@@ -1101,7 +1119,7 @@ export function PhotoEditor({
           />
         </label>
         <label>
-          투명도 {100 - opacity}%
+          투명도 {Math.round(100 - opacity)}%
           <input
             aria-label="주석 투명도"
             type="range"
@@ -1211,6 +1229,18 @@ export function PhotoEditor({
                       }
                     />
                   </label>
+                  <label>
+                    크기 조절
+                    <input
+                      aria-label="글자 크기 슬라이더"
+                      type="range"
+                      min={6}
+                      max={500}
+                      step={1}
+                      value={fontSize}
+                      onChange={(e) => setFontSize(Number(e.target.value))}
+                    />
+                  </label>
                 </>
               )}
               {styleOpen && selected?.tool === "stamp" && (
@@ -1237,7 +1267,7 @@ export function PhotoEditor({
                 />
               </label>
               <label>
-                투명도
+                투명도 {Math.round(100 - opacity)}%
                 <input
                   aria-label="설정 투명도"
                   type="range"
@@ -1520,18 +1550,7 @@ export function PhotoEditor({
         <button disabled={readonly || !!frame} onClick={beginFrame}>
           영역 자르기 (포트레이트)
         </button>
-        <button
-          className="primary"
-          disabled={readonly || !dirty || !!frame || textOpen || styleOpen}
-          onClick={() => {
-            savePhoto(photo);
-            setSavedMessage(
-              "현재 사진을 작업 중인 상담에 반영했습니다. 상담 저장을 해야 다시 열 때 유지됩니다.",
-            );
-          }}
-        >
-          사진 편집 저장
-        </button>
+        {saveButton}
         <button
           onClick={() => canvas.current?.parentElement?.requestFullscreen?.()}
         >

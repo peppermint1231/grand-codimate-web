@@ -250,7 +250,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.5.0",
+        version: "0.5.1",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"

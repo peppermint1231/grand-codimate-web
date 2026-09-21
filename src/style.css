@@ -2175,3 +2175,6 @@ details p {
 .quote-totals dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; }
 .quote-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .quote-totals .total { margin-top: 10px; padding: 16px 0 4px; }
+
+.followup-preview { border: 1px solid var(--line); background: #f1f6ef; border-radius: 10px; padding: 14px 18px; margin: 12px 0; }
+.followup-preview p { margin: 6px 0 0; font-size: 13px; }

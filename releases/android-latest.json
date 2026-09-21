@@ -1,7 +1,7 @@
 {
-  "version": "0.6.0",
-  "versionCode": 10,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.6.0.apk",
-  "sha256": "7508bf65cfb0f817859fb822f1c9ddf00da6fe546a56a54d9f4bcd3911afbb4d",
-  "notes": "상담 시술 검색·전체 상품 보기·견적 금액 표시·계산 오류 및 저장·확정 검증 개선"
+  "version": "0.7.0",
+  "versionCode": 11,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.0.apk",
+  "sha256": "aee362d3b329166f81b9b3cdee745652dace861c8b42b36bf68ce3860b7b51c6",
+  "notes": "중간·연장상담 미리보기·현재 단가와 단위 적용·패키지 상태 충돌 방지·중간상담 완료 표시 개선"
 }

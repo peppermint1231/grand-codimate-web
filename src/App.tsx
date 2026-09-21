@@ -56,6 +56,7 @@ import {
 import {
   applyCommand,
   calculate,
+  renewalQuote,
   metrics,
   gradeFor,
   duplicates,
@@ -111,7 +112,11 @@ const names: Record<string, string> = {
 const date = () =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const status = (c: Consultation) =>
-  c.cancelled ? "취소" : { H: "보류", P: "성공", F: "실패" }[c.status];
+  c.cancelled
+    ? "취소"
+    : c.kind === "interim"
+      ? { H: "보류", P: "완료", F: "중단" }[c.status]
+      : { H: "보류", P: "성공", F: "실패" }[c.status];
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field">
@@ -410,6 +415,10 @@ export function App() {
           patientId: p.id,
           kind,
           sourceConsultationId,
+          sourceRev: sourceConsultationId
+            ? state.consultations.find((c) => c.id === sourceConsultationId)
+                ?.rev
+            : undefined,
           category:
             selectedCategory ||
             (window.confirm(
@@ -424,6 +433,7 @@ export function App() {
       setConsultId(id);
       setPage("consult");
       setTab("photo");
+      return true;
     });
   const logout = () => {
     if (
@@ -1726,7 +1736,7 @@ function PatientDetail({
     kind?: Consultation["kind"],
     source?: string,
     category?: "미용" | "보험",
-  ) => void;
+  ) => Promise<unknown>;
   send: (...args: any[]) => any;
   open: (c: Consultation) => void;
 }) {
@@ -1738,6 +1748,23 @@ function PatientDetail({
   const m = metrics(s, p.id),
     g = gradeFor(s, p),
     cs = s.consultations.filter((c) => c.patientId === p.id);
+  const sources = cs.filter(
+    (x) =>
+      x.category === startCategory &&
+      !x.cancelled &&
+      x.kind !== "interim" &&
+      (starting !== "renewal" || x.status === "P"),
+  );
+  const source = sources.find((x) => x.id === sourceId);
+  let renewalPreview: ReturnType<typeof renewalQuote> | undefined;
+  let renewalError = "";
+  if (starting === "renewal" && source) {
+    try {
+      renewalPreview = renewalQuote(source, latestCatalog(s), "preview");
+    } catch (e) {
+      renewalError = (e as Error).message;
+    }
+  }
   return (
     <>
       <button className="back" onClick={back}>
@@ -1808,14 +1835,7 @@ function PatientDetail({
                   onChange={(e) => setSourceId(e.target.value)}
                 >
                   <option value="">이전 상담 선택</option>
-                  {cs
-                    .filter(
-                      (x) =>
-                        x.category === startCategory &&
-                        !x.cancelled &&
-                        (starting !== "renewal" || x.status === "P") &&
-                        x.kind !== "interim",
-                    )
+                  {sources
                     .slice()
                     .reverse()
                     .map((x) => (
@@ -1824,11 +1844,50 @@ function PatientDetail({
                         {x.quote.lines
                           .map((l) => l.name + " " + l.label)
                           .join(", ") || "사진 상담"}{" "}
-                        · {status(x)}
+                        · {consultationKind(x)} · {status(x)}
+                        {x.status === "P"
+                          ? ` · ${packageActive(x) ? "진행 중" : "완료"}`
+                          : ""}
                       </option>
                     ))}
                 </select>
               </Field>
+              {!sources.length && (
+                <p className="small">
+                  이 구분에 선택할 수 있는 이전 시술 상담이 없습니다.
+                </p>
+              )}
+              {source && (
+                <div
+                  className="followup-preview"
+                  aria-label="이전 상담 미리보기"
+                >
+                  <strong>
+                    {source.createdAt.slice(0, 10)} · {consultationKind(source)}
+                  </strong>
+                  <p>
+                    사진 {source.photos.length}장 · {source.photoColumns || 2}열
+                    배치
+                  </p>
+                  <p>
+                    기준 상담: {status(source)}
+                    {source.status === "P"
+                      ? ` · 패키지 ${packageActive(source) ? "진행 중" : "완료"}`
+                      : ""}
+                  </p>
+                  {renewalPreview && (
+                    <p>
+                      이전 견적 {money(source.quote.total)} → 현재 단가 견적{" "}
+                      {money(renewalPreview.total)} · 할인 초기화
+                    </p>
+                  )}
+                </div>
+              )}
+              {renewalError && (
+                <p className="error" role="alert">
+                  {renewalError}
+                </p>
+              )}
               <p className="small">
                 이전 사진과 주석을 불러온 뒤 비교할 사진을 선택합니다.
                 {starting === "renewal"
@@ -1839,10 +1898,10 @@ function PatientDetail({
           )}
           <button
             className="primary"
-            disabled={starting !== "initial" && !sourceId}
-            onClick={() => {
-              start(starting, sourceId || undefined, startCategory);
-              setStarting(null);
+            disabled={starting !== "initial" && (!source || !!renewalError)}
+            onClick={async () => {
+              if (await start(starting, sourceId || undefined, startCategory))
+                setStarting(null);
             }}
           >
             상담 시작
@@ -1922,7 +1981,7 @@ function PatientDetail({
           <Summary
             label="상담 횟수"
             value={`${cs.length}건`}
-            detail={`성공 ${cs.filter((c) => c.status === "P" && !c.cancelled).length}건`}
+            detail={`시술 성공 ${cs.filter((c) => c.status === "P" && !c.cancelled && c.kind !== "interim").length}건 · 중간 완료 ${cs.filter((c) => c.status === "P" && !c.cancelled && c.kind === "interim").length}건`}
           />
         </div>
       )}
@@ -2324,6 +2383,15 @@ function ConsultationView({
         (x) => x.status === "published" && x.version === draft.catalogVersion,
       )
     : latestCatalog(s);
+  const source = s.consultations.find((x) => x.id === c.sourceConsultationId);
+  const sourceInvalid =
+    c.kind === "renewal" &&
+    (!source ||
+      source.cancelled ||
+      source.status !== "P" ||
+      source.kind === "interim" ||
+      source.patientId !== c.patientId ||
+      source.category !== c.category);
   const readonly = !(
     user.role === "admin" ||
     (c.status === "H" && !c.cancelled && c.ownerId === user.id)
@@ -2528,6 +2596,40 @@ function ConsultationView({
           </>
         }
       />
+      {c.sourceConsultationId && c.kind !== "initial" && (
+        <div className="followup-preview" aria-label="기준 상담 정보">
+          <strong>{consultationKind(c)}의 기준 상담</strong>
+          {source ? (
+            <p>
+              {source.createdAt.slice(0, 10)} · {source.category} ·{" "}
+              {consultationKind(source)} · {status(source)} · 패키지{" "}
+              {packageActive(source) ? "진행 중" : "완료"}
+            </p>
+          ) : (
+            <p>기준 상담을 찾을 수 없습니다.</p>
+          )}
+          <p>
+            {c.kind === "interim"
+              ? "중간상담을 완료해도 기존 패키지의 진행 상태는 유지됩니다."
+              : "연장 확정 시 기존 패키지는 완료되고 새 상담이 진행 중이 됩니다. 연장 안 함은 기존 패키지만 완료합니다."}
+          </p>
+          {c.kind === "renewal" &&
+            c.status === "H" &&
+            source &&
+            c.sourceRev !== undefined &&
+            c.sourceRev !== source.rev && (
+              <p className="small">
+                상담 시작 후 기준 상담이 변경됐습니다. 현재 상태를 확인한 뒤
+                확정하세요.
+              </p>
+            )}
+          {sourceInvalid && (
+            <p className="error" role="alert">
+              기준 상담이 취소되었거나 연장할 수 없는 상태입니다.
+            </p>
+          )}
+        </div>
+      )}
       <div className="tabs">
         {[
           ["photo", "01  사진"],
@@ -3188,6 +3290,7 @@ function ConsultationView({
                   disabled={
                     readonly ||
                     dirty ||
+                    sourceInvalid ||
                     !!validationError ||
                     (c.kind !== "interim" && !quote.lines.length)
                   }
@@ -3201,13 +3304,23 @@ function ConsultationView({
                       }
                       if (
                         !window.confirm(
-                          "성공 확정 후 원문 수정·취소는 관리자만 가능합니다. 확정할까요?",
+                          c.kind === "interim"
+                            ? "중간상담을 완료할까요? 기존 패키지 진행 상태는 유지됩니다."
+                            : c.kind === "renewal"
+                              ? "기존 패키지를 완료하고 이 연장상담을 진행 중으로 확정할까요?"
+                              : "성공 확정 후 원문 수정·취소는 관리자만 가능합니다. 확정할까요?",
                         )
                       )
                         return;
                       await send(
                         "consultation.finalize",
-                        { status: "P", documents: [] },
+                        {
+                          status: "P",
+                          documents: [],
+                          ...(c.kind === "renewal"
+                            ? { sourceRev: source?.rev }
+                            : {}),
+                        },
                         c.id,
                         c.rev,
                       );
@@ -3221,7 +3334,9 @@ function ConsultationView({
                       : "성공 확정 · 진행 중"}
                 </button>
                 <button
-                  disabled={readonly || dirty || !!validationError}
+                  disabled={
+                    readonly || dirty || sourceInvalid || !!validationError
+                  }
                   onClick={() =>
                     work(async () => {
                       if (JSON.stringify(draft) !== JSON.stringify(c)) {
@@ -3232,20 +3347,32 @@ function ConsultationView({
                         !window.confirm(
                           c.kind === "renewal"
                             ? "연장하지 않고 기존 패키지를 완료로 표시할까요?"
-                            : "실패 확정 후 수정은 관리자만 가능합니다.",
+                            : c.kind === "interim"
+                              ? "중간상담을 중단할까요? 기존 패키지 진행 상태는 유지됩니다."
+                              : "실패 확정 후 수정은 관리자만 가능합니다.",
                         )
                       )
                         return;
                       await send(
                         "consultation.finalize",
-                        { status: "F", documents: [] },
+                        {
+                          status: "F",
+                          documents: [],
+                          ...(c.kind === "renewal"
+                            ? { sourceRev: source?.rev }
+                            : {}),
+                        },
                         c.id,
                         c.rev,
                       );
                     })
                   }
                 >
-                  {c.kind === "renewal" ? "연장 안 함 · 완료" : "실패 확정"}
+                  {c.kind === "renewal"
+                    ? "연장 안 함 · 완료"
+                    : c.kind === "interim"
+                      ? "중간상담 중단"
+                      : "실패 확정"}
                 </button>
               </div>
             )}

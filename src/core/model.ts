@@ -143,6 +143,7 @@ export interface Photo {
 export interface Consultation extends Base {
   kind?: "initial" | "interim" | "renewal";
   sourceConsultationId?: string;
+  sourceRev?: number;
   photoColumns?: number;
   packageProgress?: { total?: number; used?: number; complete: boolean };
   patientId: string;

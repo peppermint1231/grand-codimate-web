@@ -122,6 +122,41 @@ export function calculate(
     total: supply + vatAmount,
   };
 }
+export function renewalQuote(
+  source: Consultation,
+  catalog: Catalog | undefined,
+  id: string,
+): Quote {
+  ensure(
+    source.kind !== "interim" && source.quote.lines.length > 0,
+    "시술 견적이 있는 기존 상담을 선택하세요",
+  );
+  const lines = source.quote.lines.map((old, index) => {
+    const product = catalog?.products.find(
+      (x) => x.id === old.productId && x.active,
+    );
+    const option = product?.options.find(
+      (x) => x.id === old.optionId && !x.review && x.price !== null,
+    );
+    ensure(
+      product && option && productCategory(product) === source.category,
+      `${old.name}: 현재 판매 단가·상담 구분을 검토·게시한 뒤 연장하세요`,
+    );
+    return {
+      ...old,
+      id: `${id}-${index}`,
+      name: product.name,
+      label: option.label,
+      price: option.price!,
+      tax: option.tax,
+      unit: option.unit,
+      description: product.description,
+      composition: product.composition,
+      discount: { kind: "amount" as const, value: 0 },
+    };
+  });
+  return calculate(lines, { kind: "amount", value: 0 }, source.quote.vat);
+}
 export function activeLedger(s: State) {
   const reversed = new Set(
     s.ledger.filter((l) => l.kind === "reversal").map((l) => l.originalId),
@@ -540,35 +575,24 @@ export async function applyCommand(
             !source.cancelled,
           "같은 환자·구분의 이전 상담을 선택하세요",
         );
+      if (kind !== "initial") {
+        ensure(
+          source?.kind !== "interim",
+          "시술 상담을 기준으로 중간·연장상담을 시작하세요",
+        );
+        if (p.sourceRev !== undefined)
+          ensure(
+            z.number().int().positive().parse(p.sourceRev) === source?.rev,
+            "기준 상담이 변경되었습니다. 최신 내용을 확인하고 다시 시작하세요.",
+            409,
+          );
+      }
       if (kind === "renewal")
         ensure(source?.status === "P", "성공 확정한 기존 상담을 선택하세요");
-      let quote = emptyQuote();
-      if (kind === "renewal" && source) {
-        const lines = source.quote.lines.map((old, index) => {
-          const product = cat?.products.find(
-            (x) => x.id === old.productId && x.active,
-          );
-          const option = product?.options.find(
-            (x) => x.id === old.optionId && !x.review && x.price !== null,
-          );
-          ensure(
-            product && option && productCategory(product) === category,
-            `${old.name}: 현재 판매 단가·상담 구분을 검토·게시한 뒤 연장하세요`,
-          );
-          return {
-            ...old,
-            id: `${id}-${index}`,
-            name: product.name,
-            label: option.label,
-            price: option.price!,
-            tax: option.tax,
-            description: product.description,
-            composition: product.composition,
-            discount: { kind: "amount" as const, value: 0 },
-          };
-        });
-        quote = calculate(lines, quote.discount, source.quote.vat);
-      }
+      const quote =
+        kind === "renewal" && source
+          ? renewalQuote(source, cat, id)
+          : emptyQuote();
       s.consultations.push({
         ...base,
         patientId: patient.id,
@@ -585,13 +609,14 @@ export async function applyCommand(
         cancelled: false,
         kind,
         sourceConsultationId: source?.id,
-        photoColumns: 2,
+        sourceRev: source?.rev,
+        photoColumns: source?.photoColumns || 2,
         catalogVersion: cat?.version || "",
         quote,
         memo: "",
         photos: source
           ? source.photos.map((ph, index) => ({
-              ...ph,
+              ...structuredClone(ph),
               id: `${id}-history-${index}`,
               selected: false,
               capturedAt: ph.capturedAt || source.createdAt,
@@ -781,7 +806,11 @@ export async function applyCommand(
     case "consultation.finalize": {
       const c = consultation();
       edit(c);
-      ensure(c.status === "H", "이미 확정된 상담입니다", 409);
+      ensure(
+        c.status === "H" && !c.cancelled,
+        "이미 확정되었거나 취소된 상담입니다",
+        409,
+      );
       const status = z.enum(["P", "F"]).parse(p.status);
       ensure(
         status !== "P" || c.kind === "interim" || c.quote.lines.length > 0,
@@ -812,16 +841,43 @@ export async function applyCommand(
       c.status = status;
       if (c.kind !== "interim" && status === "P")
         c.packageProgress = { complete: false };
-      if (c.kind === "renewal" && c.sourceConsultationId) {
+      if (c.kind === "renewal") {
         const source = s.consultations.find(
           (x) => x.id === c.sourceConsultationId,
-        )!;
-        // The renewed consultation becomes the current package. A declined renewal closes the previous package.
+        );
+        ensure(
+          source &&
+            source.patientId === c.patientId &&
+            source.category === c.category &&
+            source.status === "P" &&
+            source.kind !== "interim" &&
+            !source.cancelled,
+          "기준 상담이 취소되었거나 연장할 수 없는 상태입니다. 기준 상담을 확인하세요.",
+          409,
+        );
+        const expectedRev = p.sourceRev ?? c.sourceRev;
+        if (expectedRev !== undefined)
+          ensure(
+            z.number().int().positive().parse(expectedRev) === source.rev,
+            "기준 상담이 다른 기기에서 변경되었습니다. 새로고침 후 최신 상태를 확인하고 다시 확정하세요.",
+            409,
+          );
         source.packageProgress = { complete: true };
         touch(source);
       }
       touch(c);
-      text = status === "P" ? "계약·예약 성공 확정" : "상담 실패 확정";
+      text =
+        c.kind === "interim"
+          ? status === "P"
+            ? "중간상담 완료"
+            : "중간상담 중단"
+          : c.kind === "renewal"
+            ? status === "P"
+              ? "연장 확정 · 기존 패키지 완료"
+              : "연장 안 함 · 기존 패키지 완료"
+            : status === "P"
+              ? "계약·예약 성공 확정"
+              : "상담 실패 확정";
       break;
     }
     case "consultation.package": {

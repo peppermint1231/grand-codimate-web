@@ -470,6 +470,17 @@ export class Clinic extends DurableObject<Env> {
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
         409,
       );
+    if (path === "/api/storage" && req.method === "GET") {
+      admin();
+      const rootFolder = await this.storageRoot();
+      const name = url.searchParams.get("name") || rootFolder;
+      ensure(validStorageRoot(name), "폴더 이름을 확인하세요");
+      const item =
+        this.env.REQUIRE_ONEDRIVE === "true"
+          ? await this.drive().exists(name)
+          : undefined;
+      return json({ rootFolder, name, item: item || null });
+    }
     if (path === "/api/storage" && req.method === "POST") {
       admin();
       const b = await body();

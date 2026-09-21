@@ -1,6 +1,6 @@
 # 코디메이트
 
-[0.8.1 폴더 편집·단가표 변경 이력](docs/RELEASE-0.8.1.md)
+[0.8.2 폴더 편집·단가표 변경 이력](docs/RELEASE-0.8.2.md)
 
 안드로이드 태블릿과 PC 웹에서 사용하는 병원 상담 통합 개발판. 실제 사용 전 [구현·검증 현황](docs/IMPLEMENTATION.md)과 [운영·복구 안내](docs/OPERATIONS.md)를 확인한다.
 

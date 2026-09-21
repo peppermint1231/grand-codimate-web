@@ -2990,3 +2990,233 @@ details p {
     display: none;
   }
 }
+
+/* Catalog workspace: readable narrow panes and clear hierarchy. */
+.folder-list-heading,
+.product-list-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.folder-list-heading h3,
+.product-list-heading h3 {
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.folder-list-heading > button {
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+.catalog-fold-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.catalog-fold-controls button {
+  white-space: nowrap;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #f7f9f6;
+}
+.product-list-heading .catalog-fold-controls {
+  margin: 0;
+}
+.product-list-heading small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.folder-tree-row {
+  margin: 3px 0;
+}
+.folder-depth-0 {
+  background: #f0f4ee;
+  margin-top: 9px;
+  border: 1px solid #e3eade;
+}
+.folder-depth-0 .folder-node {
+  font-size: 14px;
+  font-weight: 700;
+}
+.folder-depth-1 .folder-node {
+  font-size: 13px;
+  font-weight: 600;
+}
+.folder-depth-2 .folder-node,
+.folder-depth-3 .folder-node {
+  font-size: 12px;
+  font-weight: 400;
+}
+.folder-depth-1,
+.folder-depth-2,
+.folder-depth-3 {
+  border-left: 2px solid #e2e9e2;
+  border-radius: 0 6px 6px 0;
+}
+.folder-tree-row.selected {
+  background: #dcebe2;
+  box-shadow: inset 3px 0 #155e59;
+}
+.folder-expander:disabled {
+  visibility: hidden;
+}
+.folder-node {
+  align-items: center;
+  line-height: 1.5;
+}
+.folder-node small {
+  font-size: 11px;
+  font-weight: 400;
+  color: #73817a;
+  padding: 1px 5px;
+}
+.folder-tree-row .folder-inline-edit {
+  flex: 1;
+}
+.folder-color-presets {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 5px 2px;
+}
+.folder-tree-row .folder-color-presets button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px #d8e1d8;
+  flex-shrink: 0;
+}
+.folder-tree-row .folder-color-presets button[aria-pressed="true"] {
+  outline: 2px solid #263c34;
+  outline-offset: 2px;
+}
+.folder-custom-color {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 12px;
+}
+.catalog-product-group {
+  border-top: 2px solid #dbe6dd;
+  padding-top: 12px;
+  display: grid;
+  gap: 9px;
+  min-width: 0;
+}
+.catalog-group-path {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  line-height: 1.5;
+  padding: 2px 2px 5px;
+}
+.catalog-group-path span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.catalog-group-path .group-root {
+  font-size: 14px;
+  font-weight: 750;
+  background: #edf2eb;
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+.catalog-group-path .group-child {
+  font-size: 12px;
+  font-weight: 500;
+}
+.catalog-group-path small {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.catalog-product-row {
+  padding: 0;
+  overflow: hidden;
+}
+.catalog-product-heading {
+  padding: 10px 12px;
+  background: #f7f9f6;
+  gap: 7px;
+}
+.catalog-product-title {
+  padding: 5px 2px;
+}
+.catalog-product-title b {
+  font-size: 14px;
+  color: #28463c;
+}
+.catalog-product-title small {
+  margin-top: 4px;
+  font-weight: 400;
+  font-size: 11px;
+}
+.product-expander {
+  padding: 7px 3px;
+  border: 0;
+  background: transparent;
+  flex-shrink: 0;
+}
+.catalog-review-button {
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 6px 9px;
+  border: 1px solid #ddd6bc;
+}
+.catalog-review-button:hover {
+  filter: brightness(0.95);
+  text-decoration: underline;
+}
+.catalog-options-visible {
+  margin: 0 14px 12px 27px;
+  padding-left: 12px;
+  border-left: 2px solid #e0e8df;
+}
+.catalog-option-visible {
+  padding: 11px 0;
+}
+.catalog-option-visible:first-child {
+  border-top: 0;
+}
+.catalog-option-visible b {
+  font-size: 13px;
+  font-weight: 500;
+}
+.catalog-option-visible strong {
+  font-size: 13px;
+}
+.catalog-review-notice {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #edf4ee;
+  line-height: 1.7;
+  font-size: 13px;
+}
+.catalog-review-save {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #fff;
+  padding: 8px 0;
+  margin-bottom: 12px;
+}
+@media (max-width: 700px) {
+  .catalog-options-visible {
+    margin-left: 14px;
+  }
+}

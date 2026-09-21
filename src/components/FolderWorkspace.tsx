@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import {
   ChevronRight,
-  Folder,
   GripVertical,
   Plus,
   Copy,
@@ -24,6 +23,13 @@ import {
   moveProducts,
   type CollisionPolicy,
 } from "../core/catalogFolders";
+const colorPresets = [
+  { name: "기본 그린", value: "#155e59" },
+  { name: "블루", value: "#315d87" },
+  { name: "퍼플", value: "#76528b" },
+  { name: "로즈", value: "#a04d61" },
+  { name: "앰버", value: "#936017" },
+];
 export function FolderWorkspace({
   catalog,
   selected,
@@ -137,24 +143,26 @@ export function FolderWorkspace({
       .filter((f) => f.parentId === parentId)
       .map((f) => {
         const children = nodes.some((x) => x.parentId === f.id),
-          open =
-            expanded.includes(f.id) ||
-            folderPath(catalog, selected).some((x) => x.parentId === f.id);
+          open = expanded.includes(f.id);
         return (
           <div key={f.id}>
             <div
               className={
-                "folder-tree-row " +
+                "folder-tree-row folder-depth-" +
+                Math.min(depth, 3) +
+                " " +
                 (selected === f.id ? "selected " : "") +
                 (drop?.id === f.id ? "drop-" + drop.position : "")
               }
               style={{ paddingLeft: depth * 14 }}
               data-tree-id={f.id}
+              data-depth={depth}
             >
               <button
                 className="folder-expander"
                 aria-label={f.name + (open ? " 접기" : " 펼치기")}
                 disabled={!children}
+                aria-expanded={children ? open : undefined}
                 onClick={() =>
                   setExpanded(
                     open
@@ -231,6 +239,7 @@ export function FolderWorkspace({
                     autoFocus
                     aria-label="폴더 이름"
                     value={name}
+                    style={{ color }}
                     maxLength={60}
                     onChange={(e) => setName(e.target.value)}
                     onKeyDown={(e) => {
@@ -241,12 +250,32 @@ export function FolderWorkspace({
                       if (e.key === "Escape") setRenaming("");
                     }}
                   />
-                  <input
-                    type="color"
-                    aria-label="폴더 색상"
-                    value={color}
-                    onChange={(e) => setColor(e.target.value)}
-                  />
+                  <div
+                    className="folder-color-presets"
+                    role="group"
+                    aria-label="텍스트 색상 프리셋"
+                  >
+                    {colorPresets.map((preset) => (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        title={preset.name}
+                        aria-label={preset.name}
+                        aria-pressed={color === preset.value}
+                        style={{ backgroundColor: preset.value }}
+                        onClick={() => setColor(preset.value)}
+                      />
+                    ))}
+                  </div>
+                  <label className="folder-custom-color">
+                    직접 선택
+                    <input
+                      type="color"
+                      aria-label="폴더 색상"
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                    />
+                  </label>
                   <button
                     aria-label="폴더 이름 적용"
                     onClick={() => work(async () => rename())}
@@ -276,11 +305,7 @@ export function FolderWorkspace({
                     }
                   }}
                 >
-                  <Folder
-                    size={17}
-                    style={{ color: f.color || "#155e59", flexShrink: 0 }}
-                  />
-                  <span>{f.name}</span>
+                  <span style={{ color: f.color || "#155e59" }}>{f.name}</span>
                   <small>{folderImpact(catalog, f.id).products}</small>
                 </button>
               )}
@@ -291,8 +316,8 @@ export function FolderWorkspace({
       });
   const targetName = nodes.find((f) => f.id === selected)?.name || "최상위";
   return (
-    <aside className="card catalog-folders">
-      <div className="section-title">
+    <aside className="card catalog-folders" aria-label="고민별 폴더 목록">
+      <div className="folder-list-heading">
         <h3>고민별 폴더</h3>
         {canEdit && !editing && (
           <button onClick={start}>
@@ -300,6 +325,17 @@ export function FolderWorkspace({
             폴더 목록 수정
           </button>
         )}
+      </div>
+      <div className="catalog-fold-controls" aria-label="폴더 펼침 설정">
+        <button type="button" onClick={() => setExpanded([])}>
+          모두 접기
+        </button>
+        <button
+          type="button"
+          onClick={() => setExpanded(nodes.map((f) => f.id))}
+        >
+          모두 펼치기
+        </button>
       </div>
       {editing && (
         <div className="folder-edit-toolbar">

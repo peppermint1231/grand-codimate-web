@@ -3987,6 +3987,7 @@ function CatalogView({
       >
         {current && (
           <FolderWorkspace
+            key={book}
             catalog={current}
             selected={category}
             onSelect={setCategory}
@@ -4303,6 +4304,7 @@ function CatalogView({
             </Empty>
           ) : (
             <CatalogProductRows
+              key={book}
               catalog={current}
               products={products}
               editable={!!editable}
@@ -4310,7 +4312,21 @@ function CatalogView({
               selectedIds={bulkIds}
               onSelection={setBulkIds}
               onChange={folderDraft ? setFolderDraft : setDraft}
-              onEdit={setSelected}
+              onEdit={(id) => {
+                if (can && !folderDraft && current.status === "published") {
+                  const now = new Date().toISOString();
+                  setDraft({
+                    ...structuredClone(current),
+                    id: crypto.randomUUID(),
+                    rev: 0,
+                    status: "draft",
+                    publishedAt: undefined,
+                    createdAt: now,
+                    updatedAt: now,
+                  });
+                }
+                setSelected(id);
+              }}
               work={work}
             />
           )}
@@ -4385,6 +4401,30 @@ function CatalogView({
       </div>
       {product && (
         <Modal title="상품·옵션 편집" close={() => setSelected("")}>
+          <p className="catalog-review-notice">
+            {editable
+              ? "가격·부가세와 원본 근거를 확인하고 검토 완료를 표시하세요. 초안 저장 후 ‘검증 후 게시’를 눌러야 상담·추천기에 반영됩니다."
+              : folderDraft
+                ? "폴더 편집 중에는 상품 상세를 조회할 수 있습니다. 폴더 편집을 저장하거나 취소한 뒤 상품을 검토하세요."
+                : "상품 상세 조회 화면입니다. 단가표 편집 권한이 있어야 수정할 수 있습니다."}
+          </p>
+          {editable && (
+            <div className="catalog-review-save">
+              <button
+                className="primary"
+                onClick={() =>
+                  work(async () => {
+                    if (await save()) {
+                      setDraft(undefined);
+                      setSelected("");
+                    }
+                  })
+                }
+              >
+                검토 내용 초안 저장
+              </button>
+            </div>
+          )}
           <div className="form-grid">
             <Field label="상품명">
               <input

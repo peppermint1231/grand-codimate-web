@@ -1,237 +1,17 @@
 import { useRef, useState } from "react";
-import {
-  ChevronRight,
-  Folder,
-  FolderOpen,
-  GripVertical,
-  Plus,
-} from "lucide-react";
+import { GripVertical } from "lucide-react";
 import { money, type Catalog, type Product } from "../core/model";
 import {
   folderPath,
-  rootFolders,
-  folderError,
-  moveFolder,
   moveProducts,
-  inFolder,
   productFolder,
 } from "../core/catalogFolders";
 type Work = (fn: () => Promise<unknown>) => unknown;
-export function CatalogFolders({
-  catalog,
-  selected,
-  onSelect,
-  editable,
-  onChange,
-  selectedIds,
-  work,
-}: {
-  catalog: Catalog;
-  selected: string;
-  onSelect: (id: string) => void;
-  editable: boolean;
-  onChange: (catalog: Catalog) => void;
-  selectedIds: string[];
-  work: Work;
-}) {
-  const [open, setOpen] = useState<string[]>([]),
-    [destination, setDestination] = useState("");
-  const nodes = [...rootFolders, ...(catalog.folders || [])];
-  const edit = (next: Catalog) => {
-    const error = folderError(next);
-    if (error) throw new Error(error);
-    onChange(next);
-  };
-  const render = (parentId: string, depth = 0): React.ReactNode =>
-    nodes
-      .filter((x) => x.parentId === parentId)
-      .map((node) => {
-        const expanded =
-          open.includes(node.id) ||
-          folderPath(catalog, selected).some((x) => x.parentId === node.id);
-        const children = nodes.some((x) => x.parentId === node.id);
-        return (
-          <div key={node.id}>
-            <div
-              className={
-                "catalog-folder-row " + (selected === node.id ? "selected" : "")
-              }
-              style={{ paddingLeft: depth * 14 }}
-            >
-              <button
-                type="button"
-                aria-label={node.name + (expanded ? " 접기" : " 펼치기")}
-                disabled={!children}
-                onClick={() =>
-                  setOpen(
-                    expanded
-                      ? open.filter((x) => x !== node.id)
-                      : [...open, node.id],
-                  )
-                }
-              >
-                <ChevronRight
-                  size={14}
-                  style={{ transform: expanded ? "rotate(90deg)" : undefined }}
-                />
-              </button>
-              <button
-                type="button"
-                data-folder-target={node.id}
-                onClick={() => {
-                  onSelect(node.id);
-                  setOpen([...open, node.id]);
-                }}
-              >
-                {expanded ? <FolderOpen size={16} /> : <Folder size={16} />}
-                <span>{node.name}</span>
-                <small>
-                  {
-                    catalog.products.filter((p) =>
-                      inFolder(catalog, p, node.id),
-                    ).length
-                  }
-                </small>
-              </button>
-            </div>
-            {expanded && render(node.id, depth + 1)}
-          </div>
-        );
-      });
-  return (
-    <aside className="card catalog-folders">
-      <h3>고민별 폴더</h3>
-      <button
-        type="button"
-        className={!selected ? "selected" : ""}
-        onClick={() => onSelect("")}
-      >
-        전체 상품 · {catalog.products.length}
-      </button>
-      {render("")}
-      {editable && (
-        <>
-          <p className="small">고정 상위 분류 아래 세부 폴더 3단계</p>
-          <button
-            type="button"
-            disabled={!selected || folderPath(catalog, selected).length >= 4}
-            onClick={() =>
-              work(async () => {
-                const name = window.prompt("새 폴더 이름");
-                if (!name?.trim()) return;
-                const id = crypto.randomUUID();
-                edit({
-                  ...catalog,
-                  folders: [
-                    ...(catalog.folders || []),
-                    { id, parentId: selected, name: name.trim() },
-                  ],
-                });
-                setOpen([...open, selected]);
-                onSelect(id);
-              })
-            }
-          >
-            <Plus size={15} />
-            폴더 추가
-          </button>
-          {!!catalog.folders?.some((x) => x.id === selected) && (
-            <div className="button-row">
-              <button
-                type="button"
-                onClick={() =>
-                  work(async () => {
-                    const name = window.prompt(
-                      "폴더 이름",
-                      nodes.find((x) => x.id === selected)?.name,
-                    );
-                    if (name?.trim())
-                      edit({
-                        ...catalog,
-                        folders: catalog.folders!.map((x) =>
-                          x.id === selected ? { ...x, name: name.trim() } : x,
-                        ),
-                      });
-                  })
-                }
-              >
-                이름 변경
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  work(async () => {
-                    if (
-                      catalog.products.some((p) =>
-                        inFolder(catalog, p, selected),
-                      ) ||
-                      nodes.some((x) => x.parentId === selected)
-                    )
-                      throw new Error("상품과 하위 폴더를 먼저 이동하세요");
-                    edit({
-                      ...catalog,
-                      folders: catalog.folders!.filter(
-                        (x) => x.id !== selected,
-                      ),
-                    });
-                    onSelect("");
-                  })
-                }
-              >
-                빈 폴더 삭제
-              </button>
-            </div>
-          )}
-          <label className="field">
-            <span>이동할 폴더</span>
-            <select
-              aria-label="이동할 폴더"
-              value={destination}
-              onChange={(e) => setDestination(e.target.value)}
-            >
-              <option value="">위치 선택</option>
-              {nodes.map((node) => (
-                <option key={node.id} value={node.id}>
-                  {folderPath(catalog, node.id)
-                    .map((x) => x.name)
-                    .join(" / ")}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={!destination || !selectedIds.length}
-            onClick={() =>
-              work(async () =>
-                onChange(moveProducts(catalog, selectedIds, destination)),
-              )
-            }
-          >
-            선택 {selectedIds.length}개 상품 이동
-          </button>
-          <button
-            type="button"
-            disabled={
-              !destination || !catalog.folders?.some((x) => x.id === selected)
-            }
-            onClick={() =>
-              work(async () =>
-                onChange(moveFolder(catalog, selected, destination)),
-              )
-            }
-          >
-            현재 폴더 이동
-          </button>
-        </>
-      )}
-    </aside>
-  );
-}
 export function CatalogProductRows({
   catalog,
   products,
   editable,
+  folderEditing = false,
   selectedIds,
   onSelection,
   onChange,
@@ -241,6 +21,7 @@ export function CatalogProductRows({
   catalog: Catalog;
   products: Product[];
   editable: boolean;
+  folderEditing?: boolean;
   selectedIds: string[];
   onSelection: (ids: string[]) => void;
   onChange: (catalog: Catalog) => void;
@@ -261,7 +42,7 @@ export function CatalogProductRows({
     });
   return (
     <div className="catalog-product-rows">
-      {editable && (
+      {(editable || folderEditing) && (
         <div className="button-row">
           <button
             type="button"
@@ -285,7 +66,7 @@ export function CatalogProductRows({
       {products.map((p) => (
         <article className="catalog-product-row" key={p.id}>
           <div className="catalog-product-heading">
-            {editable && (
+            {(editable || folderEditing) && (
               <>
                 <input
                   type="checkbox"

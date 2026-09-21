@@ -334,3 +334,77 @@ it("distinguishes matching product and option IDs in different catalog books", a
     "이벤트",
   ]);
 });
+it("accepts renamed dynamic categories and preserves the original patient-selected label", async () => {
+  const f = await fixture(),
+    c = threeCatalogs()[0];
+  c.folderTree = [
+    {
+      id: "custom-root",
+      parentId: "",
+      name: "나의 피부 고민",
+      color: "#336699",
+    },
+  ];
+  c.products[0].folderId = "custom-root";
+  f.db
+    .prepare("UPDATE entities SET value=? WHERE id=?")
+    .run(await seal(c, f.key), c.id);
+  const pub = (await (
+    await f.request("/public/catalog", undefined, true)
+  ).json()) as any;
+  expect(
+    pub.categories.find((x: any) => x.id === "미용:custom-root"),
+  ).toMatchObject({ name: "나의 피부 고민", color: "#336699" });
+  const input = { ...f.input, concerns: ["미용:custom-root"] };
+  const response = await f.request("/public/inquiries", input, true);
+  expect(response.status).toBe(200);
+  const { receipt } = (await response.json()) as any;
+  c.folderTree[0].name = "변경된 이름";
+  f.db
+    .prepare("UPDATE entities SET value=? WHERE id=?")
+    .run(await seal(c, f.key), c.id);
+  expect(
+    (
+      await f.request("/inquiries/convert", {
+        id: receipt,
+        person: f.input.person,
+        category: "미용",
+      })
+    ).status,
+  ).toBe(200);
+  const { state } = (await (await f.request("/state")).json()) as any;
+  expect(state.consultations[0].memo).toContain("나의 피부 고민");
+  expect(state.consultations[0].memo).not.toContain("변경된 이름");
+});
+it("stores folder history atomically with its published catalog and hides draft snapshots from non-editors", async () => {
+  const f = await fixture(),
+    c = threeCatalogs()[0];
+  c.folderTree = [{ id: "pigment", parentId: "", name: "편집한 고민" }];
+  expect(
+    (
+      await f.request("/commands", {
+        id: "folder-history-command",
+        type: "catalog.folders.commit",
+        entityId: c.id,
+        baseRev: c.rev,
+        payload: { catalog: c, basePublishedId: c.id },
+      })
+    ).status,
+  ).toBe(200);
+  const admin = (await (await f.request("/state")).json()) as any;
+  expect(admin.state.catalogRevisions).toHaveLength(2);
+  const accountRow = f.db
+    .prepare("SELECT id,value FROM secrets WHERE id LIKE 'user:%'")
+    .get() as any;
+  const account = await open<any>(accountRow.value, f.key);
+  account.role = "doctor";
+  account.permissions = {};
+  f.db
+    .prepare("UPDATE secrets SET value=? WHERE id=?")
+    .run(await seal(account, f.key), accountRow.id);
+  const limited = (await (await f.request("/state")).json()) as any;
+  expect(limited.state.catalogRevisions).toHaveLength(0);
+  expect(
+    limited.state.catalogs.every((c: any) => c.status === "published"),
+  ).toBe(true);
+});

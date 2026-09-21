@@ -48,6 +48,8 @@ export class Inquiries {
       person: { name: "", phone: "", sex: "U", dob: "", address: "" },
       selections: [],
       concerns: [],
+      concernLabels: [],
+      answerLabels: [],
       answers: [],
     });
   }

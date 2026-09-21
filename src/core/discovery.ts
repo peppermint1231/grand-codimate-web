@@ -6,7 +6,8 @@ import {
   type State,
   type Patient,
 } from "./model";
-import { folderPath, productFolder } from "./catalogFolders";
+import { concerns as baseConcerns } from "./concerns";
+import { catalogNodes, folderPath, productFolder } from "./catalogFolders";
 export interface PublicOption {
   id: string;
   label: string;
@@ -19,7 +20,7 @@ export interface PublicProduct {
   name: string;
   book: CatalogBook;
   catalogVersion: string;
-  folder: { id: string; name: string }[];
+  folder: { id: string; name: string; color?: string }[];
   options: PublicOption[];
 }
 export interface Inquiry {
@@ -38,6 +39,8 @@ export interface Inquiry {
     label: string;
   }[];
   concerns: string[];
+  concernLabels?: string[];
+  answerLabels?: string[];
   answers: string[];
   consent: {
     personal: true;
@@ -60,6 +63,7 @@ export function publicProducts(state: State): PublicProduct[] {
         folder: folderPath(c, productFolder(c, p)).map((f) => ({
           id: f.id,
           name: f.name,
+          color: f.color,
         })),
         options: p.options.map((o) => ({
           id: o.id,
@@ -68,6 +72,31 @@ export function publicProducts(state: State): PublicProduct[] {
           price: p.active && !o.review && o.tax !== "unknown" ? o.price : null,
           tax: p.active && !o.review && o.tax !== "unknown" ? o.tax : "unknown",
         })),
+      })),
+  );
+}
+export interface PublicCategory {
+  id: string;
+  folderId: string;
+  book: CatalogBook;
+  name: string;
+  color?: string;
+  questions: { id: string; label: string }[];
+}
+export function publicCategories(state: State): PublicCategory[] {
+  return latestCatalogs(state).flatMap((c) =>
+    catalogNodes(c)
+      .filter((f) => !f.parentId)
+      .map((f) => ({
+        id: catalogBook(c) + ":" + f.id,
+        folderId: f.id,
+        book: catalogBook(c),
+        name: f.name,
+        color: f.color,
+        questions: [
+          ...(baseConcerns.find((x) => x.id === f.id && x.name === f.name)
+            ?.questions || []),
+        ],
       })),
   );
 }
@@ -104,7 +133,7 @@ export const inquiryInput = z.object({
       }),
     )
     .max(30),
-  concerns: z.array(z.string().max(100)).max(14),
+  concerns: z.array(z.string().max(140)).max(100),
   answers: z.array(z.string().max(100)).max(50),
   personalConsent: z.literal(true),
   sensitiveConsent: z.literal(true),

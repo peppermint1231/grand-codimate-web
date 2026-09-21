@@ -1,3 +1,4 @@
+import { catalogChanges } from "./catalogHistory";
 import { folderError } from "./catalogFolders";
 import { safeName } from "./storagePaths";
 import { z } from "zod";
@@ -435,6 +436,7 @@ export async function applyCommand(
     "변경 내용을 확인하세요",
   );
   const s = structuredClone(input);
+  s.catalogRevisions ||= [];
   const p = cmd.payload;
   const id = cmd.entityId || cmd.id;
   let patientId: string | undefined;
@@ -470,6 +472,38 @@ export async function applyCommand(
       "이 상담을 수정할 권한이 없습니다",
       403,
     );
+  const recordCatalog = (
+    before: Catalog | undefined,
+    after: Catalog,
+    action: string,
+  ) => {
+    if (
+      before &&
+      !s.catalogRevisions.some(
+        (r) => r.catalogId === before.id && r.snapshot.rev === before.rev,
+      )
+    )
+      s.catalogRevisions.push({
+        ...base,
+        id: cmd.id + "-before",
+        catalogId: before.id,
+        book: catalogBook(before),
+        actorId: before.authorId || user.id,
+        action: "변경 전",
+        changes: ["수정 전 단가표"],
+        snapshot: structuredClone(before),
+      });
+    s.catalogRevisions.push({
+      ...base,
+      id: cmd.id,
+      catalogId: after.id,
+      book: catalogBook(after),
+      actorId: user.id,
+      action,
+      changes: catalogChanges(before, after),
+      snapshot: structuredClone(after),
+    });
+  };
   switch (cmd.type) {
     case "patient.create": {
       const d = patientSchema.parse(p);
@@ -1165,6 +1199,12 @@ export async function applyCommand(
           authorId: user.id,
         });
       }
+      recordCatalog(
+        input.catalogs.find((c) => c.id === id) ||
+          latestCatalog(input, catalogBook(catalog)),
+        s.catalogs.find((c) => c.id === id)!,
+        "초안 저장",
+      );
       text = "단가표 초안 저장";
       break;
     }
@@ -1177,7 +1217,80 @@ export async function applyCommand(
       c.version = now + "-" + cmd.id.slice(0, 8);
       c.publishedAt = now;
       touch(c);
+      recordCatalog(
+        input.catalogs.find((x) => x.id === id),
+        c,
+        "게시",
+      );
       text = "단가표 게시";
+      break;
+    }
+    case "catalog.folders.commit":
+    case "catalog.restore": {
+      need("catalog.edit");
+      const current = find(s.catalogs);
+      const before = structuredClone(current);
+      ensure(
+        p.basePublishedId ===
+          (latestCatalog(s, catalogBook(current))?.id || ""),
+        "다른 기기에서 단가표를 게시했습니다. 최신 내용을 확인하세요",
+        409,
+      );
+      ensure(
+        current.status !== "published" ||
+          latestCatalog(s, catalogBook(current))?.id === current.id,
+        "최신 게시본에서 수정하세요",
+        409,
+      );
+      let candidate: Catalog;
+      if (cmd.type === "catalog.restore") {
+        const revision = s.catalogRevisions.find((r) => r.id === p.revisionId);
+        ensure(
+          revision && revision.book === catalogBook(current),
+          "복원할 단가표 이력을 확인하세요",
+        );
+        candidate = structuredClone(revision.snapshot);
+      } else candidate = structuredClone(p.catalog as Catalog);
+      ensure(
+        catalogBook(candidate) === catalogBook(current),
+        "같은 구분의 단가표만 적용할 수 있습니다",
+      );
+      const publish =
+        cmd.type === "catalog.folders.commit" ||
+        candidate.status === "published";
+      validateCatalog(candidate, publish);
+      ensure(
+        !s.catalogs.some((c) => c.id === cmd.id),
+        "저장 작업 ID가 이미 사용되었습니다",
+        409,
+      );
+      candidate = {
+        ...candidate,
+        ...base,
+        id: cmd.id,
+        book: catalogBook(current),
+        authorId: user.id,
+        status: publish ? "published" : "draft",
+        version: now + "-" + cmd.id.slice(0, 8),
+        publishedAt: publish ? now : undefined,
+      };
+      s.catalogs.push(candidate);
+      // An edited draft becomes an immutable archived draft; newer published version wins in the UI.
+      recordCatalog(
+        before,
+        candidate,
+        cmd.type === "catalog.restore"
+          ? publish
+            ? "이전 이력 복원"
+            : "초안 이력 복원"
+          : "폴더 수정 저장",
+      );
+      text =
+        cmd.type === "catalog.restore"
+          ? publish
+            ? "단가표 이력 복원·게시"
+            : "단가표 초안 이력 복원"
+          : "폴더 수정·추천기 반영";
       break;
     }
     case "audit.export": {

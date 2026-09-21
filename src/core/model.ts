@@ -78,6 +78,7 @@ export interface Product extends Base {
 export interface Catalog extends Base {
   book?: CatalogBook;
   folders?: CatalogFolder[];
+  folderTree?: CatalogFolder[];
   schemaVersion: 1;
   version: string;
   status: "draft" | "published";
@@ -85,6 +86,14 @@ export interface Catalog extends Base {
   references: { sheet: string; rows: { row: number; cells: Source[] }[] }[];
   publishedAt?: string;
   authorId?: string;
+}
+export interface CatalogRevision extends Base {
+  catalogId: string;
+  book: CatalogBook;
+  actorId: string;
+  action: string;
+  changes: string[];
+  snapshot: Catalog;
 }
 export interface Discount {
   kind: "amount" | "percent";
@@ -236,6 +245,7 @@ export interface State {
   consultations: Consultation[];
   ledger: Ledger[];
   catalogs: Catalog[];
+  catalogRevisions: CatalogRevision[];
   policies: Policy[];
   opinions: Opinion[];
   consents: Consent[];
@@ -256,6 +266,7 @@ export const emptyState = (): State => ({
   consultations: [],
   ledger: [],
   catalogs: [],
+  catalogRevisions: [],
   policies: [],
   opinions: [],
   consents: [],
@@ -277,6 +288,7 @@ export const emptyQuote = (): Quote => ({
 export const catalogBooks = ["미용", "보험", "이벤트"] as const;
 export type CatalogBook = (typeof catalogBooks)[number];
 export interface CatalogFolder {
+  color?: string;
   id: string;
   parentId: string;
   name: string;

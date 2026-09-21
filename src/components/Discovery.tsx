@@ -16,7 +16,7 @@ import {
   type State,
 } from "../core/model";
 import { concerns } from "../core/concerns";
-import type { Inquiry, PublicProduct } from "../core/discovery";
+import type { Inquiry, PublicProduct, PublicCategory } from "../core/discovery";
 const blankPerson = () => ({
   name: "",
   phone: "",
@@ -25,6 +25,8 @@ const blankPerson = () => ({
   address: "",
 });
 export function Discovery() {
+  const [concerns, setCategories] = useState<PublicCategory[]>([]);
+  const [folderFilter, setFolderFilter] = useState("");
   const [products, setProducts] = useState<PublicProduct[]>([]),
     [token, setToken] = useState("");
   const [step, setStep] = useState(0),
@@ -45,6 +47,7 @@ export function Discovery() {
   const reset = () => {
     setStep(0);
     setBook("미용");
+    setFolderFilter("");
     setFilterConcerns(true);
     setConcerns([]);
     setAnswers([]);
@@ -58,6 +61,7 @@ export function Discovery() {
     api("/public/catalog")
       .then((d) => {
         setProducts(d.products);
+        setCategories(d.categories || []);
         setToken(d.token);
       })
       .catch((e) => setError(e.message));
@@ -90,7 +94,8 @@ export function Discovery() {
       p.book === book &&
       (!filterConcerns ||
         !selectedConcerns.length ||
-        p.folder.some((f) => selectedConcerns.includes(f.id))) &&
+        p.folder.some((f) => selectedConcerns.includes(p.book + ":" + f.id))) &&
+      (!folderFilter || p.folder.some((f) => f.id === folderFilter)) &&
       [p.name, ...p.options.map((o) => o.label)].some((x) =>
         x.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
       ),
@@ -163,27 +168,49 @@ export function Discovery() {
                 <h2>어떤 고민이 있으세요?</h2>
                 <span>여러 개 선택할 수 있어요</span>
               </div>
-              <div className="discovery-concerns">
-                {concerns.map((c) => (
+              <div className="tabs" aria-label="고민 단가표 구분">
+                {catalogBooks.map((kind) => (
                   <button
-                    key={c.id}
-                    aria-pressed={selectedConcerns.includes(c.id)}
-                    className={
-                      selectedConcerns.includes(c.id) ? "selected" : ""
-                    }
-                    onClick={() => toggleConcern(c.id)}
+                    key={kind}
+                    className={kind === book ? "active" : ""}
+                    onClick={() => {
+                      setBook(kind);
+                      setFolderFilter("");
+                    }}
                   >
-                    <span>{c.name}</span>
-                    {selectedConcerns.includes(c.id) ? (
-                      <Check size={20} />
-                    ) : (
-                      <PlusMark />
-                    )}
+                    {kind}
                   </button>
                 ))}
               </div>
+              <div className="discovery-concerns">
+                {concerns
+                  .filter((c) => c.book === book)
+                  .map((c) => (
+                    <button
+                      key={c.id}
+                      aria-pressed={selectedConcerns.includes(c.id)}
+                      className={
+                        selectedConcerns.includes(c.id) ? "selected" : ""
+                      }
+                      style={
+                        c.color
+                          ? { borderLeft: `5px solid ${c.color}` }
+                          : undefined
+                      }
+                      onClick={() => toggleConcern(c.id)}
+                    >
+                      <span>{c.name}</span>
+                      {selectedConcerns.includes(c.id) ? (
+                        <Check size={20} />
+                      ) : (
+                        <PlusMark />
+                      )}
+                    </button>
+                  ))}
+              </div>
               {selectedConcerns.map((id) => {
                 const c = concerns.find((c) => c.id === id)!;
+                if (!c.questions.length) return null;
                 return (
                   <fieldset className="discovery-question" key={id}>
                     <legend>{c.name} · 해당하는 내용을 골라주세요</legend>
@@ -232,7 +259,10 @@ export function Discovery() {
                   <button
                     key={kind}
                     className={book === kind ? "active" : ""}
-                    onClick={() => setBook(kind)}
+                    onClick={() => {
+                      setBook(kind);
+                      setFolderFilter("");
+                    }}
                   >
                     {kind}
                   </button>
@@ -254,6 +284,40 @@ export function Discovery() {
                   onChange={(e) => setFilterConcerns(e.target.checked)}
                 />
                 선택한 고민에 해당하는 시술만 보기
+              </label>
+              <label className="field">
+                <span>세부 폴더</span>
+                <select
+                  value={folderFilter}
+                  onChange={(e) => setFolderFilter(e.target.value)}
+                >
+                  <option value="">전체 세부 폴더</option>
+                  {[
+                    ...new Map(
+                      products
+                        .filter((p) => p.book === book)
+                        .flatMap((p) =>
+                          p.folder.map(
+                            (f, i) =>
+                              [
+                                f.id,
+                                {
+                                  id: f.id,
+                                  name: p.folder
+                                    .slice(0, i + 1)
+                                    .map((x) => x.name)
+                                    .join(" / "),
+                                },
+                              ] as const,
+                          ),
+                        ),
+                    ).values(),
+                  ].map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
               </label>
               <div className="discovery-products">
                 {filtered.map((p) => (
@@ -660,20 +724,25 @@ export function DiscoveryDesk({
           >
             <h3>{selected.person.name} 님의 상담 준비</h3>
             <p>
-              {selected.concerns
-                .map((id) => concerns.find((c) => c.id === id)?.name)
-                .join(" · ")}
+              {(
+                selected.concernLabels ||
+                selected.concerns.map(
+                  (id) => concerns.find((c) => c.id === id)?.name || id,
+                )
+              ).join(" · ")}
             </p>
             <p className="small">
-              {selected.answers
-                .map(
-                  (id) =>
-                    concerns
-                      .flatMap((c) => [...c.questions])
-                      .find((q) => q.id === id)?.label,
-                )
-                .filter(Boolean)
-                .join(" · ")}
+              {(
+                selected.answerLabels ||
+                selected.answers
+                  .map(
+                    (id) =>
+                      concerns
+                        .flatMap((c) => [...c.questions])
+                        .find((q) => q.id === id)?.label,
+                  )
+                  .filter(Boolean)
+              ).join(" · ")}
             </p>
             {selected.selections.map((s) => (
               <p key={s.catalogVersion + s.productId + s.optionId}>

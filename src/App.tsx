@@ -1,13 +1,14 @@
 import { DiscoveryDesk } from "./components/Discovery";
-import {
-  CatalogFolders,
-  CatalogProductRows,
-} from "./components/CatalogOrganizer";
+import { CatalogProductRows } from "./components/CatalogOrganizer";
+import { FolderWorkspace } from "./components/FolderWorkspace";
+import { CatalogHistory } from "./components/CatalogHistory";
 import {
   inFolder,
   folderPath,
   productFolder,
   rootFolders,
+  catalogNodes,
+  editableTree,
 } from "./core/catalogFolders";
 import { appBack, useAppBack } from "./lib/navigation";
 import { QuoteTotals } from "./components/QuoteTotals";
@@ -2957,7 +2958,7 @@ function ConsultationView({
                   onChange={(e) => setCategory(e.target.value)}
                 >
                   <option value="">모든 카테고리</option>
-                  {[...rootFolders, ...(catalog?.folders || [])].map(
+                  {(catalog ? catalogNodes(catalog) : rootFolders).map(
                     (folder) => (
                       <option key={folder.id} value={folder.id}>
                         {catalog
@@ -3650,17 +3651,37 @@ function CatalogView({
   work: (f: () => Promise<any>) => any;
 }) {
   const can = allowed(user, "catalog.edit");
+  const [folderDraft, setFolderDraft] = useState<Catalog>();
+  const folderBasePublished = useRef("");
+  const [folderWidth, setFolderWidth] = useState(() => {
+    const n = Number(localStorage.getItem("codimate-folder-width"));
+    return n >= 220 && n <= 600 ? n : 300;
+  });
+  const splitRef = useRef<HTMLDivElement>(null);
+  const resizeStart = useRef<{ x: number; width: number } | null>(null);
+  const resizeFolder = (width: number) => {
+    const max = Math.min(
+      600,
+      Math.max(220, (splitRef.current?.clientWidth || 900) - 360),
+    );
+    const next = Math.min(max, Math.max(220, width));
+    setFolderWidth(next);
+    localStorage.setItem("codimate-folder-width", String(next));
+  };
+
   const [book, setBook] = useState<CatalogBook>("미용");
   const [drafts, setDrafts] = useState<Partial<Record<CatalogBook, Catalog>>>(
     {},
   );
-  const unsaved = Object.values(drafts).some(
-    (c) =>
-      c &&
-      c.status === "draft" &&
-      JSON.stringify(c) !==
-        JSON.stringify(s.catalogs.find((saved) => saved.id === c.id)),
-  );
+  const unsaved =
+    !!folderDraft ||
+    Object.values(drafts).some(
+      (c) =>
+        c &&
+        c.status === "draft" &&
+        JSON.stringify(c) !==
+          JSON.stringify(s.catalogs.find((saved) => saved.id === c.id)),
+    );
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (unsaved) {
@@ -3695,12 +3716,19 @@ function CatalogView({
     [reviewFilter, setReviewFilter] = useState("all");
   const [bulkIds, setBulkIds] = useState<string[]>([]),
     [paste, setPaste] = useState("");
+  const latest = latestCatalog(s, book);
   const current =
+    folderDraft ||
     draft ||
     s.catalogs
-      .filter((c) => c.status === "draft" && catalogBook(c) === book)
+      .filter(
+        (c) =>
+          c.status === "draft" &&
+          catalogBook(c) === book &&
+          (!latest || c.updatedAt > latest.updatedAt),
+      )
       .at(-1) ||
-    latestCatalog(s, book);
+    latest;
   const products =
     current?.products.filter(
       (p) =>
@@ -3721,7 +3749,7 @@ function CatalogView({
           )),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
-  const editable = current?.status === "draft" && can;
+  const editable = !folderDraft && current?.status === "draft" && can;
   const change = (p: Product) => {
     if (current)
       setDraft({
@@ -3740,7 +3768,7 @@ function CatalogView({
         description="미용·보험·이벤트별 원본과 게시 버전을 관리합니다. 맞춤 시술 찾기에서도 같은 상품을 사용합니다."
         action={
           <div className="button-row">
-            {can && (
+            {can && !folderDraft && (
               <label className="button">
                 <Plus size={18} />
                 JSON 초안 가져오기
@@ -3834,6 +3862,7 @@ function CatalogView({
             type="button"
             key={kind}
             className={book === kind ? "active" : ""}
+            disabled={!!folderDraft}
             onClick={() => {
               setBook(kind);
               setCategory("");
@@ -3849,6 +3878,7 @@ function CatalogView({
         <div className="table-toolbar">
           <select
             aria-label="단가표 버전"
+            disabled={!!folderDraft}
             value={current?.id || ""}
             onChange={(e) => {
               setDraft(s.catalogs.find((c) => c.id === e.target.value));
@@ -3875,7 +3905,7 @@ function CatalogView({
             />
             비활성 포함 내보내기
           </label>
-          {can && (
+          {can && !folderDraft && (
             <button
               onClick={() => {
                 const now = new Date().toISOString();
@@ -3897,7 +3927,7 @@ function CatalogView({
               새 {book} 단가표 작성
             </button>
           )}
-          {current && can && (
+          {current && can && !folderDraft && (
             <button
               onClick={() =>
                 setDraft({
@@ -3927,18 +3957,117 @@ function CatalogView({
           </div>
         )}
       </div>
-      <div className="catalog-admin">
+      {current && (
+        <CatalogHistory
+          state={s}
+          catalog={current}
+          disabled={unsaved}
+          canEdit={can}
+          work={work}
+          restore={async (revisionId, base) => {
+            if (
+              await send(
+                "catalog.restore",
+                { revisionId, basePublishedId: latest?.id || "" },
+                base.id,
+                base.rev,
+              )
+            ) {
+              setDraft(undefined);
+              setCategory("");
+              setSelected("");
+            }
+          }}
+        />
+      )}
+      <div
+        className="catalog-admin catalog-resizable"
+        ref={splitRef}
+        style={{ "--folder-width": folderWidth + "px" } as React.CSSProperties}
+      >
         {current && (
-          <CatalogFolders
+          <FolderWorkspace
             catalog={current}
             selected={category}
             onSelect={setCategory}
-            editable={!!editable}
-            onChange={setDraft}
+            editing={!!folderDraft}
+            canEdit={can}
+            start={() => {
+              if (unsaved) {
+                work(async () => {
+                  throw new Error(
+                    "작성 중인 상품 변경을 초안 저장한 뒤 폴더를 수정하세요",
+                  );
+                });
+                return;
+              }
+              folderBasePublished.current = latest?.id || "";
+              setFolderDraft(editableTree(current));
+              setBulkIds([]);
+            }}
+            cancel={() => {
+              setFolderDraft(undefined);
+              setBulkIds([]);
+              setCategory("");
+            }}
+            save={async () => {
+              if (
+                await send(
+                  "catalog.folders.commit",
+                  {
+                    catalog: folderDraft,
+                    basePublishedId: folderBasePublished.current,
+                  },
+                  current.id,
+                  current.rev,
+                )
+              ) {
+                setFolderDraft(undefined);
+                setDraft(undefined);
+                setBulkIds([]);
+                setCategory("");
+              }
+            }}
+            onChange={setFolderDraft}
             selectedIds={bulkIds}
             work={work}
           />
         )}
+        <div
+          role="separator"
+          aria-label="폴더 목록 너비 조절"
+          aria-orientation="vertical"
+          aria-valuemin={220}
+          aria-valuemax={600}
+          aria-valuenow={folderWidth}
+          tabIndex={0}
+          className="catalog-divider"
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              e.preventDefault();
+              resizeFolder(folderWidth + (e.key === "ArrowLeft" ? -20 : 20));
+            }
+          }}
+          onDoubleClick={() => resizeFolder(300)}
+          onPointerDown={(e) => {
+            resizeStart.current = { x: e.clientX, width: folderWidth };
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (resizeStart.current)
+              resizeFolder(
+                resizeStart.current.width + e.clientX - resizeStart.current.x,
+              );
+          }}
+          onPointerUp={() => {
+            resizeStart.current = null;
+          }}
+          onPointerCancel={() => {
+            resizeStart.current = null;
+          }}
+        >
+          <span />
+        </div>
         <div className="card">
           <div className="table-toolbar">
             <div className="search">
@@ -4177,9 +4306,10 @@ function CatalogView({
               catalog={current}
               products={products}
               editable={!!editable}
+              folderEditing={!!folderDraft}
               selectedIds={bulkIds}
               onSelection={setBulkIds}
-              onChange={setDraft}
+              onChange={folderDraft ? setFolderDraft : setDraft}
               onEdit={setSelected}
               work={work}
             />
@@ -4271,7 +4401,7 @@ function CatalogView({
                   change({ ...product, folderId: e.target.value })
                 }
               >
-                {[...rootFolders, ...(current?.folders || [])].map((f) => (
+                {(current ? catalogNodes(current) : rootFolders).map((f) => (
                   <option key={f.id} value={f.id}>
                     {folderPath(current!, f.id)
                       .map((x) => x.name)

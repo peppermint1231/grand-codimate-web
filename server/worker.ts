@@ -2,6 +2,7 @@ import { Inquiries } from "./inquiries";
 import {
   inquiryInput,
   publicProducts,
+  publicCategories,
   type Inquiry,
 } from "../src/core/discovery";
 import { concerns } from "../src/core/concerns";
@@ -408,7 +409,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.8.0",
+        version: "0.8.1",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -587,8 +588,10 @@ export class Clinic extends DurableObject<Env> {
         { id: crypto.randomUUID(), expires: Date.now() + 3600_000 },
         this.env.ENCRYPTION_KEY,
       );
+      const state = await this.catalogState();
       return json({
-        products: publicProducts(await this.catalogState()),
+        products: publicProducts(state),
+        categories: publicCategories(state),
         token,
       });
     }
@@ -642,15 +645,18 @@ export class Clinic extends DurableObject<Env> {
             ? rate.expires
             : Date.now() + 600_000,
       });
-      const available = publicProducts(await this.catalogState());
+      const publicState = await this.catalogState();
+      const available = publicProducts(publicState);
+      const categories = publicCategories(publicState);
+      const chosenCategories = input.concerns.map(
+        (id) =>
+          categories.find((c) => c.id === id) ||
+          categories.find((c) => c.folderId === id),
+      );
       ensure(
-        input.concerns.every((id) => concerns.some((c) => c.id === id)) &&
+        chosenCategories.every(Boolean) &&
           input.answers.every((id) =>
-            concerns.some(
-              (c) =>
-                input.concerns.includes(c.id) &&
-                c.questions.some((q) => q.id === id),
-            ),
+            chosenCategories.some((c) => c?.questions.some((q) => q.id === id)),
           ),
         "선택한 고민을 확인하세요",
       );
@@ -698,6 +704,13 @@ export class Clinic extends DurableObject<Env> {
         person: input.person,
         selections,
         concerns: input.concerns,
+        concernLabels: chosenCategories.map((c) => c!.name),
+        answerLabels: input.answers.map(
+          (id) =>
+            chosenCategories
+              .flatMap((c) => c!.questions)
+              .find((q) => q.id === id)!.label,
+        ),
         answers: input.answers,
         consent: {
           personal: true,
@@ -812,14 +825,18 @@ export class Clinic extends DurableObject<Env> {
               ]
             : [];
         });
-        const labels = inquiry.concerns.map(
-          (id) => concerns.find((c) => c.id === id)?.name || id,
-        );
-        const answers = inquiry.answers.map(
-          (id) =>
-            concerns.flatMap((c) => [...c.questions]).find((q) => q.id === id)
-              ?.label || id,
-        );
+        const labels =
+          inquiry.concernLabels ||
+          inquiry.concerns.map(
+            (id) => concerns.find((c) => c.id === id)?.name || id,
+          );
+        const answers =
+          inquiry.answerLabels ||
+          inquiry.answers.map(
+            (id) =>
+              concerns.flatMap((c) => [...c.questions]).find((q) => q.id === id)
+                ?.label || id,
+          );
         const memo = [
           "맞춤 시술 찾기 접수",
           ...labels,
@@ -1034,8 +1051,10 @@ export class Clinic extends DurableObject<Env> {
           quote: emptyQuote(),
         }));
       }
-      if (!allowed(user, "catalog.edit"))
+      if (!allowed(user, "catalog.edit")) {
         s.catalogs = s.catalogs.filter((c) => c.status === "published");
+        s.catalogRevisions = [];
+      }
       return json({
         state: s,
         user: { ...user, passwordHash: undefined },

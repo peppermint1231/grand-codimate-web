@@ -1,7 +1,7 @@
 {
-  "version": "0.8.0",
-  "versionCode": 14,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.0.apk",
-  "sha256": "4d9960c7afbd409011799902eaba9b9921a9725a645ab868f102310479b94da1",
-  "notes": "미용·보험·이벤트 SSOT과 혼합 장바구니 · 3단계 폴더 정리 · 맞춤 시술 찾기 웹 접수와 상담 연결"
+  "version": "0.8.1",
+  "versionCode": 15,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.1.apk",
+  "sha256": "d5fce51056e6d97a1ef3039c90a08f8404cf6e3a55f71c3d1cade06e00f085a4",
+  "notes": "단가표 폴더 편집 · 목록 너비 조절 · 이름과 색상 · 드래그 이동/병합/복사/삭제 · 저장 이력과 되돌리기"
 }

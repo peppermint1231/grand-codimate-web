@@ -1,7 +1,7 @@
 {
-  "version": "0.5.1",
-  "versionCode": 9,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.5.1.apk",
-  "sha256": "b5d7aa260a883b56c59bdd0115f71fee6bf72951af51df8be4b4d22e7e88588b",
-  "notes": "글자 크기 슬라이더·투명도 수치·상단 사진 저장·이력 배치·비교 화면 터치 스크롤 개선"
+  "version": "0.6.0",
+  "versionCode": 10,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.6.0.apk",
+  "sha256": "7508bf65cfb0f817859fb822f1c9ddf00da6fe546a56a54d9f4bcd3911afbb4d",
+  "notes": "상담 시술 검색·전체 상품 보기·견적 금액 표시·계산 오류 및 저장·확정 검증 개선"
 }

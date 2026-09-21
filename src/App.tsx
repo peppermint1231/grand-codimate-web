@@ -1,4 +1,5 @@
 import { appBack, useAppBack } from "./lib/navigation";
+import { QuoteTotals } from "./components/QuoteTotals";
 import { AddressSearch } from "./components/AddressSearch";
 import {
   PhotoBoard,
@@ -441,6 +442,8 @@ export function App() {
     setPending([]);
     setConsultId("");
     setPatientId("");
+    setPage("patients");
+    setTab("photo");
   };
   useEffect(() => {
     if (needsServer) return;
@@ -2307,6 +2310,7 @@ function ConsultationView({
   const [draft, setDraft] = useState(c),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
+    [productLimit, setProductLimit] = useState(70),
     [historyOpen, setHistoryOpen] = useState(false),
     [adding, setAdding] = useState(false),
     [photoError, setPhotoError] = useState(""),
@@ -2315,22 +2319,31 @@ function ConsultationView({
     [template, setTemplate] = useState(""),
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
-  const catalog =
-    s.catalogs.find((x) => x.version === draft.catalogVersion) ||
-    latestCatalog(s);
+  const catalog = draft.catalogVersion
+    ? s.catalogs.find(
+        (x) => x.status === "published" && x.version === draft.catalogVersion,
+      )
+    : latestCatalog(s);
   const readonly = !(
     user.role === "admin" ||
-    (c.status === "H" && c.ownerId === user.id)
+    (c.status === "H" && !c.cancelled && c.ownerId === user.id)
   );
-  const products = (catalog?.products || []).filter(
+  const availableProducts = (catalog?.products || []).filter(
+    (p) => p.active && productCategory(p) === c.category,
+  );
+  const query = search.trim().toLocaleLowerCase();
+  const products = availableProducts.filter(
     (p) =>
-      p.active &&
-      productCategory(p) === c.category &&
       (!category || p.category === category) &&
-      [p.name, p.category, p.description].some((t) =>
-        t.toLowerCase().includes(search.toLowerCase()),
-      ),
+      [
+        p.name,
+        p.category,
+        p.description,
+        p.composition,
+        ...p.options.map((o) => o.label),
+      ].some((text) => text.toLocaleLowerCase().includes(query)),
   );
+  useEffect(() => setProductLimit(70), [search, category]);
   let quote = draft.quote;
   let quoteError = "";
   try {
@@ -2343,6 +2356,15 @@ function ConsultationView({
   } catch (e) {
     quoteError = (e as Error).message;
   }
+  const dirty = JSON.stringify(draft) !== JSON.stringify(c);
+  const validationError =
+    quoteError ||
+    (quote.discountTotal > 0 && !draft.quote.reason.trim()
+      ? "할인 사유를 입력하세요."
+      : "") ||
+    (c.status !== "H" && dirty && !readonly && !draft.quote.reason.trim()
+      ? "확정 상담 수정 사유를 입력하세요."
+      : "");
   const [draftReady, setDraftReady] = useState(false);
   const [localSaved, setLocalSaved] = useState(false);
   useEffect(() => {
@@ -2397,7 +2419,7 @@ function ConsultationView({
       )
     )
       throw new Error("편집기에서 ‘사진 편집 저장’을 먼저 눌러주세요.");
-    if (quoteError) throw new Error(quoteError);
+    if (validationError) throw new Error(validationError);
     return send(
       "consultation.save",
       {
@@ -2459,6 +2481,7 @@ function ConsultationView({
     );
   const author = s.users.find((u) => u.id === c.ownerId) || user;
   const pdf = async (statusOverride?: "P" | "F") => {
+    if (quoteError) throw new Error(quoteError);
     const images = [];
     for (const p of draft.photos.filter((p) => p.selected)) {
       const b = await annotatedBlob(p);
@@ -2474,9 +2497,9 @@ function ConsultationView({
   };
   return (
     <>
-      {quoteError && (
+      {validationError && (
         <div className="error" role="alert">
-          {quoteError}
+          {validationError}
         </div>
       )}
       {localSaved && (
@@ -2496,7 +2519,7 @@ function ConsultationView({
             <span className={"badge " + c.status}>{status(c)}</span>
             <button
               className="primary"
-              disabled={readonly}
+              disabled={readonly || !!validationError}
               onClick={() => work(save)}
             >
               <Check size={18} />
@@ -2754,24 +2777,29 @@ function ConsultationView({
                   <Search size={18} />
                   <input
                     aria-label="시술 검색"
-                    placeholder="시술명 또는 설명 검색"
+                    placeholder="시술명·옵션·구성·설명 검색"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
                 <select
+                  aria-label="시술 카테고리"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                 >
                   <option value="">모든 카테고리</option>
-                  {[...new Set(catalog?.products.map((p) => p.category))].map(
+                  {[...new Set(availableProducts.map((p) => p.category))].map(
                     (c) => (
                       <option key={c}>{c}</option>
                     ),
                   )}
                 </select>
+                <p className="small" role="status">
+                  검색 결과 {products.length}개 ·{" "}
+                  {Math.min(productLimit, products.length)}개 표시
+                </p>
                 <div className="product-list">
-                  {products.slice(0, 70).map((p) => (
+                  {products.slice(0, productLimit).map((p) => (
                     <div className="product" key={p.id}>
                       <b>{p.name}</b>
                       <small>{p.category}</small>
@@ -2791,6 +2819,8 @@ function ConsultationView({
                               productId: p.id,
                               optionId: o.id,
                               name: p.name,
+                              description: p.description,
+                              composition: p.composition,
                               label: o.label,
                               quantity: 1,
                               unit: o.unit,
@@ -2798,12 +2828,28 @@ function ConsultationView({
                               tax: o.tax,
                               discount: { kind: "amount" as const, value: 0 },
                             };
-                            updateQuote({
-                              lines: [...draft.quote.lines, line],
+                            setDraft({
+                              ...draft,
+                              catalogVersion:
+                                draft.catalogVersion || catalog!.version,
+                              quote: {
+                                ...draft.quote,
+                                lines: [...draft.quote.lines, line],
+                              },
                             });
                           }}
                         >
-                          <span>{o.label}</span>
+                          <span>
+                            {o.label}
+                            <small>
+                              {o.unit} ·{" "}
+                              {o.tax === "inclusive"
+                                ? "VAT 포함"
+                                : o.tax === "exempt"
+                                  ? "면세"
+                                  : "VAT 별도"}
+                            </small>
+                          </span>
                           <b>
                             {o.review
                               ? "확인 필요"
@@ -2817,11 +2863,16 @@ function ConsultationView({
                     </div>
                   ))}
                 </div>
+                {products.length > productLimit && (
+                  <button onClick={() => setProductLimit((n) => n + 70)}>
+                    시술 더 보기 ({products.length - productLimit}개 남음)
+                  </button>
+                )}
                 {!products.length && (
                   <Empty>
-                    게시된 판매상품이 없습니다.
-                    <br />
-                    관리자 단가표에서 검토 후 게시하세요.
+                    {availableProducts.length
+                      ? "검색 조건에 맞는 시술이 없습니다."
+                      : "게시된 판매상품이 없습니다. 관리자 단가표에서 검토 후 게시하세요."}
                   </Empty>
                 )}
               </div>
@@ -2829,6 +2880,11 @@ function ConsultationView({
                 <h3>
                   장바구니 <small>{draft.quote.lines.length}개</small>
                 </h3>
+                {!draft.quote.lines.length && (
+                  <Empty>
+                    위에서 시술 옵션을 선택하면 장바구니에 추가됩니다.
+                  </Empty>
+                )}
                 {draft.quote.lines.map((l, i) => (
                   <div className="cart-line" key={l.id}>
                     <b>{l.name}</b>
@@ -2844,7 +2900,9 @@ function ConsultationView({
                       <Field label="수량">
                         <input
                           type="number"
+                          aria-label={`${l.name} ${l.label} 수량`}
                           min={0.1}
+                          max={1000}
                           step={0.1}
                           disabled={readonly}
                           value={l.quantity}
@@ -2852,7 +2910,7 @@ function ConsultationView({
                             const lines = [...draft.quote.lines];
                             lines[i] = {
                               ...l,
-                              quantity: Math.max(0.1, Number(e.target.value)),
+                              quantity: Number(e.target.value),
                             };
                             updateQuote({ lines });
                           }}
@@ -2862,6 +2920,12 @@ function ConsultationView({
                         <input
                           type="number"
                           min={0}
+                          max={
+                            l.discount.kind === "percent"
+                              ? 100
+                              : Math.round(l.price * l.quantity)
+                          }
+                          aria-label={`${l.name} ${l.label} 할인`}
                           disabled={readonly}
                           value={l.discount.value}
                           onChange={(e) => {
@@ -2878,6 +2942,7 @@ function ConsultationView({
                         />
                       </Field>
                       <select
+                        aria-label={`${l.name} ${l.label} 할인 단위`}
                         value={l.discount.kind}
                         disabled={readonly}
                         onChange={(e) => {
@@ -2915,6 +2980,11 @@ function ConsultationView({
                     <input
                       type="number"
                       min={0}
+                      max={
+                        draft.quote.discount.kind === "percent"
+                          ? 100
+                          : undefined
+                      }
                       value={draft.quote.discount.value}
                       disabled={readonly}
                       onChange={(e) =>
@@ -2928,6 +2998,8 @@ function ConsultationView({
                     />
                   </Field>
                   <select
+                    aria-label="전체 할인 단위"
+                    disabled={readonly}
                     value={draft.quote.discount.kind}
                     onChange={(e) =>
                       updateQuote({
@@ -2942,6 +3014,9 @@ function ConsultationView({
                     <option value="percent">%</option>
                   </select>
                 </div>
+                <p className="small">
+                  항목별 할인 후 남은 금액에 전체 할인을 적용합니다.
+                </p>
                 <Field label="부가세 안내">
                   <select
                     disabled={readonly}
@@ -2963,14 +3038,7 @@ function ConsultationView({
                     disabled={readonly}
                   />
                 </Field>
-                <div className="total">
-                  <span>최종 안내금액</span>
-                  <strong>{money(quote.total)}</strong>
-                </div>
-                <small>
-                  할인 {money(quote.discountTotal)} · 부가세{" "}
-                  {money(quote.vatAmount)}
-                </small>
+                <QuoteTotals quote={quote} error={quoteError} />
               </div>
             </section>
           )}
@@ -2987,8 +3055,10 @@ function ConsultationView({
               />
             </Field>
             {c.kind !== "interim" &&
-              latestCatalog(s)?.version !== c.catalogVersion && (
+              latestCatalog(s) &&
+              latestCatalog(s)?.version !== draft.catalogVersion && (
                 <button
+                  disabled={readonly}
                   onClick={() => {
                     if (
                       window.confirm(
@@ -3057,23 +3127,13 @@ function ConsultationView({
                     {l.label} × {l.quantity}
                   </small>
                 </span>
-                <span>{money(l.price * l.quantity)}</span>
+                <span>{money(Math.round(l.price * l.quantity))}</span>
               </div>
             ))}
-            <div className="list-row">
-              <span>할인</span>
-              <span>− {money(quote.discountTotal)}</span>
-            </div>
-            <div className="list-row">
-              <span>부가세</span>
-              <span>{money(quote.vatAmount)}</span>
-            </div>
-            <div className="total">
-              <span>최종 안내금액</span>
-              <strong>{money(quote.total)}</strong>
-            </div>
+            <QuoteTotals quote={quote} error={quoteError} />
             <div className="button-row">
               <button
+                disabled={!!quoteError}
                 onClick={() =>
                   work(async () => {
                     await send("audit.export", { format: "consultation-pdf" });
@@ -3084,6 +3144,7 @@ function ConsultationView({
                 병원용 PDF
               </button>
               <button
+                disabled={!!quoteError}
                 onClick={() =>
                   work(async () => {
                     await send("audit.export", { format: "quote-jpg" });
@@ -3097,6 +3158,7 @@ function ConsultationView({
                 환자용 JPG
               </button>
               <button
+                disabled={!!quoteError}
                 onClick={() =>
                   work(async () => {
                     if (native) {
@@ -3114,10 +3176,21 @@ function ConsultationView({
                 인쇄
               </button>
             </div>
+            {c.status === "H" && dirty && !readonly && (
+              <p className="small" role="status">
+                변경 내용을 보류·변경 저장한 뒤 최종 견적을 확인하고 확정하세요.
+              </p>
+            )}
             {c.status === "H" && (
               <div className="button-row">
                 <button
                   className="primary"
+                  disabled={
+                    readonly ||
+                    dirty ||
+                    !!validationError ||
+                    (c.kind !== "interim" && !quote.lines.length)
+                  }
                   onClick={() =>
                     work(async () => {
                       if (JSON.stringify(draft) !== JSON.stringify(c)) {
@@ -3148,6 +3221,7 @@ function ConsultationView({
                       : "성공 확정 · 진행 중"}
                 </button>
                 <button
+                  disabled={readonly || dirty || !!validationError}
                   onClick={() =>
                     work(async () => {
                       if (JSON.stringify(draft) !== JSON.stringify(c)) {

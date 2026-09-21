@@ -649,6 +649,7 @@ export async function applyCommand(
           x.status === "published" &&
           x.version === (p.catalogVersion || c.catalogVersion),
       );
+      ensure(!p.catalogVersion || catalog, "게시된 단가표 버전을 확인하세요");
       if (c.kind === "interim")
         ensure(
           !((p.lines || []) as unknown[]).length,
@@ -665,9 +666,17 @@ export async function applyCommand(
           }),
         )
         .parse(p.lines || []);
+      ensure(
+        new Set(raw.map((l) => l.id)).size === raw.length &&
+          raw.every((l) => l.id.trim()),
+        "견적 항목 ID가 없거나 중복되었습니다",
+      );
       const lines: Line[] = raw.map((l) => {
         const old = c.quote.lines.find(
-          (x) => x.id === l.id && x.optionId === l.optionId,
+          (x) =>
+            x.id === l.id &&
+            x.productId === l.productId &&
+            x.optionId === l.optionId,
         );
         if (old && (!p.catalogVersion || p.catalogVersion === c.catalogVersion))
           return { ...old, quantity: l.quantity, discount: l.discount };

@@ -2170,3 +2170,8 @@ details p {
 @media (max-width: 700px) { .consultation-covers { max-width: 148px; min-width: 64px; } .consultation-covers .consultation-cover { width: 64px; height: 64px; flex-basis: 64px; } }
 .annotation-settings-fields label { white-space: nowrap; gap: 12px; }
 .annotation-settings-fields input[type="range"] { min-width: 0; flex: 1; }
+
+.quote-totals dl { margin: 12px 0 0; }
+.quote-totals dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 13px; }
+.quote-totals dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.quote-totals .total { margin-top: 10px; padding: 16px 0 4px; }

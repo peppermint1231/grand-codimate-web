@@ -119,9 +119,16 @@ export class Drive {
   async item(id: string) {
     return (await (
       await this.request(
-        "/me/drive/items/" + encodeURIComponent(id) + "?$select=id,name,folder",
+        "/me/drive/items/" +
+          encodeURIComponent(id) +
+          "?$select=id,name,folder,parentReference",
       )
-    ).json()) as { id: string; name: string; folder?: object };
+    ).json()) as {
+      id: string;
+      name: string;
+      folder?: object;
+      parentReference?: { id?: string };
+    };
   }
   async renameFolder(id: string, name: string) {
     const item = await this.item(id);

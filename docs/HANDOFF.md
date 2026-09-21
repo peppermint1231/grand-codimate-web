@@ -6,7 +6,9 @@
 
 OneDrive 루트 `.codimate-storage.enc`에 폴더 ID를 암호화하여 이름 변경 전에 저장합니다. 서버에 변경 중인 폴더 ID를 기록하며 다음 인증 요청에서 실제 원격 이름을 조회해 응답 유실을 처리합니다. 새 서버는 OAuth 연결 때 locator로 현재 폴더를 찾아 복구합니다. 과거 미디어 경로·업로드 예약은 현재 루트로 해석하고 다운로드는 기존 파일 ID를 사용합니다. 과거 원본 JSON 내부의 경로 문자열은 당시 경로이며 현재 위치는 앱 설정에서 확인합니다.
 
-자동 테스트 89개와 TypeScript·웹 빌드, 브라우저 입력 검증·저장·재열람·세로 화면 검증 통과. 브라우저에서 찾은 health 응답이 state의 저장 위치를 덮어쓰는 초기 로드 경쟁도 수정했습니다. `scripts/verify-storage-settings.ts`, `artifacts/storage-settings-browser.json` 참고. 배포·APK·운영 이름 변경 결과는 `artifacts/deployment-0.7.2.json`, `artifacts/storage-root-production.json`에 별도 기록합니다.
+운영 확인 시 OneDrive 폴더는 이미 `코디메이트`였고 앱 경로만 `상담`으로 남아 있었습니다. 외부 이름 변경 후 재연결 분기를 추가했습니다. 현재 서버의 저장 완료 작업 전체 파일명·최신 암호화 기록 내용·관리자 계정·기존 사진 ID의 상위 폴더를 대조해야 재연결할 수 있습니다. 검증 실패 시 기존 설정을 유지합니다.
+
+자동 테스트 91개와 TypeScript·웹 빌드, 브라우저 입력 검증·저장·재열람·세로 화면 검증 통과. 브라우저에서 찾은 health 응답이 state의 저장 위치를 덮어쓰는 초기 로드 경쟁도 수정했습니다. `scripts/verify-storage-settings.ts`, `artifacts/storage-settings-browser.json` 참고. 배포·APK·운영 이름 변경 결과는 `artifacts/deployment-0.7.2.json`, `artifacts/storage-root-production.json`에 별도 기록합니다.
 
 ## 2026-09-21 운영 SSOT 등록·게시 완료
 

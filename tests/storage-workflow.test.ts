@@ -530,3 +530,71 @@ it("only administrators can change the clinic storage root", async () => {
   ).toBe(403);
   expect(rename).not.toHaveBeenCalled();
 });
+
+it("reconnects an externally renamed folder only after matching receipts, administrator and media ancestry", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  const account = f.db
+    .prepare("SELECT id,value FROM secrets WHERE id LIKE 'user:%'")
+    .get() as { id: string; value: string };
+  await Drive.prototype.put(
+    "상담/_codimate/accounts/" + account.id.slice(5) + ".enc",
+    account.value,
+  );
+  await f.upload("external-photo");
+  await Drive.prototype.renameFolder("root-folder", "코디메이트"); // User renames in OneDrive first.
+  rename.mockClear();
+  const readItem = vi.mocked(Drive.prototype.item).getMockImplementation()!;
+  vi.mocked(Drive.prototype.item).mockImplementation(async (id) =>
+    id === "root-folder"
+      ? readItem(id)
+      : { id, name: "photo", parentReference: { id: "root-folder" } },
+  );
+  vi.spyOn(Drive.prototype, "listCommits").mockImplementation(
+    async (folder = "commits", root = "상담") =>
+      [...f.files]
+        .filter(([path]) => path.startsWith(`${root}/_codimate/${folder}/`))
+        .map(([path, file]) => ({
+          id: file.id,
+          name: path.split("/").at(-1)!,
+        })),
+  );
+  const result = await f.request("/storage", {
+    rootFolder: "코디메이트",
+    baseRoot: "상담",
+  });
+  expect(result.status, await result.clone().text()).toBe(200);
+  expect(await result.json()).toMatchObject({
+    reconnected: true,
+    rootFolder: "코디메이트",
+  });
+  expect(rename).not.toHaveBeenCalled();
+  expect(await (await f.request("/media/external-photo")).text()).toBe(
+    "test-photo",
+  );
+  expect((await f.upload("after-external")).status).toBe(200);
+  expect([...f.files.keys()].some((path) => path.startsWith("상담/"))).toBe(
+    false,
+  );
+});
+
+it("does not adopt an unrelated or incomplete folder when the previous root is missing", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  await Drive.prototype.renameFolder("root-folder", "코디메이트");
+  rename.mockClear();
+  vi.spyOn(Drive.prototype, "listCommits").mockResolvedValue([]);
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(409);
+  expect(((await (await f.request("/state")).json()) as any).storageRoot).toBe(
+    "상담",
+  );
+  expect(f.files.has(".codimate-storage.enc")).toBe(false);
+  expect(rename).not.toHaveBeenCalled();
+});

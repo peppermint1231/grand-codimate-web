@@ -172,6 +172,72 @@ export class Clinic extends DurableObject<Env> {
     await this.setSecret("storage-root", item.name);
     this.sql.exec("DELETE FROM secrets WHERE id=?", "storage-rename");
   }
+  private async verifyMovedStorage(
+    root: string,
+    folderId: string,
+    user: Account,
+  ) {
+    const message =
+      "기존 자료가 보관된 폴더인지 확인할 수 없습니다. 원래 폴더를 복원한 뒤 다시 시도하세요";
+    // Recognize an out-of-app rename only when the destination contains the
+    // clinic's complete known receipt set and the current administrator backup.
+    const rows = this.sql
+      .exec<{ value: string }>(
+        "SELECT value FROM operations WHERE done=1 ORDER BY rowid",
+      )
+      .toArray();
+    ensure(rows.length > 0, message, 409);
+    const commits = await this.drive().listCommits("commits", root);
+    const byName = new Map(commits.map((item) => [item.name, item]));
+    for (const row of rows) {
+      const op = await open<{ path: string }>(
+        row.value,
+        this.env.ENCRYPTION_KEY,
+      );
+      ensure(byName.has(op.path.split("/").at(-1)), message, 409);
+    }
+    const last = rows.at(-1)!;
+    const lastOp = await open<{ path: string }>(
+      last.value,
+      this.env.ENCRYPTION_KEY,
+    );
+    const lastFile = byName.get(lastOp.path.split("/").at(-1))!;
+    ensure(
+      (await (await this.drive().get(lastFile.id)).text()) === last.value,
+      message,
+      409,
+    );
+    const accountFile = await this.drive().exists(
+      `${root}/_codimate/accounts/${user.id}.enc`,
+    );
+    ensure(accountFile, message, 409);
+    const account = await open<Account>(
+      await (await this.drive().get(accountFile.id)).text(),
+      this.env.ENCRYPTION_KEY,
+    );
+    ensure(
+      account.id === user.id && account.passwordHash === user.passwordHash,
+      message,
+      409,
+    );
+    // When media exists, its stable item ID must actually descend from this
+    // folder. A copied folder with different item IDs is not an in-place rename.
+    for (const row of this.sql
+      .exec<{ value: string }>("SELECT value FROM media")
+      .toArray()) {
+      const media = await open<{ remoteId?: string }>(
+        row.value,
+        this.env.ENCRYPTION_KEY,
+      );
+      if (!media.remoteId) continue;
+      let id: string | undefined = media.remoteId;
+      for (let depth = 0; id && id !== folderId && depth < 10; depth++) {
+        id = (await this.drive().item(id)).parentReference?.id;
+      }
+      ensure(id === folderId, message, 409);
+      break;
+    }
+  }
   private async flush() {
     const root = await this.storageRoot();
     const rows = this.sql
@@ -479,7 +545,18 @@ export class Clinic extends DurableObject<Env> {
         this.env.REQUIRE_ONEDRIVE === "true"
           ? await this.drive().exists(name)
           : undefined;
-      return json({ rootFolder, name, item: item || null });
+      return json({
+        rootFolder,
+        name,
+        item: item
+          ? {
+              id: item.id,
+              name: item.name,
+              size: item.size,
+              folder: item.folder,
+            }
+          : null,
+      });
     }
     if (path === "/api/storage" && req.method === "POST") {
       admin();
@@ -496,20 +573,39 @@ export class Clinic extends DurableObject<Env> {
       );
       if (b.rootFolder === current)
         return json({ ok: true, rootFolder: current });
-      await this.flush();
       if (this.env.REQUIRE_ONEDRIVE === "true") {
         const source = await this.drive().exists(current);
+        const target = await this.drive().exists(b.rootFolder);
+        if (!source && target?.folder) {
+          ensure(
+            this.sql.exec("SELECT id FROM operations WHERE done=0").toArray()
+              .length === 0,
+            "대기 작업이 있습니다. OneDrive 폴더를 원래 이름으로 복원하고 저장 재시도 후 변경하세요",
+            409,
+          );
+          await this.verifyMovedStorage(b.rootFolder, target.id, user);
+          await this.drive().put(
+            ".codimate-storage.enc",
+            await seal({ folderId: target.id }, this.env.ENCRYPTION_KEY),
+          );
+          await this.setSecret("storage-root", b.rootFolder);
+          return json({
+            ok: true,
+            rootFolder: b.rootFolder,
+            reconnected: true,
+          });
+        }
         ensure(
           source?.folder,
           "현재 저장 폴더가 없습니다. OneDrive 연결과 폴더를 확인하세요",
           409,
         );
-        const target = await this.drive().exists(b.rootFolder);
         ensure(
           !target || target.id === source.id,
           "같은 이름의 파일이나 폴더가 이미 있습니다. 다른 이름을 입력하세요",
           409,
         );
+        await this.flush();
         // Write the stable locator BEFORE renaming, so recovery works even if
         // the process stops after Graph accepts PATCH but before local commit.
         await this.drive().put(
@@ -519,7 +615,10 @@ export class Clinic extends DurableObject<Env> {
         await this.setSecret("storage-rename", { folderId: source.id });
         await this.drive().renameFolder(source.id, b.rootFolder);
         await this.settleStorageRename();
-      } else await this.setSecret("storage-root", b.rootFolder);
+      } else {
+        await this.flush();
+        await this.setSecret("storage-root", b.rootFolder);
+      }
       return json({ ok: true, rootFolder: await this.storageRoot() });
     }
     if (path === "/api/backup" && req.method === "POST") {

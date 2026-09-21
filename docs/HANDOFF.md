@@ -1,5 +1,15 @@
 # 코디메이트 개발 인계
 
+## 2026-09-21 SSOT 후보 검토 — 0.7.1
+
+[0.7.1 변경 기록](RELEASE-0.7.1.md)이 최신입니다. 사용자 지시는 후보 검토까지이며 부가세는 일괄 기준 없이 항목별 확인입니다. 원본 29시트·3,760셀과 기존 1,043개 가격 후보 전수를 대조했습니다. 검토 초안은 상품/안내 505개·옵션 1,027개, 부가세 미확정 1,026개, 부가세 외 확인 조건 190개 옵션, 고정 가격 미기재·범위 15개입니다. 모든 상품은 비활성이고 운영 단가표 등록·게시를 수행하지 않았습니다. 운영 관리자 로그인 세션은 확보하지 않은 상태입니다.
+
+비공개 산출물: `private/catalog-reviewed.json`, `private/catalog-reviewed.report.json`, `private/단가표_후보검토_2026-09-21.xlsx`, `private/단가표_후보검토_2026-09-21.md`. 재현은 `private/review-catalog.py` → `private/review-catalog-finish.py` → `npx tsx private/verify-catalog-review.ts` → `npx tsx private/export-catalog-review.ts`입니다. 원본 값·출처·검토용 스크립트는 공개 저장소에 올리지 않습니다. `private/catalog-tax-policy.json`은 사용자의 항목별 부가세 확인 지시를 보관합니다.
+
+모델에 `Option.tax = unknown`을 추가했습니다. 초안에는 허용하고 활성 상품 게시·견적 계산에서는 거부합니다. 원본 가져오기·새 옵션·붙여넣기는 미표기 부가세를 unknown으로 보관합니다. UI에는 검토 필터, 옵션별 원본 근거, 계산 단위 입력을 추가했습니다. 79개 테스트와 원본 가격/셀·기존 후보 전수 추적 검증, 실제 검토 초안의 로컬 UI 저장·재열람·수정·세로 화면 검증을 통과했습니다. 브라우저 재현은 `LD_LIBRARY_PATH=/tmp/codimate-browser-deps/root/usr/lib/aarch64-linux-gnu npx tsx private/verify-catalog-review-browser.ts`이며 운영 데이터로 시험하지 않습니다.
+
+아래 0.7.0은 local `867b058`, web `c011077046726e31a3d71286c19747b0a8329bed`로 게시·검증을 완료했습니다. 아래는 과거 기록입니다.
+
 ## 2026-09-21 중간·연장상담 리뷰 — 0.7.0
 
 [0.7.0 변경 기록](RELEASE-0.7.0.md)이 최신입니다. 기준 상담·현재 단가 미리보기, 연장 단위 갱신, 독립 사진 복사와 열 배치 유지, 중간 완료/중단 및 성공 건수 구분을 반영했습니다. `renewalQuote`를 시작창과 서버에서 함께 사용합니다. `Consultation.sourceRev`와 명령의 `sourceRev`로 기준 상담 생성/확정 충돌을 검사하며 취소된 기준 상담의 연장 확정을 차단합니다. 명시적으로 최신 상태를 다시 확인한 뒤에는 현재 버전으로 확정할 수 있습니다.

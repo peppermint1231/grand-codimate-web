@@ -74,6 +74,10 @@ export function calculate(
 ): Quote {
   const bases = lines.map((l) => {
     ensure(
+      ["exclusive", "inclusive", "exempt"].includes(l.tax),
+      `${l.name}: 부가세 기준을 확인하세요`,
+    );
+    ensure(
       Number.isFinite(l.quantity) && l.quantity > 0 && l.quantity <= 1000,
       "수량을 확인하세요",
     );
@@ -376,13 +380,13 @@ export function validateCatalog(c: Catalog, posting = false) {
       ids.add(o.id);
       if (o.price !== null) amount.parse(o.price);
       ensure(
-        ["exclusive", "inclusive", "exempt"].includes(o.tax),
+        ["exclusive", "inclusive", "exempt", "unknown"].includes(o.tax),
         "부가세 기준을 확인하세요",
       );
       if (posting && p.active)
         ensure(
-          !o.review && o.price !== null,
-          "판매 중 상품의 확인 필요 가격을 해결하세요",
+          !o.review && o.price !== null && o.tax !== "unknown",
+          "판매 중 상품의 확인 필요 가격·부가세를 해결하세요",
         );
     }
   }

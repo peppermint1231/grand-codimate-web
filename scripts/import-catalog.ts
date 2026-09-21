@@ -114,7 +114,7 @@ for (const sheet of wb.worksheets) {
         id: "o-" + id(sheet.name + ":" + c.cell),
         label: headers.get(col) || "옵션 확인 필요",
         price: price(raw),
-        tax: /vat.*포함|부가세.*포함/i.test(raw) ? "inclusive" : "exclusive",
+        tax: /vat.*포함|부가세.*포함/i.test(raw) ? "inclusive" : "unknown",
         review: true,
         issues,
         sources: [c],

@@ -56,7 +56,7 @@ export interface Option {
   id: string;
   label: string;
   price: number | null;
-  tax: "exclusive" | "inclusive" | "exempt";
+  tax: "exclusive" | "inclusive" | "exempt" | "unknown";
   review: boolean;
   issues: string[];
   sources: Source[];

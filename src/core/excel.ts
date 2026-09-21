@@ -123,7 +123,7 @@ export async function catalogWorkbook(
           p.options
             .map(
               (o) =>
-                `${o.label}: ${{ exclusive: "VAT 별도", inclusive: "VAT 포함", exempt: "면세" }[o.tax]} / ${o.priceKind}`,
+                `${o.label}: ${{ exclusive: "VAT 별도", inclusive: "VAT 포함", exempt: "면세", unknown: "부가세 확인 필요" }[o.tax]} / ${o.priceKind}`,
             )
             .join("\n"),
           note,
@@ -135,7 +135,7 @@ export async function catalogWorkbook(
             [p.description, p.composition].filter(Boolean).join("\n"),
             o.label,
             o.price ?? "별도 견적",
-            `${o.tax === "exclusive" ? "VAT 별도" : o.tax === "inclusive" ? "VAT 포함" : "면세"} / ${o.priceKind}`,
+            `${{ exclusive: "VAT 별도", inclusive: "VAT 포함", exempt: "면세", unknown: "부가세 확인 필요" }[o.tax]} / ${o.priceKind}`,
             [note, ...(o.review ? o.issues : [])].filter(Boolean).join("\n"),
           ]);
     }

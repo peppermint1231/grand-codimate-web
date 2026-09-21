@@ -2949,7 +2949,9 @@ function ConsultationView({
                                 ? "VAT 포함"
                                 : o.tax === "exempt"
                                   ? "면세"
-                                  : "VAT 별도"}
+                                  : o.tax === "unknown"
+                                    ? "부가세 확인 필요"
+                                    : "VAT 별도"}
                             </small>
                           </span>
                           <b>
@@ -2996,7 +2998,9 @@ function ConsultationView({
                         ? "VAT 포함"
                         : l.tax === "exempt"
                           ? "면세"
-                          : "VAT 별도"}
+                          : l.tax === "unknown"
+                            ? "부가세 확인 필요"
+                            : "VAT 별도"}
                     </small>
                     <div className="inline-fields">
                       <Field label="수량">
@@ -3558,7 +3562,8 @@ function CatalogView({
     [category, setCategory] = useState(""),
     [selected, setSelected] = useState(""),
     [includeInactive, setIncludeInactive] = useState(false),
-    [onlyReview, setOnlyReview] = useState(false);
+    [onlyReview, setOnlyReview] = useState(false),
+    [reviewFilter, setReviewFilter] = useState("all");
   const [bulkIds, setBulkIds] = useState<string[]>([]),
     [paste, setPaste] = useState("");
   const current =
@@ -3569,8 +3574,20 @@ function CatalogView({
     current?.products.filter(
       (p) =>
         (!category || p.category === category) &&
-        p.name.toLowerCase().includes(search.toLowerCase()) &&
-        (!onlyReview || p.options.some((o) => o.review)),
+        [p.name, p.description, p.composition, ...p.options.map((o) => o.label)]
+          .join(" ")
+          .toLowerCase()
+          .includes(search.toLowerCase()) &&
+        (!onlyReview || p.options.some((o) => o.review)) &&
+        (reviewFilter === "all" ||
+          p.options.some((o) =>
+            reviewFilter === "tax"
+              ? o.tax === "unknown"
+              : reviewFilter === "missing"
+                ? o.price === null
+                : o.review &&
+                  o.issues.some((i) => !i.startsWith("부가세 미표기")),
+          )),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
   const editable = current?.status === "draft" && can;
@@ -3751,6 +3768,16 @@ function CatalogView({
               />
               확인 필요
             </label>
+            <select
+              aria-label="검토 항목"
+              value={reviewFilter}
+              onChange={(e) => setReviewFilter(e.target.value)}
+            >
+              <option value="all">전체 검토 항목</option>
+              <option value="details">가격·구성·판매 조건</option>
+              <option value="tax">부가세 미확정</option>
+              <option value="missing">가격 미기재·범위</option>
+            </select>
           </div>
           {editable && current && (
             <details className="bulk-edit">
@@ -3926,7 +3953,9 @@ function CatalogView({
                                   ? "inclusive"
                                   : tax === "면세"
                                     ? "exempt"
-                                    : "exclusive",
+                                    : tax === "별도"
+                                      ? "exclusive"
+                                      : "unknown",
                               review: true,
                               issues: ["붙여넣기 자료 검토"],
                               sources: [],
@@ -4163,6 +4192,7 @@ function CatalogView({
               </Field>
               <Field label="부가세">
                 <select
+                  aria-label="부가세"
                   disabled={!editable}
                   value={o.tax}
                   onChange={(e) => {
@@ -4171,6 +4201,7 @@ function CatalogView({
                     change({ ...product, options });
                   }}
                 >
+                  <option value="unknown">확인 필요</option>
                   <option value="exclusive">별도</option>
                   <option value="inclusive">포함</option>
                   <option value="exempt">면세</option>
@@ -4190,6 +4221,39 @@ function CatalogView({
                 가격·옵션 검토 완료
               </label>
               {o.review && <p className="small">{o.issues.join(" · ")}</p>}
+              <Field label="계산 단위">
+                <input
+                  disabled={!editable}
+                  value={o.unit}
+                  onChange={(e) =>
+                    change({
+                      ...product,
+                      options: product.options.map((x) =>
+                        x.id === o.id ? { ...x, unit: e.target.value } : x,
+                      ),
+                    })
+                  }
+                />
+              </Field>
+              {o.tax === "unknown" && (
+                <p className="error">
+                  부가세 기준을 선택해야 판매용으로 게시할 수 있습니다.
+                </p>
+              )}
+              {!!o.sources.length && (
+                <details className="option-source">
+                  <summary>이 옵션의 원본 가격·기준</summary>
+                  {o.sources.map((source) => (
+                    <p key={`${source.sheet}!${source.cell}`}>
+                      <b>
+                        {source.sheet}!{source.cell}
+                      </b>
+                      <br />
+                      {source.text}
+                    </p>
+                  ))}
+                </details>
+              )}
             </div>
           ))}
           {editable && (
@@ -4204,7 +4268,7 @@ function CatalogView({
                         id: crypto.randomUUID(),
                         label: "새 옵션",
                         price: null,
-                        tax: "exclusive",
+                        tax: "unknown",
                         review: true,
                         issues: ["가격 검토 필요"],
                         sources: [],
@@ -4246,7 +4310,7 @@ function CatalogView({
           <details>
             <summary>원본 위치·내용</summary>
             {product.sources.map((source) => (
-              <p key={source.cell}>
+              <p key={`${source.sheet}!${source.cell}`}>
                 <b>
                   {source.sheet}!{source.cell}
                 </b>

@@ -1,7 +1,7 @@
 {
-  "version": "0.7.0",
-  "versionCode": 11,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.0.apk",
-  "sha256": "aee362d3b329166f81b9b3cdee745652dace861c8b42b36bf68ce3860b7b51c6",
-  "notes": "중간·연장상담 미리보기·현재 단가와 단위 적용·패키지 상태 충돌 방지·중간상담 완료 표시 개선"
+  "version": "0.7.1",
+  "versionCode": 12,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.1.apk",
+  "sha256": "eed05376858b170758f51ab6178aedafdd6b805b1f88222e435a7df6e8df90a2",
+  "notes": "단가표 후보 검토 필터·원본 근거·계산 단위 편집·부가세 미확정 상태 지원"
 }

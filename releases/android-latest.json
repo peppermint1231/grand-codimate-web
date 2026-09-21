@@ -1,7 +1,7 @@
 {
-  "version": "0.8.2",
-  "versionCode": 16,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.2.apk",
-  "sha256": "5a498706fa45ba3909456ce964c73ab8f4d6f987227596a0616bfbc997132eef",
-  "notes": "단가표 목록 가독성 · 텍스트 색상 프리셋 · 전체 접기/펼치기 · 상품 검토 편집 개선"
+  "version": "0.8.3",
+  "versionCode": 17,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.3.apk",
+  "sha256": "49147f9b704afd5cb3b69af84357bd08d0aefa86038f9615c3f456b5ec186260",
+  "notes": "상품 이동 후 선택 해제 · 폴더/상품 되돌리기와 다시 실행 · 수정 이력 선택 창"
 }

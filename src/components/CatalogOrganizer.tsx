@@ -197,9 +197,10 @@ export function CatalogProductRows({
                           ?.closest<HTMLElement>("[data-folder-target]")
                           ?.dataset.folderTarget;
                         if (target)
-                          work(async () =>
-                            onChange(moveProducts(catalog, d.ids, target)),
-                          );
+                          work(async () => {
+                            onChange(moveProducts(catalog, d.ids, target));
+                            onSelection([]);
+                          });
                       }}
                       onPointerCancel={() => {
                         drag.current = null;

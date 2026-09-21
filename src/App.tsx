@@ -1,3 +1,5 @@
+import { useCatalogUndo } from "./lib/useCatalogUndo";
+import { CatalogEditActions } from "./components/CatalogEditActions";
 import { DiscoveryDesk } from "./components/Discovery";
 import { CatalogProductRows } from "./components/CatalogOrganizer";
 import { FolderWorkspace } from "./components/FolderWorkspace";
@@ -3651,7 +3653,7 @@ function CatalogView({
   work: (f: () => Promise<any>) => any;
 }) {
   const can = allowed(user, "catalog.edit");
-  const [folderDraft, setFolderDraft] = useState<Catalog>();
+  const [folderDraft, putFolderDraft] = useState<Catalog>();
   const folderBasePublished = useRef("");
   const [folderWidth, setFolderWidth] = useState(() => {
     const n = Number(localStorage.getItem("codimate-folder-width"));
@@ -3706,8 +3708,19 @@ function CatalogView({
     };
   }, [unsaved]);
   const draft = drafts[book];
-  const setDraft = (value: Catalog | undefined) =>
+  const putDraft = (value: Catalog | undefined) =>
     setDrafts((previous) => ({ ...previous, [book]: value }));
+  const setDraft = (value: Catalog | undefined) => {
+    if (value && value.id === current?.id && value.status === "draft")
+      edits.record(value);
+    else edits.reset();
+    putDraft(value);
+  };
+  const setFolderDraft = (value: Catalog | undefined) => {
+    if (value && folderDraft) edits.record(value);
+    else edits.reset();
+    putFolderDraft(value);
+  };
   const [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
     [selected, setSelected] = useState(""),
@@ -3750,6 +3763,20 @@ function CatalogView({
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
   const editable = !folderDraft && current?.status === "draft" && can;
+  const edits = useCatalogUndo(
+    `${book}:${folderDraft ? "folder" : "product"}:${current?.id}:${current?.rev}`,
+    current,
+    can && (!!folderDraft || !!editable),
+    (restored) => {
+      if (folderDraft) putFolderDraft(restored);
+      else putDraft(restored);
+      setBulkIds([]);
+      if (category && !catalogNodes(restored).some((f) => f.id === category))
+        setCategory("");
+      if (selected && !restored.products.some((p) => p.id === selected))
+        setSelected("");
+    },
+  );
   const change = (p: Product) => {
     if (current)
       setDraft({
@@ -3856,6 +3883,7 @@ function CatalogView({
           </button>
         </div>
       )}
+      {editable && <CatalogEditActions actions={edits} />}
       <div className="tabs" aria-label="단가표 구분">
         {catalogBooks.map((kind) => (
           <button
@@ -3976,7 +4004,9 @@ function CatalogView({
               setDraft(undefined);
               setCategory("");
               setSelected("");
+              return true;
             }
+            return false;
           }}
         />
       )}
@@ -4031,6 +4061,8 @@ function CatalogView({
             }}
             onChange={setFolderDraft}
             selectedIds={bulkIds}
+            onSelection={setBulkIds}
+            editActions={<CatalogEditActions actions={edits} />}
             work={work}
           />
         )}
@@ -4401,282 +4433,287 @@ function CatalogView({
       </div>
       {product && (
         <Modal title="상품·옵션 편집" close={() => setSelected("")}>
-          <p className="catalog-review-notice">
-            {editable
-              ? "가격·부가세와 원본 근거를 확인하고 검토 완료를 표시하세요. 초안 저장 후 ‘검증 후 게시’를 눌러야 상담·추천기에 반영됩니다."
-              : folderDraft
-                ? "폴더 편집 중에는 상품 상세를 조회할 수 있습니다. 폴더 편집을 저장하거나 취소한 뒤 상품을 검토하세요."
-                : "상품 상세 조회 화면입니다. 단가표 편집 권한이 있어야 수정할 수 있습니다."}
-          </p>
-          {editable && (
-            <div className="catalog-review-save">
-              <button
-                className="primary"
-                onClick={() =>
-                  work(async () => {
-                    if (await save()) {
-                      setDraft(undefined);
-                      setSelected("");
-                    }
-                  })
-                }
-              >
-                검토 내용 초안 저장
-              </button>
+          <div data-catalog-product-editor>
+            {editable && <CatalogEditActions actions={edits} />}
+            <p className="catalog-review-notice">
+              {editable
+                ? "가격·부가세와 원본 근거를 확인하고 검토 완료를 표시하세요. 초안 저장 후 ‘검증 후 게시’를 눌러야 상담·추천기에 반영됩니다."
+                : folderDraft
+                  ? "폴더 편집 중에는 상품 상세를 조회할 수 있습니다. 폴더 편집을 저장하거나 취소한 뒤 상품을 검토하세요."
+                  : "상품 상세 조회 화면입니다. 단가표 편집 권한이 있어야 수정할 수 있습니다."}
+            </p>
+            {editable && (
+              <div className="catalog-review-save">
+                <button
+                  className="primary"
+                  onClick={() =>
+                    work(async () => {
+                      if (await save()) {
+                        setDraft(undefined);
+                        setSelected("");
+                      }
+                    })
+                  }
+                >
+                  검토 내용 초안 저장
+                </button>
+              </div>
+            )}
+            <div className="form-grid">
+              <Field label="상품명">
+                <input
+                  disabled={!editable}
+                  value={product.name}
+                  onChange={(e) => change({ ...product, name: e.target.value })}
+                />
+              </Field>
+              <Field label="소속 폴더">
+                <select
+                  disabled={!editable}
+                  value={productFolder(current!, product)}
+                  onChange={(e) =>
+                    change({ ...product, folderId: e.target.value })
+                  }
+                >
+                  {(current ? catalogNodes(current) : rootFolders).map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {folderPath(current!, f.id)
+                        .map((x) => x.name)
+                        .join(" / ")}
+                    </option>
+                  ))}
+                </select>
+                <small>원본 분류: {product.category}</small>
+              </Field>
             </div>
-          )}
-          <div className="form-grid">
-            <Field label="상품명">
-              <input
+            <Field label="설명">
+              <textarea
                 disabled={!editable}
-                value={product.name}
-                onChange={(e) => change({ ...product, name: e.target.value })}
+                value={product.description}
+                onChange={(e) =>
+                  change({ ...product, description: e.target.value })
+                }
               />
             </Field>
-            <Field label="소속 폴더">
+            <Field label="패키지·회차별 구성">
+              <textarea
+                disabled={!editable}
+                value={product.composition}
+                onChange={(e) =>
+                  change({ ...product, composition: e.target.value })
+                }
+              />
+            </Field>
+            <label className="check">
+              <input
+                type="checkbox"
+                disabled={!editable}
+                checked={product.active}
+                onChange={(e) =>
+                  change({ ...product, active: e.target.checked })
+                }
+              />
+              판매 활성화
+            </label>
+            <Field label="미용·보험 구분">
               <select
                 disabled={!editable}
-                value={productFolder(current!, product)}
+                value={productCategory(product)}
                 onChange={(e) =>
-                  change({ ...product, folderId: e.target.value })
-                }
-              >
-                {(current ? catalogNodes(current) : rootFolders).map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {folderPath(current!, f.id)
-                      .map((x) => x.name)
-                      .join(" / ")}
-                  </option>
-                ))}
-              </select>
-              <small>원본 분류: {product.category}</small>
-            </Field>
-          </div>
-          <Field label="설명">
-            <textarea
-              disabled={!editable}
-              value={product.description}
-              onChange={(e) =>
-                change({ ...product, description: e.target.value })
-              }
-            />
-          </Field>
-          <Field label="패키지·회차별 구성">
-            <textarea
-              disabled={!editable}
-              value={product.composition}
-              onChange={(e) =>
-                change({ ...product, composition: e.target.value })
-              }
-            />
-          </Field>
-          <label className="check">
-            <input
-              type="checkbox"
-              disabled={!editable}
-              checked={product.active}
-              onChange={(e) => change({ ...product, active: e.target.checked })}
-            />
-            판매 활성화
-          </label>
-          <Field label="미용·보험 구분">
-            <select
-              disabled={!editable}
-              value={productCategory(product)}
-              onChange={(e) =>
-                change({
-                  ...product,
-                  careCategory: e.target.value as "미용" | "보험",
-                })
-              }
-            >
-              <option>미용</option>
-              <option>보험</option>
-            </select>
-          </Field>
-          {product.options.map((o, i) => (
-            <div className="option-edit" key={o.id}>
-              <Field label="옵션">
-                <input
-                  disabled={!editable}
-                  value={o.label}
-                  onChange={(e) => {
-                    const options = [...product.options];
-                    options[i] = { ...o, label: e.target.value };
-                    change({ ...product, options });
-                  }}
-                />
-              </Field>
-              <Field label="가격 (원)">
-                <input
-                  disabled={!editable}
-                  type="number"
-                  value={o.price ?? ""}
-                  min={0}
-                  onChange={(e) => {
-                    const options = [...product.options];
-                    options[i] = {
-                      ...o,
-                      price:
-                        e.target.value === "" ? null : Number(e.target.value),
-                    };
-                    change({ ...product, options });
-                  }}
-                />
-              </Field>
-              <Field label="가격 구분">
-                <select
-                  disabled={!editable}
-                  value={o.priceKind}
-                  onChange={(e) =>
-                    change({
-                      ...product,
-                      options: product.options.map((x) =>
-                        x.id === o.id
-                          ? {
-                              ...x,
-                              priceKind: e.target.value as typeof o.priceKind,
-                            }
-                          : x,
-                      ),
-                    })
-                  }
-                >
-                  <option value="regular">정가</option>
-                  <option value="clinic">원내 적용가</option>
-                  <option value="event">이벤트가</option>
-                  <option value="quote">별도 견적</option>
-                </select>
-              </Field>
-              <Field label="부가세">
-                <select
-                  aria-label="부가세"
-                  disabled={!editable}
-                  value={o.tax}
-                  onChange={(e) => {
-                    const options = [...product.options];
-                    options[i] = { ...o, tax: e.target.value as any };
-                    change({ ...product, options });
-                  }}
-                >
-                  <option value="unknown">확인 필요</option>
-                  <option value="exclusive">별도</option>
-                  <option value="inclusive">포함</option>
-                  <option value="exempt">면세</option>
-                </select>
-              </Field>
-              <label className="check">
-                <input
-                  disabled={!editable}
-                  type="checkbox"
-                  checked={!o.review}
-                  onChange={(e) => {
-                    const options = [...product.options];
-                    options[i] = { ...o, review: !e.target.checked };
-                    change({ ...product, options });
-                  }}
-                />
-                가격·옵션 검토 완료
-              </label>
-              {o.review && <p className="small">{o.issues.join(" · ")}</p>}
-              <Field label="계산 단위">
-                <input
-                  disabled={!editable}
-                  value={o.unit}
-                  onChange={(e) =>
-                    change({
-                      ...product,
-                      options: product.options.map((x) =>
-                        x.id === o.id ? { ...x, unit: e.target.value } : x,
-                      ),
-                    })
-                  }
-                />
-              </Field>
-              {o.tax === "unknown" && (
-                <p className="error">
-                  부가세 기준을 선택해야 판매용으로 게시할 수 있습니다.
-                </p>
-              )}
-              {!!o.sources.length && (
-                <details className="option-source">
-                  <summary>이 옵션의 원본 가격·기준</summary>
-                  {o.sources.map((source) => (
-                    <p key={`${source.sheet}!${source.cell}`}>
-                      <b>
-                        {source.sheet}!{source.cell}
-                      </b>
-                      <br />
-                      {source.text}
-                    </p>
-                  ))}
-                </details>
-              )}
-            </div>
-          ))}
-          {editable && (
-            <div className="button-row">
-              <button
-                onClick={() =>
                   change({
                     ...product,
-                    options: [
-                      ...product.options,
-                      {
-                        id: crypto.randomUUID(),
-                        label: "새 옵션",
-                        price: null,
-                        tax: "unknown",
-                        review: true,
-                        issues: ["가격 검토 필요"],
-                        sources: [],
-                        priceKind: "clinic",
-                        unit: "개",
-                      },
-                    ],
+                    careCategory: e.target.value as "미용" | "보험",
                   })
                 }
               >
-                옵션 추가
-              </button>
-              <button
-                onClick={() => {
-                  const copy = {
-                    ...structuredClone(product),
-                    id: crypto.randomUUID(),
-                    name: product.name + " (복사)",
-                    active: false,
-                    options: product.options.map((o) => ({
-                      ...o,
-                      id: crypto.randomUUID(),
-                    })),
-                  };
-                  setDraft({
-                    ...current!,
-                    products: [...current!.products, copy],
-                  });
-                  setSelected(copy.id);
-                }}
-              >
-                상품 복제
-              </button>
-              <button className="primary" onClick={() => setSelected("")}>
-                편집 내용 유지
-              </button>
-            </div>
-          )}
-          <details>
-            <summary>원본 위치·내용</summary>
-            {product.sources.map((source) => (
-              <p key={`${source.sheet}!${source.cell}`}>
-                <b>
-                  {source.sheet}!{source.cell}
-                </b>
-                <br />
-                {source.text}
-              </p>
+                <option>미용</option>
+                <option>보험</option>
+              </select>
+            </Field>
+            {product.options.map((o, i) => (
+              <div className="option-edit" key={o.id}>
+                <Field label="옵션">
+                  <input
+                    disabled={!editable}
+                    value={o.label}
+                    onChange={(e) => {
+                      const options = [...product.options];
+                      options[i] = { ...o, label: e.target.value };
+                      change({ ...product, options });
+                    }}
+                  />
+                </Field>
+                <Field label="가격 (원)">
+                  <input
+                    disabled={!editable}
+                    type="number"
+                    value={o.price ?? ""}
+                    min={0}
+                    onChange={(e) => {
+                      const options = [...product.options];
+                      options[i] = {
+                        ...o,
+                        price:
+                          e.target.value === "" ? null : Number(e.target.value),
+                      };
+                      change({ ...product, options });
+                    }}
+                  />
+                </Field>
+                <Field label="가격 구분">
+                  <select
+                    disabled={!editable}
+                    value={o.priceKind}
+                    onChange={(e) =>
+                      change({
+                        ...product,
+                        options: product.options.map((x) =>
+                          x.id === o.id
+                            ? {
+                                ...x,
+                                priceKind: e.target.value as typeof o.priceKind,
+                              }
+                            : x,
+                        ),
+                      })
+                    }
+                  >
+                    <option value="regular">정가</option>
+                    <option value="clinic">원내 적용가</option>
+                    <option value="event">이벤트가</option>
+                    <option value="quote">별도 견적</option>
+                  </select>
+                </Field>
+                <Field label="부가세">
+                  <select
+                    aria-label="부가세"
+                    disabled={!editable}
+                    value={o.tax}
+                    onChange={(e) => {
+                      const options = [...product.options];
+                      options[i] = { ...o, tax: e.target.value as any };
+                      change({ ...product, options });
+                    }}
+                  >
+                    <option value="unknown">확인 필요</option>
+                    <option value="exclusive">별도</option>
+                    <option value="inclusive">포함</option>
+                    <option value="exempt">면세</option>
+                  </select>
+                </Field>
+                <label className="check">
+                  <input
+                    disabled={!editable}
+                    type="checkbox"
+                    checked={!o.review}
+                    onChange={(e) => {
+                      const options = [...product.options];
+                      options[i] = { ...o, review: !e.target.checked };
+                      change({ ...product, options });
+                    }}
+                  />
+                  가격·옵션 검토 완료
+                </label>
+                {o.review && <p className="small">{o.issues.join(" · ")}</p>}
+                <Field label="계산 단위">
+                  <input
+                    disabled={!editable}
+                    value={o.unit}
+                    onChange={(e) =>
+                      change({
+                        ...product,
+                        options: product.options.map((x) =>
+                          x.id === o.id ? { ...x, unit: e.target.value } : x,
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+                {o.tax === "unknown" && (
+                  <p className="error">
+                    부가세 기준을 선택해야 판매용으로 게시할 수 있습니다.
+                  </p>
+                )}
+                {!!o.sources.length && (
+                  <details className="option-source">
+                    <summary>이 옵션의 원본 가격·기준</summary>
+                    {o.sources.map((source) => (
+                      <p key={`${source.sheet}!${source.cell}`}>
+                        <b>
+                          {source.sheet}!{source.cell}
+                        </b>
+                        <br />
+                        {source.text}
+                      </p>
+                    ))}
+                  </details>
+                )}
+              </div>
             ))}
-          </details>
+            {editable && (
+              <div className="button-row">
+                <button
+                  onClick={() =>
+                    change({
+                      ...product,
+                      options: [
+                        ...product.options,
+                        {
+                          id: crypto.randomUUID(),
+                          label: "새 옵션",
+                          price: null,
+                          tax: "unknown",
+                          review: true,
+                          issues: ["가격 검토 필요"],
+                          sources: [],
+                          priceKind: "clinic",
+                          unit: "개",
+                        },
+                      ],
+                    })
+                  }
+                >
+                  옵션 추가
+                </button>
+                <button
+                  onClick={() => {
+                    const copy = {
+                      ...structuredClone(product),
+                      id: crypto.randomUUID(),
+                      name: product.name + " (복사)",
+                      active: false,
+                      options: product.options.map((o) => ({
+                        ...o,
+                        id: crypto.randomUUID(),
+                      })),
+                    };
+                    setDraft({
+                      ...current!,
+                      products: [...current!.products, copy],
+                    });
+                    setSelected(copy.id);
+                  }}
+                >
+                  상품 복제
+                </button>
+                <button className="primary" onClick={() => setSelected("")}>
+                  편집 내용 유지
+                </button>
+              </div>
+            )}
+            <details>
+              <summary>원본 위치·내용</summary>
+              {product.sources.map((source) => (
+                <p key={`${source.sheet}!${source.cell}`}>
+                  <b>
+                    {source.sheet}!{source.cell}
+                  </b>
+                  <br />
+                  {source.text}
+                </p>
+              ))}
+            </details>
+          </div>
         </Modal>
       )}
     </>

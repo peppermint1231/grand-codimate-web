@@ -3220,3 +3220,110 @@ details p {
     margin-left: 14px;
   }
 }
+
+.catalog-edit-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+}
+.catalog-edit-actions button {
+  white-space: nowrap;
+  font-size: 13px;
+}
+.catalog-edit-actions small {
+  font-size: 11px;
+}
+.catalog-history-dialog {
+  width: min(980px, 95vw);
+  max-height: 85dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.catalog-history-dialog > .section-title {
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.catalog-history-browser {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+  min-height: 0;
+  height: 52dvh;
+}
+.catalog-history-list,
+.catalog-history-preview {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.catalog-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 3px;
+}
+.catalog-history-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 4px;
+  padding: 12px;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.catalog-history-choice strong {
+  font-size: 14px;
+}
+.catalog-history-choice[aria-pressed="true"] {
+  background: #e5f0e8;
+  border-color: #155e59;
+  box-shadow: inset 3px 0 #155e59;
+}
+.history-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+}
+.catalog-history-preview {
+  background: #f7f9f6;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  font-size: 13px;
+}
+.catalog-history-preview ul {
+  padding-left: 20px;
+}
+.catalog-history-preview button {
+  position: sticky;
+  bottom: 0;
+}
+.catalog-history-warning {
+  font-size: 12px;
+  padding: 8px 12px;
+  background: #fff4dd;
+  border-radius: 8px;
+}
+@media (max-width: 650px) {
+  .catalog-history-browser {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(110px, 1fr) minmax(130px, 1fr);
+    height: 55dvh;
+  }
+  .catalog-history-dialog > .section-title h2 {
+    font-size: 18px;
+  }
+}
+
+.catalog-edit-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}

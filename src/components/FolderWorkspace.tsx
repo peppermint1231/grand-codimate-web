@@ -41,6 +41,8 @@ export function FolderWorkspace({
   save,
   onChange,
   selectedIds,
+  onSelection,
+  editActions,
   work,
 }: {
   catalog: Catalog;
@@ -53,6 +55,8 @@ export function FolderWorkspace({
   save: () => Promise<unknown>;
   onChange: (c: Catalog) => void;
   selectedIds: string[];
+  onSelection: (ids: string[]) => void;
+  editActions?: React.ReactNode;
   work: (f: () => Promise<unknown>) => unknown;
 }) {
   const nodes = catalogNodes(catalog);
@@ -339,6 +343,12 @@ export function FolderWorkspace({
       </div>
       {editing && (
         <div className="folder-edit-toolbar">
+          <fieldset
+            className="catalog-edit-fieldset"
+            disabled={!!renaming || !!collision || !!deleting}
+          >
+            {editActions}
+          </fieldset>
           <button
             className="primary"
             disabled={!!renaming || !!collision || !!deleting}
@@ -463,9 +473,10 @@ export function FolderWorkspace({
             <button
               disabled={!destination || !selectedIds.length}
               onClick={() =>
-                work(async () =>
-                  apply(moveProducts(catalog, selectedIds, destination)),
-                )
+                work(async () => {
+                  apply(moveProducts(catalog, selectedIds, destination));
+                  onSelection([]);
+                })
               }
             >
               선택 {selectedIds.length}개 상품 이동

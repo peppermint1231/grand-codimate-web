@@ -280,3 +280,253 @@ it("a failed patient snapshot never reports a successful save; same operation re
     memo: "retry-safe",
   });
 });
+
+function mockRootRename(f: Awaited<ReturnType<typeof fixture>>) {
+  let root = "상담";
+  const exists = vi.mocked(Drive.prototype.exists).getMockImplementation()!;
+  vi.mocked(Drive.prototype.exists).mockImplementation(async (path) =>
+    path === root
+      ? { id: "root-folder", name: root, size: 0, folder: {} }
+      : exists(path),
+  );
+  vi.spyOn(Drive.prototype, "item").mockImplementation(async () => ({
+    id: "root-folder",
+    name: root,
+    folder: {},
+  }));
+  const rename = vi
+    .spyOn(Drive.prototype, "renameFolder")
+    .mockImplementation(async (_id, name) => {
+      for (const [path, value] of [...f.files]) {
+        if (path.startsWith(root + "/")) {
+          f.files.delete(path);
+          f.files.set(name + path.slice(root.length), value);
+        }
+      }
+      root = name;
+    });
+  return { rename };
+}
+
+it("renames the whole storage root, preserves photos, and saves records, commits and new uploads under the new name", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  await f.upload("photo-before");
+  const before = [...f.files.values()].map((x) => x.id);
+  const response = await f.request("/storage", {
+    rootFolder: "코디메이트",
+    baseRoot: "상담",
+  });
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(rename).toHaveBeenCalledWith("root-folder", "코디메이트");
+  expect(((await (await f.request("/state")).json()) as any).storageRoot).toBe(
+    "코디메이트",
+  );
+  expect([...f.files.values()].map((x) => x.id)).toEqual(
+    expect.arrayContaining(before),
+  );
+  expect(await (await f.request("/media/photo-before")).text()).toBe(
+    "test-photo",
+  );
+  expect((await f.upload("photo-after")).status).toBe(200);
+  expect([...f.files.keys()].some((x) => x.startsWith("상담/"))).toBe(false);
+  expect(
+    [...f.files.keys()].some((x) =>
+      x.startsWith("코디메이트/_codimate/media/"),
+    ),
+  ).toBe(true);
+  expect(
+    (
+      await f.cmd(
+        "consultation.save",
+        {
+          lines: [],
+          discount: { kind: "amount", value: 0 },
+          vat: "separate",
+          memo: "after rename",
+          photos: [
+            {
+              id: "p1",
+              mediaId: "photo-before",
+              name: "before",
+              rotation: 0,
+              selected: true,
+              annotations: [],
+            },
+          ],
+        },
+        "consult",
+        1,
+      )
+    ).status,
+  ).toBe(200);
+  const snapshot = JSON.parse(
+    f.files.get("코디메이트/보험/000001M테스트/상담_consult.json")!
+      .body as string,
+  );
+  expect(snapshot.consultation.photos[0].path).toMatch(/^코디메이트\/보험\//);
+  const locator = await open<any>(
+    f.files.get(".codimate-storage.enc")!.body as string,
+    f.key,
+  );
+  expect(locator.folderId).toBe("root-folder");
+  // A second rename must also relocate references made before the first rename.
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "병원자료",
+        baseRoot: "코디메이트",
+      })
+    ).status,
+  ).toBe(200);
+  expect(await (await f.request("/media/photo-before")).text()).toBe(
+    "test-photo",
+  );
+  expect((await f.upload("photo-third")).status).toBe(200);
+  expect(
+    [...f.files.keys()]
+      .filter((x) => x !== ".codimate-storage.enc")
+      .every((x) => x.startsWith("병원자료/")),
+  ).toBe(true);
+});
+
+it("rejects invalid names, stale settings and existing destinations without moving data", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  for (const rootFolder of [
+    "",
+    "../코디메이트",
+    "상담/새폴더",
+    "끝.",
+    "CON",
+    "공백 ",
+    "a".repeat(81),
+  ]) {
+    expect(
+      (await f.request("/storage", { rootFolder, baseRoot: "상담" })).status,
+    ).toBe(400);
+  }
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "이전",
+      })
+    ).status,
+  ).toBe(409);
+  f.files.set("코디메이트", { id: "other-folder", body: "", mime: "" });
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(409);
+  expect(rename).not.toHaveBeenCalled();
+  expect(((await (await f.request("/state")).json()) as any).storageRoot).toBe(
+    "상담",
+  );
+});
+
+it("reconciles a rename whose response was lost before allowing the next upload", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  const apply = rename.getMockImplementation()!;
+  rename.mockImplementation(async (...args) => {
+    await apply(...args);
+    throw new Error("response lost");
+  });
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(503);
+  expect((await f.upload("after-timeout")).status).toBe(200);
+  expect(((await (await f.request("/state")).json()) as any).storageRoot).toBe(
+    "코디메이트",
+  );
+  expect([...f.files.keys()].some((x) => x.startsWith("상담/"))).toBe(false);
+  expect(
+    f.db.prepare("SELECT id FROM secrets WHERE id='storage-rename'").all(),
+  ).toEqual([]);
+});
+
+it("retains the original root after a rejected remote rename and retries safely", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  rename.mockRejectedValueOnce(new Error("remote unavailable"));
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(503);
+  expect(((await (await f.request("/state")).json()) as any).storageRoot).toBe(
+    "상담",
+  );
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(200);
+});
+
+it("flushes pending data before renaming and stops when that save fails", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  f.put.mockRejectedValue(new Error("save unavailable"));
+  expect(
+    (
+      await f.cmd(
+        "patient.create",
+        {
+          name: "대기",
+          sex: "F",
+          dob: "1980-01-01",
+          phone: "01000000001",
+          address: "검증동",
+        },
+        "pending-patient",
+      )
+    ).status,
+  ).toBe(503);
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(503);
+  expect(rename).not.toHaveBeenCalled();
+});
+
+it("only administrators can change the clinic storage root", async () => {
+  const f = await fixture();
+  const { rename } = mockRootRename(f);
+  const row = f.db
+    .prepare("SELECT id,value FROM secrets WHERE id LIKE 'user:%'")
+    .get() as { id: string; value: string };
+  const account = await open<any>(row.value, f.key);
+  f.db
+    .prepare("UPDATE secrets SET value=? WHERE id=?")
+    .run(await seal({ ...account, role: "staff" }, f.key), row.id);
+  expect(
+    (
+      await f.request("/storage", {
+        rootFolder: "코디메이트",
+        baseRoot: "상담",
+      })
+    ).status,
+  ).toBe(403);
+  expect(rename).not.toHaveBeenCalled();
+});

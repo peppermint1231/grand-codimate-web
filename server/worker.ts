@@ -1,4 +1,10 @@
-import { patientFolder, photoFileName } from "../src/core/storagePaths";
+import {
+  DEFAULT_STORAGE_ROOT,
+  validStorageRoot,
+  relocateStoragePath,
+  patientFolder,
+  photoFileName,
+} from "../src/core/storagePaths";
 import bundledRelease from "../releases/android-latest.json";
 import { latestRelease, parseRelease } from "../src/core/appRelease";
 import { DurableObject } from "cloudflare:workers";
@@ -151,7 +157,23 @@ export class Clinic extends DurableObject<Env> {
     ensure(u?.active, "계정이 비활성화되었습니다", 401);
     return u;
   }
+  private async storageRoot() {
+    return (await this.secret<string>("storage-root")) || DEFAULT_STORAGE_ROOT;
+  }
+  private async settleStorageRename() {
+    const pending = await this.secret<{ folderId: string }>("storage-rename");
+    if (!pending) return;
+    const item = await this.drive().item(pending.folderId);
+    ensure(
+      item.folder && validStorageRoot(item.name),
+      "저장 폴더를 확인하세요",
+      409,
+    );
+    await this.setSecret("storage-root", item.name);
+    this.sql.exec("DELETE FROM secrets WHERE id=?", "storage-rename");
+  }
   private async flush() {
+    const root = await this.storageRoot();
     const rows = this.sql
       .exec<{ id: string; value: string }>(
         "SELECT id,value FROM operations WHERE done=0 ORDER BY rowid",
@@ -182,12 +204,12 @@ export class Clinic extends DurableObject<Env> {
                   ...photo,
                   fileName: m?.name,
                   oneDriveItemId: m?.remoteId,
-                  path: m?.path,
+                  path: m?.path ? relocateStoragePath(m.path, root) : undefined,
                 };
               }),
             );
             await this.drive().put(
-              `${patientFolder(patient, c.category)}/상담_${c.id}.json`,
+              `${patientFolder(patient, c.category, await this.storageRoot())}/상담_${c.id}.json`,
               JSON.stringify(
                 { schemaVersion: 1, consultation: { ...c, photos } },
                 null,
@@ -197,7 +219,11 @@ export class Clinic extends DurableObject<Env> {
             );
           }
         }
-        await this.drive().put(op.path, row.value, "application/json");
+        await this.drive().put(
+          relocateStoragePath(op.path, root),
+          row.value,
+          "application/json",
+        );
       }
       const encrypted = await Promise.all(
         op.changes.map(async (c) => ({
@@ -250,7 +276,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.7.1",
+        version: "0.7.2",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -357,8 +383,29 @@ export class Clinic extends DurableObject<Env> {
         code: url.searchParams.get("code") || "",
       });
       await this.setSecret("drive", tokens);
-      await this.drive().folders("상담/_codimate/accounts");
-      const savedAccounts = await this.drive().listCommits("accounts");
+      // A stable item ID finds renamed roots even on a fresh recovery server.
+      const locator = await this.drive().exists(".codimate-storage.enc");
+      if (locator) {
+        const saved = await open<{ folderId: string }>(
+          await (await this.drive().get(locator.id)).text(),
+          this.env.ENCRYPTION_KEY,
+        );
+        const item = await this.drive().item(saved.folderId);
+        ensure(
+          item.folder && validStorageRoot(item.name),
+          "저장 폴더를 확인하세요",
+          409,
+        );
+        await this.setSecret("storage-root", item.name);
+      }
+      await this.settleStorageRename();
+      await this.drive().folders(
+        (await this.storageRoot()) + "/_codimate/accounts",
+      );
+      const savedAccounts = await this.drive().listCommits(
+        "accounts",
+        await this.storageRoot(),
+      );
       // Connecting a recovery server must never overwrite the source accounts
       // or add its temporary bootstrap administrator to the source backup.
       for (const row of savedAccounts.length
@@ -372,12 +419,17 @@ export class Clinic extends DurableObject<Env> {
         const account = await this.secret<Account>(row.id);
         if (account)
           await this.drive().put(
-            "상담/_codimate/accounts/" + account.id + ".enc",
+            (await this.storageRoot()) +
+              "/_codimate/accounts/" +
+              account.id +
+              ".enc",
             await seal(account, this.env.ENCRYPTION_KEY),
           );
       }
       for (const folder of ["commits", "media"])
-        await this.drive().folders("상담/_codimate/" + folder);
+        await this.drive().folders(
+          (await this.storageRoot()) + "/_codimate/" + folder,
+        );
       if (savedAccounts.length) {
         const localUsers = this.sql
           .exec<{ id: string }>(
@@ -390,13 +442,16 @@ export class Clinic extends DurableObject<Env> {
         );
         const missingHistory =
           !this.sql.exec("SELECT id FROM operations LIMIT 1").toArray()
-            .length && (await this.drive().listCommits()).length > 0;
+            .length &&
+          (await this.drive().listCommits("commits", await this.storageRoot()))
+            .length > 0;
         if (unknownAccount || missingHistory)
           await this.setSecret("restore-required", true);
       }
       return Response.redirect(this.env.APP_ORIGIN + "/?connected=1", 302);
     }
     const user = await this.user(req);
+    await this.settleStorageRename();
     const admin = () =>
       ensure(user.role === "admin", "관리자만 가능합니다", 403);
     if (
@@ -406,6 +461,7 @@ export class Clinic extends DurableObject<Env> {
         "/api/media",
         "/api/sync",
         "/api/update",
+        "/api/storage",
       ].includes(path) &&
       req.method === "POST"
     )
@@ -414,6 +470,47 @@ export class Clinic extends DurableObject<Env> {
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
         409,
       );
+    if (path === "/api/storage" && req.method === "POST") {
+      admin();
+      const b = await body();
+      ensure(
+        validStorageRoot(b.rootFolder),
+        "폴더 이름은 80자 이내로 입력하고 경로 구분자·특수문자·끝의 마침표를 제외하세요",
+      );
+      const current = await this.storageRoot();
+      ensure(
+        b.baseRoot === current,
+        "다른 기기에서 저장 폴더를 변경했습니다. 새로고침 후 다시 시도하세요",
+        409,
+      );
+      if (b.rootFolder === current)
+        return json({ ok: true, rootFolder: current });
+      await this.flush();
+      if (this.env.REQUIRE_ONEDRIVE === "true") {
+        const source = await this.drive().exists(current);
+        ensure(
+          source?.folder,
+          "현재 저장 폴더가 없습니다. OneDrive 연결과 폴더를 확인하세요",
+          409,
+        );
+        const target = await this.drive().exists(b.rootFolder);
+        ensure(
+          !target || target.id === source.id,
+          "같은 이름의 파일이나 폴더가 이미 있습니다. 다른 이름을 입력하세요",
+          409,
+        );
+        // Write the stable locator BEFORE renaming, so recovery works even if
+        // the process stops after Graph accepts PATCH but before local commit.
+        await this.drive().put(
+          ".codimate-storage.enc",
+          await seal({ folderId: source.id }, this.env.ENCRYPTION_KEY),
+        );
+        await this.setSecret("storage-rename", { folderId: source.id });
+        await this.drive().renameFolder(source.id, b.rootFolder);
+        await this.settleStorageRename();
+      } else await this.setSecret("storage-root", b.rootFolder);
+      return json({ ok: true, rootFolder: await this.storageRoot() });
+    }
     if (path === "/api/backup" && req.method === "POST") {
       admin();
       const snapshot = {
@@ -427,6 +524,7 @@ export class Clinic extends DurableObject<Env> {
           .exec("SELECT * FROM secrets WHERE id LIKE ?", "user:%")
           .toArray(),
         media: this.sql.exec("SELECT * FROM media").toArray(),
+        storageRoot: await this.storageRoot(),
       };
       return json({
         encrypted: await seal(snapshot, this.env.ENCRYPTION_KEY),
@@ -450,7 +548,7 @@ export class Clinic extends DurableObject<Env> {
       };
       if (this.env.REQUIRE_ONEDRIVE === "true")
         await this.drive().put(
-          "상담/_codimate/update.json",
+          (await this.storageRoot()) + "/_codimate/update.json",
           JSON.stringify(release),
           "application/json",
         );
@@ -492,6 +590,7 @@ export class Clinic extends DurableObject<Env> {
           .exec("SELECT id FROM operations WHERE done=0")
           .toArray().length,
         driveConnected: !!(await this.secret("drive")),
+        storageRoot: await this.storageRoot(),
         restoreRequired: !!(await this.secret("restore-required")),
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
@@ -552,7 +651,7 @@ export class Clinic extends DurableObject<Env> {
       ensure(a.passwordHash, "비밀번호를 입력하세요");
       if (this.env.REQUIRE_ONEDRIVE === "true")
         await this.drive().put(
-          "상담/_codimate/accounts/" + id + ".enc",
+          (await this.storageRoot()) + "/_codimate/accounts/" + id + ".enc",
           await seal(a, this.env.ENCRYPTION_KEY),
         );
       await this.setSecret("user:" + id, a);
@@ -626,12 +725,18 @@ export class Clinic extends DurableObject<Env> {
               c.photos.find((p) => p.mediaId === id)?.capturedAt ||
               m.capturedAt ||
               source.createdAt;
-            const folder = patientFolder(patient, c.category),
+            const folder = patientFolder(
+                patient,
+                c.category,
+                await this.storageRoot(),
+              ),
               name = photoFileName(patient, capturedAt, m.mime);
             const reservation = await this.secret<{ path: string }>(
               "legacy-path:" + id,
             );
-            let path = reservation?.path || `${folder}/${name}`;
+            let path = reservation?.path
+              ? relocateStoragePath(reservation.path, await this.storageRoot())
+              : `${folder}/${name}`;
             if (!reservation) {
               if (await this.drive().exists(path))
                 path = path.replace(/(\.[^.]+)$/, "_" + id + "$1");
@@ -657,7 +762,10 @@ export class Clinic extends DurableObject<Env> {
               },
               this.env.ENCRYPTION_KEY,
             );
-            await this.drive().put(`상담/_codimate/media/${id}.enc`, value);
+            await this.drive().put(
+              `${await this.storageRoot()}/_codimate/media/${id}.enc`,
+              value,
+            );
             this.sql.exec(
               "INSERT OR REPLACE INTO media VALUES(?,?)",
               id,
@@ -681,7 +789,7 @@ export class Clinic extends DurableObject<Env> {
         {
           changes,
           operation: { id: cmd.id, actor: user.id, digest },
-          path: `상담/_codimate/commits/${seq}_${cmd.id}.enc`,
+          path: `${await this.storageRoot()}/_codimate/commits/${seq}_${cmd.id}.enc`,
         },
         this.env.ENCRYPTION_KEY,
       );
@@ -711,7 +819,10 @@ export class Clinic extends DurableObject<Env> {
         "대기 작업을 먼저 처리하세요",
         409,
       );
-      const commits = await this.drive().listCommits();
+      const commits = await this.drive().listCommits(
+        "commits",
+        await this.storageRoot(),
+      );
       const changes: Change[] = [];
       const receipts: {
         id: string;
@@ -737,8 +848,13 @@ export class Clinic extends DurableObject<Env> {
       const restored: { table: string; id: string; value: string }[] = [];
       let activeAdmins = 0;
       for (const folder of ["accounts", "media"]) {
-        await this.drive().folders("상담/_codimate/" + folder);
-        for (const item of await this.drive().listCommits(folder)) {
+        await this.drive().folders(
+          (await this.storageRoot()) + "/_codimate/" + folder,
+        );
+        for (const item of await this.drive().listCommits(
+          folder,
+          await this.storageRoot(),
+        )) {
           const value = await (await this.drive().get(item.id)).text();
           const record = await open<{
             id: string;
@@ -847,7 +963,11 @@ export class Clinic extends DurableObject<Env> {
       ensure(Number.isFinite(Date.parse(capturedAt)), "촬영 날짜를 확인하세요");
       if (this.env.REQUIRE_ONEDRIVE === "true") {
         const patient = s.patients.find((p) => p.id === c.patientId)!;
-        const folder = patientFolder(patient, c.category);
+        const folder = patientFolder(
+          patient,
+          c.category,
+          await this.storageRoot(),
+        );
         const filename =
           mime === "application/pdf"
             ? name
@@ -858,7 +978,10 @@ export class Clinic extends DurableObject<Env> {
         }>("upload-path:" + id);
         if (reserved) {
           ensure(reserved.fingerprint === fingerprint, "업로드 ID 충돌", 409);
-          storagePath = reserved.path;
+          storagePath = relocateStoragePath(
+            reserved.path,
+            await this.storageRoot(),
+          );
         } else {
           storagePath = `${folder}/${filename}`;
           if (await this.drive().exists(storagePath))
@@ -899,7 +1022,10 @@ export class Clinic extends DurableObject<Env> {
         this.env.ENCRYPTION_KEY,
       );
       if (remoteId)
-        await this.drive().put("상담/_codimate/media/" + id + ".enc", value);
+        await this.drive().put(
+          (await this.storageRoot()) + "/_codimate/media/" + id + ".enc",
+          value,
+        );
       this.sql.exec("INSERT INTO media VALUES(?,?)", id, value);
       return json({ id });
     }

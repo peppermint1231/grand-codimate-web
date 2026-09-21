@@ -1,4 +1,23 @@
 import type { Patient } from "./model";
+export const DEFAULT_STORAGE_ROOT = "상담";
+export function validStorageRoot(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= 80 &&
+    value === value.trim() &&
+    !/[\\/:*?"<>|#%\u0000-\u001f]/.test(value) &&
+    !value.endsWith(".") &&
+    !value.startsWith("~$") &&
+    !/^(\.|\.\.|\.lock|desktop\.ini|_vti_.*|con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i.test(
+      value,
+    )
+  );
+}
+// All application files live directly below one configurable root folder.
+// Historical records may contain an earlier root name; item IDs stay stable.
+export const relocateStoragePath = (path: string, root: string) =>
+  root + path.slice(path.indexOf("/"));
 export const safeName = (name: string) =>
   name
     .replace(/[\\/:*?"<>|#%\u0000-\u001f]/g, "_")
@@ -7,8 +26,9 @@ export const safeName = (name: string) =>
 export const patientFolder = (
   patient: Pick<Patient, "id" | "number" | "name" | "sex" | "storageName">,
   category: "미용" | "보험",
+  root = DEFAULT_STORAGE_ROOT,
 ) =>
-  `상담/${category}/${patient.storageName || safeName(`${patient.number || patient.id}${patient.sex}${patient.name}`)}`;
+  `${root}/${category}/${patient.storageName || safeName(`${patient.number || patient.id}${patient.sex}${patient.name}`)}`;
 export function photoFileName(
   patient: Pick<Patient, "name" | "sex">,
   capturedAt: string,

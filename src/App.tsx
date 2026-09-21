@@ -290,7 +290,7 @@ export function App() {
   useEffect(() => {
     if (needsServer) return;
     api("/health")
-      .then(setHealth)
+      .then((d) => setHealth((h: any) => ({ ...h, ...d })))
       .catch(() => setError("서버에 연결할 수 없습니다."));
   }, []);
   useEffect(() => {
@@ -4469,7 +4469,12 @@ function SettingsView({
 }) {
   const [tab, setTab] = useState("grade"),
     [grades, setGrades] = useState(s.policies[0]?.grades || []),
-    [account, setAccount] = useState<User | undefined>();
+    [account, setAccount] = useState<User | undefined>(),
+    [storageRoot, setStorageRoot] = useState(health.storageRoot || "상담"),
+    [storageNotice, setStorageNotice] = useState("");
+  useEffect(() => {
+    setStorageRoot(health.storageRoot || "상담");
+  }, [health.storageRoot]);
   if (user.role !== "admin")
     return <Empty>관리자만 설정을 변경할 수 있습니다.</Empty>;
   return (
@@ -4832,6 +4837,70 @@ function SettingsView({
       )}
       {tab === "connection" && (
         <div className="detail-grid">
+          <form
+            className="card"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setStorageNotice("");
+              work(async () => {
+                const result = await api("/storage", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    rootFolder: storageRoot.trim(),
+                    baseRoot: health.storageRoot || "상담",
+                  }),
+                });
+                await refresh();
+                setStorageNotice(
+                  `저장 폴더를 ${result.rootFolder}(으)로 변경했습니다.`,
+                );
+              });
+            }}
+          >
+            <h3>OneDrive 저장 폴더</h3>
+            <p>현재 위치: 내 파일 / {health.storageRoot || "상담"}</p>
+            <Field label="저장 폴더 이름">
+              <input
+                value={storageRoot}
+                onChange={(e) => {
+                  setStorageRoot(e.target.value);
+                  setStorageNotice("");
+                }}
+                required
+                maxLength={80}
+                placeholder="코디메이트"
+              />
+            </Field>
+            <button
+              type="button"
+              onClick={() => {
+                setStorageRoot("코디메이트");
+                setStorageNotice("");
+              }}
+            >
+              코디메이트로 입력
+            </button>
+            <p>
+              변경 후: {storageRoot.trim() || "폴더 이름"} / 미용 ·{" "}
+              {storageRoot.trim() || "폴더 이름"} / 보험
+            </p>
+            <p className="small">
+              기존 폴더의 이름을 변경합니다. 사진·상담 기록·단가표·복구 자료가
+              함께 유지되며 병원 전체에 적용됩니다. 같은 이름의 폴더가 있으면
+              다른 이름을 입력하세요.
+            </p>
+            <button
+              className="primary"
+              disabled={
+                storageRoot.trim() === (health.storageRoot || "상담") ||
+                !!health.restoreRequired ||
+                (health.mode !== "local-development" && !health.driveConnected)
+              }
+            >
+              저장 폴더 변경
+            </button>
+            {storageNotice && <p role="status">{storageNotice}</p>}
+          </form>
           <div className="card">
             <h3>OneDrive 연결</h3>
             <p>

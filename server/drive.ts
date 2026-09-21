@@ -104,15 +104,49 @@ export class Drive {
     const r = await fetch(
       "https://graph.microsoft.com/v1.0/me/drive/root:/" +
         path.split("/").map(encodeURIComponent).join("/") +
-        "?$select=id,name,size",
+        "?$select=id,name,size,folder",
       { headers: { Authorization: "Bearer " + (await this.token()) } },
     );
     if (r.status === 404) return undefined;
     if (!r.ok) throw new Error(`OneDrive 파일 확인 실패 (${r.status})`);
-    return (await r.json()) as { id: string; name: string; size: number };
+    return (await r.json()) as {
+      id: string;
+      name: string;
+      size: number;
+      folder?: object;
+    };
+  }
+  async item(id: string) {
+    return (await (
+      await this.request(
+        "/me/drive/items/" + encodeURIComponent(id) + "?$select=id,name,folder",
+      )
+    ).json()) as { id: string; name: string; folder?: object };
+  }
+  async renameFolder(id: string, name: string) {
+    const item = await this.item(id);
+    if (!item.folder) throw new Error("저장 폴더를 찾을 수 없습니다");
+    const conflict = await this.exists(name);
+    if (conflict && conflict.id !== id)
+      throw new Error(
+        "같은 이름의 파일이나 폴더가 이미 있습니다. 다른 이름을 입력하세요",
+      );
+    try {
+      await this.request("/me/drive/items/" + encodeURIComponent(id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          "@microsoft.graph.conflictBehavior": "fail",
+        }),
+      });
+    } finally {
+      this.knownFolders.clear();
+    }
   }
   async put(path: string, data: BodyInit, mime = "application/octet-stream") {
-    await this.folders(path.slice(0, path.lastIndexOf("/")));
+    if (path.includes("/"))
+      await this.folders(path.slice(0, path.lastIndexOf("/")));
     const r = await this.request(
       "/me/drive/root:/" +
         path.split("/").map(encodeURIComponent).join("/") +
@@ -126,10 +160,10 @@ export class Drive {
       "/me/drive/items/" + encodeURIComponent(id) + "/content",
     );
   }
-  async listCommits(folder = "commits") {
+  async listCommits(folder = "commits", root = "상담") {
     const r = await this.request(
       "/me/drive/root:/" +
-        encodeURIComponent("상담") +
+        encodeURIComponent(root) +
         "/_codimate/" +
         encodeURIComponent(folder) +
         ":/children?$top=200&$select=id,name",

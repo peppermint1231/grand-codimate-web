@@ -1,7 +1,7 @@
 {
-  "version": "0.7.1",
-  "versionCode": 12,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.1.apk",
-  "sha256": "eed05376858b170758f51ab6178aedafdd6b805b1f88222e435a7df6e8df90a2",
-  "notes": "단가표 후보 검토 필터·원본 근거·계산 단위 편집·부가세 미확정 상태 지원"
+  "version": "0.7.2",
+  "versionCode": 13,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.7.2.apk",
+  "sha256": "7148b84fcb99a9ce6ccde005ff7da2b106d91873b7d5d3fa6200e0b5684aba76",
+  "notes": "설정에서 OneDrive 저장 폴더 이름 변경 · 기존 사진·단가표·복구 자료 유지"
 }

@@ -53,6 +53,7 @@ async function fixture() {
   };
   const backup = await seal(account, encryptionKey);
   vi.spyOn(Drive.prototype, "folders").mockResolvedValue();
+  vi.spyOn(Drive.prototype, "exists").mockResolvedValue(undefined);
   const put = vi.spyOn(Drive.prototype, "put").mockResolvedValue({ id: "file", size: 0, eTag: "tag" });
   const list = vi.spyOn(Drive.prototype, "listCommits").mockImplementation(async (folder = "commits") =>
     folder === "accounts" ? [{ id: "original-account-file", name: "original-admin.enc" }] : []);
@@ -100,4 +101,49 @@ it("a backup without an active administrator cannot replace the current server",
   f.list.mockResolvedValue([]);
   expect((await f.request("/restore", {}, f.session.token)).status).toBe(409);
   expect((await f.request("/state", undefined, f.session.token)).status).toBe(200);
+});
+
+it("a fresh server discovers a renamed root by stable folder ID and restores from that root", async () => {
+  const f = await fixture();
+  const locator = await seal({ folderId: "renamed-root" }, f.encryptionKey);
+  vi.mocked(Drive.prototype.exists).mockImplementation(async (path) =>
+    path === ".codimate-storage.enc"
+      ? { id: "locator", name: path, size: 0 }
+      : undefined,
+  );
+  vi.spyOn(Drive.prototype, "item").mockResolvedValue({
+    id: "renamed-root",
+    name: "코디메이트",
+    folder: {},
+  });
+  const get = f.get.getMockImplementation()!;
+  f.get.mockImplementation(async (id) =>
+    id === "locator" ? new Response(locator) : get(id),
+  );
+  const connection = (await (
+    await f.request("/onedrive/connect", undefined, f.session.token)
+  ).json()) as any;
+  const state = new URL(connection.url).searchParams.get("state");
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    Response.json({
+      access_token: "test-access",
+      refresh_token: "test-refresh",
+      expires_in: 3600,
+    }),
+  );
+  expect(
+    (await f.request("/onedrive/callback?code=test&state=" + state)).status,
+  ).toBe(302);
+  expect(
+    (
+      (await (
+        await f.request("/state", undefined, f.session.token)
+      ).json()) as any
+    ).storageRoot,
+  ).toBe("코디메이트");
+  expect((await f.request("/restore", {}, f.session.token)).status).toBe(200);
+  expect(f.list).toHaveBeenCalledWith("accounts", "코디메이트");
+  expect(f.list).toHaveBeenCalledWith("commits", "코디메이트");
+  expect(f.list).toHaveBeenCalledWith("media", "코디메이트");
+  expect(f.put).not.toHaveBeenCalled();
 });

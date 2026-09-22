@@ -1,3 +1,4 @@
+import { opinionReplyKey, unreadOpinionReply } from "../core/opinions";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Pencil, MessageSquare } from "lucide-react";
 import {
@@ -26,12 +27,53 @@ export function OpinionInbox({
   user,
   send,
   onOpen,
+  focusId = "",
 }: {
+  focusId?: string;
   state: State;
   user: User;
   send: Send;
   onOpen: (c: Consultation) => void;
 }) {
+  const unread = state.opinions.filter((o) =>
+    unreadOpinionReply(o, user.id, state.consultations),
+  );
+  const [filter, setFilter] = useState("all");
+  const [readError, setReadError] = useState("");
+  const [reading, setReading] = useState("");
+  const cards = useRef(new Map<string, HTMLElement>());
+  const handledFocus = useRef("");
+  const confirmReply = async (o: Opinion) => {
+    if (reading) return;
+    setReading(o.id);
+    setReadError("");
+    try {
+      const ok = await send(
+        "opinion.read",
+        { replyKey: opinionReplyKey(o) },
+        o.id,
+      );
+      if (!ok)
+        setReadError(
+          "읽음 표시가 기기에 저장되었습니다. 동기화 후 반영됩니다.",
+        );
+    } catch (e) {
+      setReadError((e as Error).message);
+    } finally {
+      setReading("");
+    }
+  };
+  useEffect(() => {
+    if (!focusId || handledFocus.current === focusId) return;
+    const o = state.opinions.find((o) => o.id === focusId);
+    if (!o) return;
+    handledFocus.current = focusId;
+    setFilter("all");
+    cards.current.get(focusId)?.scrollIntoView({ block: "center" });
+    cards.current.get(focusId)?.focus({ preventScroll: true });
+    if (unreadOpinionReply(o, user.id, state.consultations))
+      void confirmReply(o);
+  }, [focusId, state.opinions]);
   const [active, setActive] = useState<{
     opinion: Opinion;
     consultation: Consultation;
@@ -51,15 +93,55 @@ export function OpinionInbox({
     ((o.toId === user.id && user.role === "doctor") || isAdministrator(user));
   return (
     <div className="opinion-inbox">
+      <div className="tabs" aria-label="의견 알림 분류">
+        <button
+          className={filter === "all" ? "active" : ""}
+          onClick={() => setFilter("all")}
+        >
+          전체 요청·답변
+        </button>
+        <button
+          className={filter === "unread" ? "active" : ""}
+          onClick={() => setFilter("unread")}
+        >
+          새 답변 {unread.length}
+        </button>
+        <button
+          className={filter === "pending" ? "active" : ""}
+          onClick={() => setFilter("pending")}
+        >
+          내 답변 대기{" "}
+          {state.opinions.filter((o) => o.toId === user.id && !o.answer).length}
+        </button>
+      </div>
+      {filter === "unread" && !unread.length && (
+        <p>확인하지 않은 답변이 없습니다.</p>
+      )}
+      {readError && <p role="alert">{readError}</p>}
       {!state.opinions.length && <p>의견 요청이 없습니다.</p>}
       {state.opinions
+        .filter((o) =>
+          filter === "unread"
+            ? unread.includes(o)
+            : filter === "pending"
+              ? o.toId === user.id && !o.answer
+              : true,
+        )
         .slice()
         .reverse()
         .map((o) => {
           const c = state.consultations.find((c) => c.id === o.consultationId);
           return (
             <section
-              className="card opinion-card"
+              className={
+                "card opinion-card" +
+                (focusId === o.id ? " opinion-focused" : "")
+              }
+              tabIndex={-1}
+              ref={(node) => {
+                if (node) cards.current.set(o.id, node);
+                else cards.current.delete(o.id);
+              }}
               key={o.id}
               aria-label="의견 요청"
             >
@@ -131,6 +213,15 @@ export function OpinionInbox({
                     </div>
                   ))}
                 </div>
+              )}
+              {unreadOpinionReply(o, user.id, state.consultations) && (
+                <button
+                  className="opinion-unread"
+                  disabled={!!reading}
+                  onClick={() => void confirmReply(o)}
+                >
+                  {reading === o.id ? "확인 중…" : "새 답변 · 읽음 표시"}
+                </button>
               )}
               <OpinionAnswer
                 key={o.id}

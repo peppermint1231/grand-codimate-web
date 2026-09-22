@@ -1,7 +1,7 @@
 {
-  "version": "0.10.1",
-  "versionCode": 27,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.1.apk",
-  "sha256": "25f272e259419172820a94b7cda7dd57e20476ad94941805c5a1d00079611f76",
-  "notes": "상품 개별·일괄 삭제/검색·편집 취소·의견 요청 상담 사진/주석"
+  "version": "0.10.2",
+  "versionCode": 28,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.2.apk",
+  "sha256": "3d8c0cabcc8fe8cc71d0c12e25b95bc56ab3eed6dcd811087f78ef79848002cd",
+  "notes": "의사 답변 도착·읽음 알림, 상담이력 의사 의견 펼치기, 상담메모 저장 버튼"
 }

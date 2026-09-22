@@ -1620,6 +1620,27 @@ export async function applyCommand(
       text = "의견 요청 사진에 의사 주석 저장";
       break;
     }
+    case "opinion.read": {
+      const o = s.opinions.find((o) => o.id === id);
+      ensure(o, "의견 요청을 찾을 수 없습니다", 404);
+      const c = s.consultations.find((c) => c.id === o.consultationId);
+      ensure(
+        o.fromId === user.id || c?.ownerId === user.id,
+        "요청자 또는 상담자만 본인의 답변 확인 상태를 변경할 수 있습니다",
+        403,
+      );
+      ensure(
+        o.answer.trim() &&
+          String(o.answerRevision ?? o.answeredAt ?? "legacy") === p.replyKey,
+        "새 답변이 있습니다. 내용을 다시 확인하세요",
+        409,
+      );
+      o.answerReadBy = { ...o.answerReadBy, [user.id]: String(p.replyKey) };
+      // No content revision change: reading must not interrupt a doctor's draft.
+      patientId = c?.patientId;
+      text = "의사 답변 확인";
+      break;
+    }
     case "opinion.answer": {
       const o = find(s.opinions);
       ensure(
@@ -1631,6 +1652,7 @@ export async function applyCommand(
       ensure(c && c.status === "H", "확정 상담에는 답변을 추가할 수 없습니다");
       o.answer = z.string().min(1).max(10000).parse(p.answer);
       o.answeredAt = now;
+      o.answerRevision = (o.answerRevision || 0) + 1;
       touch(o);
       patientId = c.patientId;
       text = "의사 답변";

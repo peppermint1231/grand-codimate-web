@@ -266,6 +266,8 @@ export interface Opinion extends Base {
   request: string;
   answer: string;
   answeredAt?: string;
+  answerRevision?: number;
+  answerReadBy?: Record<string, string>;
 }
 export interface Consent extends Base {
   name: string;

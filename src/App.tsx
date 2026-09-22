@@ -1,3 +1,5 @@
+import { unreadOpinionReply } from "./core/opinions";
+import { ConsultationOpinions } from "./components/ConsultationOpinions";
 import { OpinionInbox } from "./components/OpinionInbox";
 import {
   matchesCatalogSearch,
@@ -207,6 +209,17 @@ export function App() {
     [modal, setModal] = useState(""),
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
+  const [opinionFocus, setOpinionFocus] = useState("");
+  const opinionPollGeneration = useRef(0);
+  const unreadReplies = user
+    ? state.opinions.filter((o) =>
+        unreadOpinionReply(o, user.id, state.consultations),
+      )
+    : [];
+  const openOpinion = (id = "") => {
+    setOpinionFocus(id);
+    setModal("opinions");
+  };
   const [restoring, setRestoring] = useState(!needsServer);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
@@ -338,7 +351,42 @@ export function App() {
     }, 30000);
     return () => clearInterval(t);
   }, [user, pending.length, consultId]);
+  useEffect(() => {
+    if (!user || needsServer) return;
+    let active = true,
+      fetching = false;
+    const poll = async () => {
+      if (
+        !active ||
+        fetching ||
+        document.visibilityState !== "visible" ||
+        !navigator.onLine ||
+        pending.length
+      )
+        return;
+      fetching = true;
+      const generation = opinionPollGeneration.current;
+      try {
+        const d = await api("/opinions");
+        if (active && generation === opinionPollGeneration.current)
+          setState((current) => ({ ...current, opinions: d.opinions }));
+      } catch {
+        /* Keep the last known notifications while offline. */
+      } finally {
+        fetching = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 15000);
+    document.addEventListener("visibilitychange", poll);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", poll);
+    };
+  }, [user?.id, pending.length]);
   const execute = async (c: Command) => {
+    opinionPollGeneration.current++;
     if (vaultEnabled()) {
       const q = [
         ...((await vaultRead<Command[]>("pending")) || []).filter(
@@ -360,7 +408,13 @@ export function App() {
         await vaultWrite("pending", q);
         setPending(q);
       }
-      await refresh();
+      opinionPollGeneration.current++;
+      if (c.type === "opinion.read") {
+        const d = await api("/opinions");
+        setState((current) => ({ ...current, opinions: d.opinions }));
+        return true;
+      }
+      await refresh(c.type.startsWith("opinion."));
       setNotice(
         health.mode === "local-development"
           ? "개발 서버에 저장했습니다."
@@ -955,20 +1009,23 @@ export function App() {
                     : "OneDrive 연결 필요"}
             </span>
             {pending.length > 0 && <button onClick={sync}>재시도</button>}
-            <button
-              aria-label="의견 요청 알림"
-              onClick={() => setModal("opinions")}
-            >
+            <button aria-label="의견 요청 알림" onClick={() => openOpinion()}>
               <Bell size={20} />
               <span>
-                {
-                  state.opinions.filter((o) => o.toId === user.id && !o.answer)
-                    .length
-                }
+                {state.opinions.filter((o) => o.toId === user.id && !o.answer)
+                  .length + unreadReplies.length}
               </span>
             </button>
           </div>
         </header>
+        {unreadReplies.length > 0 && (
+          <div className="opinion-notification" role="status">
+            <Bell size={18} /> 새 의사 답변 {unreadReplies.length}건
+            <button onClick={() => openOpinion(unreadReplies[0].id)}>
+              답변 확인
+            </button>
+          </div>
+        )}
         {error && (
           <div className="error floating" role="alert">
             {error}
@@ -1186,6 +1243,7 @@ export function App() {
           }}
         >
           <OpinionInbox
+            focusId={opinionFocus}
             state={state}
             user={user}
             send={send}
@@ -2077,22 +2135,26 @@ function PatientDetail({
                 .slice()
                 .reverse()
                 .map((c) => (
-                  <button
-                    className="list-row"
-                    key={c.id}
-                    onClick={() => open(c)}
-                  >
-                    <span>
-                      <b>
-                        {c.category} · {consultationKind(c)}
-                      </b>
-                      <small>{c.createdAt.slice(0, 10)}</small>
-                    </span>
-                    <ConsultationCover photos={c.photos} />
-                    <span className={"badge " + c.status}>{status(c)}</span>
-                    <span>{money(c.quote.total)}</span>
-                    <ChevronRight size={18} />
-                  </button>
+                  <article className="consultation-history-entry" key={c.id}>
+                    <button className="list-row" onClick={() => open(c)}>
+                      <span>
+                        <b>
+                          {c.category} · {consultationKind(c)}
+                        </b>
+                        <small>{c.createdAt.slice(0, 10)}</small>
+                      </span>
+                      <ConsultationCover photos={c.photos} />
+                      <span className={"badge " + c.status}>{status(c)}</span>
+                      <span>{money(c.quote.total)}</span>
+                      <ChevronRight size={18} />
+                    </button>
+                    <ConsultationOpinions
+                      consultation={c}
+                      state={s}
+                      user={user}
+                      send={send}
+                    />
+                  </article>
                 ))
             ) : (
               <Empty>아직 상담이 없습니다.</Empty>
@@ -3275,6 +3337,20 @@ function ConsultationView({
                 onChange={(e) => setDraft({ ...draft, memo: e.target.value })}
               />
             </Field>
+            {!readonly && (
+              <div className="memo-save-actions">
+                <button
+                  className="primary"
+                  disabled={!dirty}
+                  onClick={() => work(save)}
+                >
+                  상담메모 저장
+                </button>
+                <small>
+                  메모와 현재 사진·장바구니 변경사항을 함께 저장합니다.
+                </small>
+              </div>
+            )}
             {c.kind !== "interim" &&
               latestCatalogs(s).some(
                 (x) =>

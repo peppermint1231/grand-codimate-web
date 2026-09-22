@@ -428,7 +428,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.10.1",
+        version: "0.10.2",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1074,6 +1074,19 @@ export class Clinic extends DurableObject<Env> {
         "codimate=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0",
       );
       return r;
+    }
+    if (path === "/api/opinions") {
+      // Poll only opinions, including during consultation editing. Avoid loading
+      // the full catalogue/history state for notification checks.
+      const opinions = [];
+      for (const row of this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section=?",
+          "opinions",
+        )
+        .toArray())
+        opinions.push(await open(row.value, this.env.ENCRYPTION_KEY));
+      return json({ opinions });
     }
     if (path === "/api/state") {
       const s = await this.state();

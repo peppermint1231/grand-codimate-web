@@ -3743,3 +3743,78 @@ details p {
 .opinion-consult-link {
   white-space: nowrap;
 }
+
+.opinion-notification {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  margin: 12px 0;
+  border: 1px solid #9fc9bd;
+  border-radius: 12px;
+  background: #eaf7f1;
+  color: #145c55;
+}
+.opinion-notification button {
+  margin-left: auto;
+  font-weight: 700;
+}
+.opinion-focused {
+  outline: 2px solid #187b70;
+  outline-offset: 2px;
+}
+.opinion-unread {
+  color: #145c55;
+  background: #eaf7f1;
+  font-weight: 700;
+}
+.consultation-history-entry {
+  border-bottom: 1px solid var(--line, #dce5df);
+  padding-bottom: 8px;
+}
+.consultation-history-entry > .list-row {
+  border-bottom: 0;
+}
+.consultation-opinions {
+  margin: 0 10px 8px;
+}
+.consultation-opinions > button {
+  font-size: 13px;
+  color: #145c55;
+}
+.history-opinion {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f6f3;
+  overflow-wrap: anywhere;
+}
+.history-opinion small {
+  display: block;
+  margin-top: 4px;
+}
+.history-opinion p {
+  white-space: pre-wrap;
+}
+.memo-save-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+.memo-save-actions small {
+  color: var(--muted, #64776f);
+}
+@media (max-width: 600px) {
+  .consultation-history-entry > .list-row {
+    gap: 8px;
+  }
+  .consultation-history-entry > .list-row > span:first-child {
+    min-width: 60px;
+  }
+  .consultation-history-entry > .list-row > svg {
+    flex-shrink: 0;
+  }
+}

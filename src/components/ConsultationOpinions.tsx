@@ -1,6 +1,11 @@
 import { useState } from "react";
 import type { Consultation, State, User } from "../core/model";
-import { opinionReplyKey, unreadOpinionReply } from "../core/opinions";
+import { OpinionBody } from "./OpinionBody";
+import {
+  hasOpinionAnswer,
+  opinionReplyKey,
+  unreadOpinionReply,
+} from "../core/opinions";
 
 export function ConsultationOpinions({
   consultation,
@@ -16,11 +21,11 @@ export function ConsultationOpinions({
   const [expanded, setExpanded] = useState(false);
   const [error, setError] = useState("");
   const opinions = state.opinions.filter(
-    (o) => o.consultationId === consultation.id && o.answer.trim(),
+    (o) => o.consultationId === consultation.id && hasOpinionAnswer(o),
   );
   if (!opinions.length) return null;
   return (
-    <section className="consultation-opinions">
+    <section className="consultation-opinions" aria-label="상담 사진 의사 의견">
       <button
         aria-expanded={expanded}
         onClick={async () => {
@@ -53,7 +58,7 @@ export function ConsultationOpinions({
               <small>{new Date(o.answeredAt).toLocaleString("ko-KR")}</small>
             )}
             <p className="small">요청: {o.request}</p>
-            <p className="opinion-answer-text">{o.answer}</p>
+            <OpinionBody opinion={o} photos={consultation.photos} />
           </div>
         ))}
       {error && <p role="alert">{error}</p>}

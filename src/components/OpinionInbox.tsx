@@ -1,4 +1,10 @@
-import { opinionReplyKey, unreadOpinionReply } from "../core/opinions";
+import { OpinionBody, OpinionPhotoLink } from "./OpinionBody";
+import {
+  hasOpinionAnswer,
+  opinionPhotoLabel,
+  opinionReplyKey,
+  unreadOpinionReply,
+} from "../core/opinions";
 import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Pencil, MessageSquare } from "lucide-react";
 import {
@@ -111,7 +117,11 @@ export function OpinionInbox({
           onClick={() => setFilter("pending")}
         >
           내 답변 대기{" "}
-          {state.opinions.filter((o) => o.toId === user.id && !o.answer).length}
+          {
+            state.opinions.filter(
+              (o) => o.toId === user.id && !hasOpinionAnswer(o),
+            ).length
+          }
         </button>
       </div>
       {filter === "unread" && !unread.length && (
@@ -124,7 +134,7 @@ export function OpinionInbox({
           filter === "unread"
             ? unread.includes(o)
             : filter === "pending"
-              ? o.toId === user.id && !o.answer
+              ? o.toId === user.id && !hasOpinionAnswer(o)
               : true,
         )
         .slice()
@@ -194,7 +204,9 @@ export function OpinionInbox({
                       >
                         <PhotoPreview photo={photo} />
                       </button>
-                      <small>{photo.name}</small>
+                      <small>
+                        {opinionPhotoLabel(c.photos, photo.id)} · {photo.name}
+                      </small>
                       {canAnnotate(o, c) && (
                         <button
                           aria-label={`${photo.name} 주석 편집`}
@@ -226,6 +238,7 @@ export function OpinionInbox({
               <OpinionAnswer
                 key={o.id}
                 opinion={o}
+                photos={c?.photos || []}
                 send={send}
                 editable={
                   !!c &&
@@ -325,16 +338,28 @@ export function OpinionInbox({
 }
 function OpinionAnswer({
   opinion: o,
+  photos,
   editable,
   send,
 }: {
   opinion: Opinion;
+  photos: Photo[];
   editable: boolean;
   send: Send;
 }) {
   const [answer, setAnswer] = useState(o.answer),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const [comments, setComments] = useState(o.answerPhotoComments || []);
+  const previousComments = useRef(JSON.stringify(o.answerPhotoComments || []));
+  const serverComments = JSON.stringify(o.answerPhotoComments || []);
+  useEffect(() => {
+    const last = previousComments.current;
+    setComments((current) =>
+      JSON.stringify(current) === last ? JSON.parse(serverComments) : current,
+    );
+    previousComments.current = serverComments;
+  }, [serverComments]);
   const previous = useRef(o.answer);
   useEffect(() => {
     const last = previous.current;
@@ -355,7 +380,13 @@ function OpinionAnswer({
             try {
               const saved = await send(
                 "opinion.answer",
-                { answer },
+                {
+                  answer,
+                  answerPhotoComments: comments.map(({ photoId, text }) => ({
+                    photoId,
+                    text,
+                  })),
+                },
                 o.id,
                 o.rev,
               );
@@ -373,17 +404,90 @@ function OpinionAnswer({
             aria-label="의견 작성"
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            required
             maxLength={10000}
-            placeholder="의견을 작성하세요"
+            placeholder="전체 의견을 작성하세요. 사진별 코멘트만 남겨도 됩니다."
           />
-          <button className="primary" disabled={busy || !answer.trim()}>
+          <div className="opinion-photo-comments-editor">
+            <label>
+              사진별 코멘트 추가
+              <select
+                aria-label="코멘트할 사진 선택"
+                value=""
+                disabled={busy}
+                onChange={(e) => {
+                  const photo = photos.find((p) => p.id === e.target.value);
+                  if (photo && !comments.some((c) => c.photoId === photo.id))
+                    setComments([
+                      ...comments,
+                      { photoId: photo.id, photoName: photo.name, text: "" },
+                    ]);
+                }}
+              >
+                <option value="">사진을 선택하세요</option>
+                {photos
+                  .filter((p) => !comments.some((c) => c.photoId === p.id))
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {opinionPhotoLabel(photos, p.id)} · {p.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <p className="small">
+              사진 번호는 상담 사진의 현재 배치 순서에 따라 자동으로 바뀝니다.
+            </p>
+            {comments.map((comment) => (
+              <div className="opinion-photo-comment" key={comment.photoId}>
+                <OpinionPhotoLink
+                  photos={photos}
+                  photoId={comment.photoId}
+                  photoName={comment.photoName}
+                />
+                <textarea
+                  aria-label={`${opinionPhotoLabel(photos, comment.photoId)} 코멘트`}
+                  placeholder="이 사진에 대한 의견을 작성하세요"
+                  value={comment.text}
+                  required
+                  maxLength={10000}
+                  onChange={(e) =>
+                    setComments(
+                      comments.map((c) =>
+                        c.photoId === comment.photoId
+                          ? { ...c, text: e.target.value }
+                          : c,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setComments(
+                      comments.filter((c) => c.photoId !== comment.photoId),
+                    )
+                  }
+                >
+                  이 사진 코멘트 삭제
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            className="primary"
+            disabled={
+              busy ||
+              (!answer.trim() && !comments.length) ||
+              comments.some((c) => !c.text.trim())
+            }
+          >
             {busy ? "답변 저장 중…" : "답변 저장"}
           </button>
         </form>
+      ) : hasOpinionAnswer(o) ? (
+        <OpinionBody opinion={o} photos={photos} />
       ) : (
         <p className="opinion-answer-text">
-          {o.answer || "담당 의사의 답변을 기다리고 있습니다."}
+          담당 의사의 답변을 기다리고 있습니다.
         </p>
       )}
       {message && <p role="status">{message}</p>}

@@ -265,6 +265,7 @@ export interface Opinion extends Base {
   toId: string;
   request: string;
   answer: string;
+  answerPhotoComments?: { photoId: string; photoName: string; text: string }[];
   answeredAt?: string;
   answerRevision?: number;
   answerReadBy?: Record<string, string>;

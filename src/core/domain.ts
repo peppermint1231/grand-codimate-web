@@ -1,3 +1,4 @@
+import { hasOpinionAnswer } from "./opinions";
 import {
   mergeWebsiteCatalogs,
   websitePagesSchema,
@@ -1630,7 +1631,7 @@ export async function applyCommand(
         403,
       );
       ensure(
-        o.answer.trim() &&
+        hasOpinionAnswer(o) &&
           String(o.answerRevision ?? o.answeredAt ?? "legacy") === p.replyKey,
         "새 답변이 있습니다. 내용을 다시 확인하세요",
         409,
@@ -1649,8 +1650,53 @@ export async function applyCommand(
         403,
       );
       const c = s.consultations.find((c) => c.id === o.consultationId);
-      ensure(c && c.status === "H", "확정 상담에는 답변을 추가할 수 없습니다");
-      o.answer = z.string().min(1).max(10000).parse(p.answer);
+      ensure(
+        c && c.status === "H" && !c.cancelled,
+        "보류 상담에만 답변을 추가할 수 있습니다",
+      );
+      const answer = z
+        .string()
+        .trim()
+        .max(10000)
+        .parse(p.answer ?? "");
+      const incoming =
+        p.answerPhotoComments === undefined
+          ? o.answerPhotoComments || []
+          : z
+              .array(
+                z.object({
+                  photoId: z.string().min(1),
+                  text: z.string().trim().min(1).max(10000),
+                }),
+              )
+              .max(50)
+              .parse(p.answerPhotoComments);
+      ensure(
+        new Set(incoming.map((x) => x.photoId)).size === incoming.length,
+        "사진별 코멘트가 중복되었습니다",
+      );
+      const comments = incoming.map((comment) => {
+        const photo = c.photos.find((ph) => ph.id === comment.photoId);
+        const old = o.answerPhotoComments?.find(
+          (x) => x.photoId === comment.photoId,
+        );
+        ensure(
+          photo || old,
+          "이 상담에 없는 사진입니다. 사진 목록을 다시 확인하세요",
+          409,
+        );
+        return {
+          photoId: comment.photoId,
+          photoName: photo?.name || old!.photoName,
+          text: comment.text,
+        };
+      });
+      ensure(
+        answer || comments.length,
+        "전체 의견 또는 사진별 코멘트를 입력하세요",
+      );
+      o.answer = answer;
+      o.answerPhotoComments = comments;
       o.answeredAt = now;
       o.answerRevision = (o.answerRevision || 0) + 1;
       touch(o);

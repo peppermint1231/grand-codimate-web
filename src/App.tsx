@@ -1,4 +1,4 @@
-import { unreadOpinionReply } from "./core/opinions";
+import { unreadOpinionReply, hasOpinionAnswer } from "./core/opinions";
 import { ConsultationOpinions } from "./components/ConsultationOpinions";
 import { OpinionInbox } from "./components/OpinionInbox";
 import {
@@ -1012,8 +1012,9 @@ export function App() {
             <button aria-label="의견 요청 알림" onClick={() => openOpinion()}>
               <Bell size={20} />
               <span>
-                {state.opinions.filter((o) => o.toId === user.id && !o.answer)
-                  .length + unreadReplies.length}
+                {state.opinions.filter(
+                  (o) => o.toId === user.id && !hasOpinionAnswer(o),
+                ).length + unreadReplies.length}
               </span>
             </button>
           </div>
@@ -2148,12 +2149,6 @@ function PatientDetail({
                       <span>{money(c.quote.total)}</span>
                       <ChevronRight size={18} />
                     </button>
-                    <ConsultationOpinions
-                      consultation={c}
-                      state={s}
-                      user={user}
-                      send={send}
-                    />
                   </article>
                 ))
             ) : (
@@ -2813,135 +2808,147 @@ function ConsultationView({
             } as React.CSSProperties
           }
         >
-          <section
-            className={
-              "card photo-panel" +
-              (tab === "consult" ? " consultation-viewer-panel" : "")
-            }
-          >
-            {tab === "photo" ? (
-              <>
-                <div className="section-title">
-                  <h3>
-                    상담 사진 <small>{draft.photos.length}장</small>
-                  </h3>
-                  {native && (
+          <div className="consultation-photo-column">
+            <section
+              className={
+                "card photo-panel" +
+                (tab === "consult" ? " consultation-viewer-panel" : "")
+              }
+            >
+              {tab === "photo" ? (
+                <>
+                  <div className="section-title">
+                    <h3>
+                      상담 사진 <small>{draft.photos.length}장</small>
+                    </h3>
+                    {native && (
+                      <button
+                        disabled={readonly}
+                        onClick={() =>
+                          work(async () => addPhotos([await takePhoto()]))
+                        }
+                      >
+                        <Camera size={18} />
+                        카메라
+                      </button>
+                    )}
+                    <label className="button">
+                      <Camera size={18} />
+                      촬영·추가
+                      <input
+                        hidden
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        disabled={readonly}
+                        onChange={(e) => {
+                          void addPhotos(Array.from(e.target.files || []));
+                          e.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {user.role === "doctor" && (
                     <button
-                      disabled={readonly}
                       onClick={() =>
-                        work(async () => addPhotos([await takePhoto()]))
+                        work(() =>
+                          send(
+                            "consultation.annotate",
+                            { photos: draft.photos },
+                            c.id,
+                            c.rev,
+                          ),
+                        )
                       }
                     >
-                      <Camera size={18} />
-                      카메라
+                      내 주석 저장
                     </button>
                   )}
-                  <label className="button">
-                    <Camera size={18} />
-                    촬영·추가
-                    <input
-                      hidden
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      multiple
-                      disabled={readonly}
-                      onChange={(e) => {
-                        void addPhotos(Array.from(e.target.files || []));
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
+                  {guestPhotos.length > 0 && (
+                    <button
+                      onClick={() => addPhotos(guestPhotos.map((p) => p.file))}
+                    >
+                      로그인 전 촬영한 {guestPhotos.length}장 연결
+                    </button>
+                  )}
+                  {adding && <p role="status">사진 미리보기 준비 중…</p>}
+                  {photoError && (
+                    <p className="error" role="alert">
+                      {photoError}
+                    </p>
+                  )}
+                  {!readonly && (
+                    <button
+                      disabled={!historyPhotos.length}
+                      onClick={() => setHistoryOpen(true)}
+                    >
+                      이전 상담 사진 불러오기 ({historyPhotos.length})
+                    </button>
+                  )}
+                  {historyOpen && (
+                    <Modal
+                      title="이전 상담 사진 · 주석 포함"
+                      close={() => setHistoryOpen(false)}
+                    >
+                      <HistoryPhotoPicker
+                        photos={historyPhotos}
+                        onAdd={(photos) => {
+                          if (draft.photos.length + photos.length > 50) {
+                            setPhotoError(
+                              "상담당 사진은 50장까지 추가할 수 있습니다.",
+                            );
+                            return;
+                          }
+                          setDraft((d) => ({
+                            ...d,
+                            photos: [
+                              ...d.photos,
+                              ...photos.map((p) => ({
+                                ...p,
+                                id: crypto.randomUUID(),
+                                selected: true,
+                                representative: false,
+                              })),
+                            ],
+                          }));
+                          setHistoryOpen(false);
+                        }}
+                      />
+                    </Modal>
+                  )}
+                </>
+              ) : (
+                <div className="section-title">
+                  <h3>상담 사진</h3>
+                  <button onClick={() => setTab("photo")}>
+                    사진 선택·추가
+                  </button>
                 </div>
-                {user.role === "doctor" && (
-                  <button
-                    onClick={() =>
-                      work(() =>
-                        send(
-                          "consultation.annotate",
-                          { photos: draft.photos },
-                          c.id,
-                          c.rev,
-                        ),
-                      )
-                    }
-                  >
-                    내 주석 저장
-                  </button>
-                )}
-                {guestPhotos.length > 0 && (
-                  <button
-                    onClick={() => addPhotos(guestPhotos.map((p) => p.file))}
-                  >
-                    로그인 전 촬영한 {guestPhotos.length}장 연결
-                  </button>
-                )}
-                {adding && <p role="status">사진 미리보기 준비 중…</p>}
-                {photoError && (
-                  <p className="error" role="alert">
-                    {photoError}
-                  </p>
-                )}
-                {!readonly && (
-                  <button
-                    disabled={!historyPhotos.length}
-                    onClick={() => setHistoryOpen(true)}
-                  >
-                    이전 상담 사진 불러오기 ({historyPhotos.length})
-                  </button>
-                )}
-                {historyOpen && (
-                  <Modal
-                    title="이전 상담 사진 · 주석 포함"
-                    close={() => setHistoryOpen(false)}
-                  >
-                    <HistoryPhotoPicker
-                      photos={historyPhotos}
-                      onAdd={(photos) => {
-                        if (draft.photos.length + photos.length > 50) {
-                          setPhotoError(
-                            "상담당 사진은 50장까지 추가할 수 있습니다.",
-                          );
-                          return;
-                        }
-                        setDraft((d) => ({
-                          ...d,
-                          photos: [
-                            ...d.photos,
-                            ...photos.map((p) => ({
-                              ...p,
-                              id: crypto.randomUUID(),
-                              selected: true,
-                              representative: false,
-                            })),
-                          ],
-                        }));
-                        setHistoryOpen(false);
-                      }}
-                    />
-                  </Modal>
-                )}
-              </>
-            ) : (
-              <div className="section-title">
-                <h3>상담 사진</h3>
-                <button onClick={() => setTab("photo")}>사진 선택·추가</button>
-              </div>
+              )}
+              <PhotoBoard
+                viewer={tab === "consult"}
+                photos={draft.photos}
+                columns={draft.photoColumns || 2}
+                userId={user.id}
+                readonly={readonly}
+                canAnnotate={!readonly || user.role === "doctor"}
+                admin={isAdministrator(user)}
+                onChange={(photos) => setDraft((d) => ({ ...d, photos }))}
+                onColumns={(photoColumns) =>
+                  setDraft((d) => ({ ...d, photoColumns }))
+                }
+              />
+            </section>
+            {tab === "consult" && (
+              <ConsultationOpinions
+                consultation={draft}
+                state={s}
+                user={user}
+                send={send}
+              />
             )}
-            <PhotoBoard
-              viewer={tab === "consult"}
-              photos={draft.photos}
-              columns={draft.photoColumns || 2}
-              userId={user.id}
-              readonly={readonly}
-              canAnnotate={!readonly || user.role === "doctor"}
-              admin={isAdministrator(user)}
-              onChange={(photos) => setDraft((d) => ({ ...d, photos }))}
-              onColumns={(photoColumns) =>
-                setDraft((d) => ({ ...d, photoColumns }))
-              }
-            />
-          </section>
+          </div>
           {tab === "consult" && c.kind !== "interim" && (
             <div
               className="split-handle"

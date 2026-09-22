@@ -1,6 +1,20 @@
 # 코디메이트 개발 인계
 
+## 2026-09-23 상담 사진별 의사 코멘트 — 0.10.4
+
+[사용 안내](RELEASE-0.10.4.md). `ConsultationOpinions`는 상담이력 목록에서 제거하고 상담탭의 사진 패널 바로 아래로 이동했습니다. `consultation-photo-column`으로 사진 뷰어와 의견을 묶되 의견은 고정 높이 뷰어 밖에 두어 펼친 내용이 잘리지 않습니다. `draft.photos`를 전달해 로컬 재배치/선택 변경 때 번호도 즉시 갱신합니다.
+
+`Opinion.answerPhotoComments`는 `{photoId, photoName, text}[]`입니다. 서버는 같은 상담의 사진 ID와 코멘트 중복/빈 내용/길이·기존 권한과 rev를 검사하며 이름은 서버 사진에서 채웁니다. 삭제된 사진의 기존 코멘트는 원래 이름을 보존하고, 구버전 클라이언트가 필드를 생략해도 기존 코멘트를 유지합니다. 명시적인 빈 배열로만 제거합니다. `hasOpinionAnswer`를 알림·대기 목록·읽음·접힌 본문에서 공유해 사진 코멘트만 있는 답변도 빠지지 않습니다.
+
+`opinionPhotoLabel`은 선택된 사진 순서(비교 뷰어 숫자와 동일)에서 번호를 계산하며, 제외/삭제 시 오인할 숫자를 부여하지 않습니다. `OpinionBody`/`OpinionPhotoLink`는 의견함과 상담상세에서 같은 표시와 사진 확대를 사용합니다. PDF도 `opinionAnswerText`를 통해 현재 번호/코멘트를 포함합니다. 사진 주석 저장 후에도 일반 의견과 사진 코멘트 초안을 유지합니다.
+
+188개 자동 테스트와 `artifacts/photo-comments-browser0104.json`, `artifacts/opinions-regression0104.json`에 기록한 합성 UI 검증 통과. 운영·APK·배포 검증은 `artifacts/deployment-0.10.4.json`에 기록합니다. 운영 의사 답변/읽음/상담 자료는 검증 목적으로 쓰지 않습니다.
+
 ## 2026-09-22 의사 답변 알림·공유 이력·메모 저장 — 0.10.3
+
+운영 완료: 웹 `e9eac2bbe65fcfae13c5fd6decf1f943c8c7a765` GitHub 검사·Cloudflare 배포 성공. 184개 자동 테스트, 합성 자료의 답변 도착/계정별 읽음/수정 재알림/상담 초안 유지/메모 저장/타 직원 열람 및 기존 사진 주석 회귀 검증 통과. 최종 운영 화면에서 알림 분류·상담 링크·저장된 메모/버튼·의사 의견 기본 접힘/답변 없음 생략·모바일 가로 넘침 없음을 확인했습니다. 운영 쓰기 0건, 검증 전후 전체 State 보존, 미전송 0건입니다.
+
+APK 0.10.3/versionCode 29 기존 서명 유지, 내장/운영 파일 46개 및 공개 APK 다운로드 SHA-256 `12950c4007f49d6346cd47c3bb5ca7346d320c06b5b11edac220fb53e4461fc0` 일치. 기록 `artifacts/deployment-0.10.3.json`, `artifacts/replies-production0103.json`. 최종 점검에 사용한 로컬 Vite/Wrangler/Gradle 작업은 종료했습니다.
 
 [사용 안내](RELEASE-0.10.3.md). 답변의 `answerRevision`과 계정별 `answerReadBy`로 요청자/상담 담당자의 읽음을 구분합니다. 기존 답변은 answeredAt/legacy 식별자로 호환합니다. `opinion.read`는 자신에게 온 현재 답변 키만 확인하며 내용 rev를 올리지 않아 의사 작성 중 불필요한 충돌을 만들지 않습니다. 사진 주석 변경은 새 답변 알림을 발생시키지 않습니다. 기존 SQL/OneDrive 변경 비교는 JSON 값 기준이라 읽음 변경도 정상 저장합니다.
 
@@ -8,7 +22,7 @@
 
 0.10.2 운영 검증에서 여러 대표사진과 긴 금액의 모바일 상담이력 가로 넘침을 발견해 0.10.3에서 좁은 화면의 제목/상태/금액과 사진을 두 줄로 배치했습니다. grid 카드의 최소 폭도 컨테이너를 따르게 했습니다.
 
-184개 자동 테스트 및 경량 API의 인증/저장 상태 일치 검증 통과. `artifacts/replies-browser0102.json`과 `artifacts/opinions-regression0102.json`에 합성 자료 UI 검증을 기록합니다. 운영 검증과 APK/자산 결과는 배포 완료 후 `artifacts/deployment-0.10.3.json`에 기록합니다. 운영 실자료 읽음·상담 저장 등 쓰기는 검증에서 수행하지 않습니다.
+184개 자동 테스트 및 경량 API의 인증/저장 상태 일치 검증 통과. `artifacts/replies-browser0102.json`과 `artifacts/opinions-regression0102.json`에 합성 자료 UI 검증을 기록합니다. 운영 검증과 APK/자산 결과는 `artifacts/deployment-0.10.3.json`에 기록했습니다. 운영 실자료 읽음·상담 저장 등 쓰기는 검증에서 수행하지 않습니다.
 
 ## 2026-09-22 상품 관리·취소·의견 요청 사진 — 0.10.1
 

@@ -1,4 +1,10 @@
-import { opinionReplyKey, unreadOpinionReply } from "../src/core/opinions";
+import {
+  opinionReplyKey,
+  unreadOpinionReply,
+  hasOpinionAnswer,
+  opinionPhotoLabel,
+  opinionAnswerText,
+} from "../src/core/opinions";
 import { expect, it } from "vitest";
 import { applyCommand } from "../src/core/domain";
 import {
@@ -173,4 +179,93 @@ it("cannot acknowledge an unanswered request", async () => {
   await expect(
     applyCommand(setup(), requester, read("legacy")),
   ).rejects.toMatchObject({ status: 409 });
+});
+
+const photoAnswer = (
+  rev: number,
+  photoId = "photo",
+  text = "이 부분을 확인하세요",
+): Command => ({
+  ...answer(rev, ""),
+  payload: {
+    answer: "",
+    answerPhotoComments: [{ photoId, text, photoName: "위조된 이름" }],
+  },
+});
+it("saves photo-only replies using the consultation photo ID/name and includes them in unread/read handling", async () => {
+  const initial = setup();
+  const s = await applyCommand(initial, doctor, photoAnswer(1));
+  expect(s.opinions[0].answer).toBe("");
+  expect(s.opinions[0].answerPhotoComments).toEqual([
+    { photoId: "photo", photoName: "검증 사진", text: "이 부분을 확인하세요" },
+  ]);
+  expect(hasOpinionAnswer(s.opinions[0])).toBe(true);
+  expect(unreadOpinionReply(s.opinions[0], owner.id, s.consultations)).toBe(
+    true,
+  );
+  const next = await applyCommand(
+    s,
+    owner,
+    read(opinionReplyKey(s.opinions[0])),
+  );
+  expect(
+    unreadOpinionReply(next.opinions[0], owner.id, next.consultations),
+  ).toBe(false);
+  expect(s.consultations).toEqual(initial.consultations);
+});
+it("derives photo numbers from selected-photo order, including exclusions and deletion, without retargeting the saved comment", async () => {
+  const s = await applyCommand(setup(), doctor, photoAnswer(1));
+  const original = s.consultations[0].photos[0],
+    another = { ...original, id: "another", name: "다른 사진" };
+  expect(opinionPhotoLabel([original, another], "photo")).toBe("1번 사진");
+  expect(opinionPhotoLabel([another, original], "photo")).toBe("2번 사진");
+  expect(opinionAnswerText(s.opinions[0], [another, original])).toContain(
+    "2번 사진 · 검증 사진\n이 부분을 확인하세요",
+  );
+  expect(
+    opinionPhotoLabel([another, { ...original, selected: false }], "photo"),
+  ).toBe("비교 제외 사진");
+  expect(opinionAnswerText(s.opinions[0], [another])).toContain(
+    "삭제된 사진 · 검증 사진",
+  );
+  expect(s.opinions[0].answerPhotoComments![0].photoId).toBe("photo");
+});
+it("rejects foreign/missing photos, duplicate references, blank photo text and an empty reply", async () => {
+  const s = setup();
+  for (const cmd of [
+    photoAnswer(1, "foreign-photo"),
+    photoAnswer(1, "photo", " "),
+    answer(1, " "),
+    {
+      ...photoAnswer(1),
+      payload: {
+        answer: "전체 의견",
+        answerPhotoComments: [
+          { photoId: "photo", text: "A" },
+          { photoId: "photo", text: "B" },
+        ],
+      },
+    },
+  ])
+    await expect(applyCommand(s, doctor, cmd)).rejects.toThrow();
+  await expect(applyCommand(s, owner, photoAnswer(1))).rejects.toMatchObject({
+    status: 403,
+  });
+  await expect(applyCommand(s, doctor, photoAnswer(0))).rejects.toMatchObject({
+    status: 409,
+  });
+});
+it("preserves previously linked comments if a photo is removed, and preserves them when an older client omits the field", async () => {
+  const s = await applyCommand(setup(), doctor, photoAnswer(1));
+  s.consultations[0].photos = [];
+  const next = await applyCommand(s, doctor, answer(2, "전체 의견 수정"));
+  expect(next.opinions[0].answerPhotoComments).toEqual(
+    s.opinions[0].answerPhotoComments,
+  );
+  expect(opinionAnswerText(next.opinions[0], [])).toContain("삭제된 사진");
+  const cleared = await applyCommand(next, doctor, {
+    ...answer(3),
+    payload: { answer: "전체 의견", answerPhotoComments: [] },
+  });
+  expect(cleared.opinions[0].answerPhotoComments).toEqual([]);
 });

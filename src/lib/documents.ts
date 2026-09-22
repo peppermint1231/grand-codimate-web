@@ -1,3 +1,4 @@
+import { opinionAnswerText } from "../core/opinions";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import {
@@ -85,7 +86,9 @@ export async function consultationPDF(
   write(`할인·조정 사유: ${c.quote.reason || "없음"}`);
   write(`상담 메모\n${c.memo || "없음"}`);
   for (const o of opinions)
-    write(`의사 의견 요청: ${o.request}\n답변: ${o.answer || "답변 대기"}`);
+    write(
+      `의사 의견 요청: ${o.request}\n답변: ${opinionAnswerText(o, c.photos) || "답변 대기"}`,
+    );
   for (const s of signatures) {
     page = pdf.addPage([595, 842]);
     y = 795;

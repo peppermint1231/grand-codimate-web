@@ -436,3 +436,26 @@ export function dependentLinks(c: Catalog, id: string) {
     (f) => f.linkTo && ids.has(f.linkTo) && !ids.has(f.id),
   );
 }
+
+// Physical siblings define ordering; linked virtual children must be edited at source.
+export function folderArrowTarget(
+  c: Catalog,
+  id: string,
+  direction: "up" | "down" | "out" | "in",
+) {
+  const nodes = catalogNodes(c),
+    node = nodes.find((f) => f.id === id);
+  if (!node) return;
+  const siblings = nodes.filter((f) => f.parentId === node.parentId),
+    index = siblings.findIndex((f) => f.id === id);
+  const previous = siblings[index - 1],
+    next = siblings[index + 1];
+  if (direction === "up" && previous)
+    return { parentId: node.parentId, beforeId: previous.id };
+  if (direction === "down" && next)
+    return { parentId: node.parentId, afterId: next.id };
+  if (direction === "in" && previous) return { parentId: previous.id };
+  const parent = nodes.find((f) => f.id === node.parentId);
+  if (direction === "out" && parent)
+    return { parentId: parent.parentId, afterId: parent.id };
+}

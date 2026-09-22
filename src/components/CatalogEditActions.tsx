@@ -1,3 +1,4 @@
+import { CatalogShortcutHelp } from "./CatalogShortcutHelp";
 import { Undo2, Redo2 } from "lucide-react";
 export function CatalogEditActions({
   actions,
@@ -33,7 +34,7 @@ export function CatalogEditActions({
         <Redo2 size={16} />
         다시 실행
       </button>
-      <small>Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z / Ctrl+Y</small>
+      <CatalogShortcutHelp />
     </div>
   );
 }

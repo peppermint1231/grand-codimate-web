@@ -1,3 +1,4 @@
+import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
 import { ChevronRight, GripVertical } from "lucide-react";
 import { money, type Catalog, type Product } from "../core/model";
@@ -65,30 +66,14 @@ export function CatalogProductRows({
       products: catalog.products.map((p) => (p.id === next.id ? next : p)),
     });
   return (
-    <div
-      className="catalog-product-rows"
-      role="region"
-      aria-label="상품 목록"
-      onKeyDown={(e) => {
-        if (
-          (editable || folderEditing) &&
-          (e.ctrlKey || e.metaKey) &&
-          e.key.toLowerCase() === "a" &&
-          !(e.target as HTMLElement).matches(
-            'input:not([type="checkbox"]), textarea, select, [contenteditable="true"]',
-          )
-        ) {
-          e.preventDefault();
-          onSelection(products.map((p) => p.id));
-        }
-      }}
-    >
+    <div className="catalog-product-rows" role="region" aria-label="상품 목록">
       <div className="product-list-heading">
         <h3>
           상품 목록 <small>{products.length}개</small>
         </h3>
         <div className="catalog-fold-controls">
           <button
+            {...catalogCommand("collapse")}
             type="button"
             onClick={() => {
               setAllClosed(true);
@@ -98,6 +83,7 @@ export function CatalogProductRows({
             모두 접기
           </button>
           <button
+            {...catalogCommand("expand")}
             type="button"
             onClick={() => {
               setAllClosed(false);
@@ -112,11 +98,16 @@ export function CatalogProductRows({
         <div className="button-row">
           <button
             type="button"
+            {...catalogCommand("selectAll")}
             onClick={() => onSelection(products.map((p) => p.id))}
           >
             현재 목록 선택
           </button>
-          <button type="button" onClick={() => onSelection([])}>
+          <button
+            {...catalogCommand("selectNone")}
+            type="button"
+            onClick={() => onSelection([])}
+          >
             선택 해제
           </button>
           <span>

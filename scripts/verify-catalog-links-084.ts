@@ -75,13 +75,16 @@ try {
     rows = page.getByRole("region", { name: "상품 목록" });
   const choose = (id: string) =>
     folders.locator(`[data-folder-target="${id}"]`).click();
-  await page.getByText("단축키 안내", { exact: true }).click();
-  await expect(page.locator(".catalog-shortcuts")).toContainText(
-    "링크 붙여넣기",
-  );
   await folders
     .getByRole("button", { name: "폴더 목록 수정", exact: true })
     .click();
+  await folders
+    .getByRole("button", { name: "단축키 안내", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "단가표 편집 단축키" }),
+  ).toContainText("링크 붙여넣기");
+  await page.keyboard.press("Escape");
   await folders
     .getByRole("button", { name: "모두 펼치기", exact: true })
     .click();

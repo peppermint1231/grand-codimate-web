@@ -3341,15 +3341,69 @@ details p {
   border-radius: 8px;
   margin: 10px 0;
 }
-.catalog-shortcuts {
-  margin: 12px 0 18px;
-  font-size: 13px;
-  color: var(--muted);
+.catalog-edit-actions .catalog-help-badge {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: #b9d6d0;
+  background: #eaf4f1;
+  color: #155e59;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
 }
-.catalog-shortcuts summary {
-  cursor: pointer;
-  color: #315d60;
+.catalog-help-overlay {
+  z-index: 2000;
 }
-.catalog-shortcuts p {
-  margin: 8px 0;
+.catalog-shortcuts-dialog {
+  width: min(760px, 94vw);
+  max-height: 85dvh;
+  overflow-y: auto;
+}
+.catalog-shortcuts-dialog > .section-title {
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 1;
+}
+.catalog-shortcut-group h3 {
+  margin: 20px 0 8px;
+  color: #155e59;
+}
+.catalog-shortcut-group dl {
+  margin: 0;
+}
+.catalog-shortcut-group dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf1f0;
+}
+.catalog-shortcut-group dt {
+  flex: 1;
+}
+.catalog-shortcut-group dd {
+  margin: 0;
+  text-align: right;
+}
+.catalog-shortcut-group kbd {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  color: #315d57;
+}
+.folder-arrow-actions button {
+  padding: 8px 12px;
+}
+@media (max-width: 600px) {
+  .catalog-shortcut-group dl > div {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .catalog-shortcut-group dd {
+    text-align: left;
+  }
 }

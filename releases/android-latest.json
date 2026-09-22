@@ -1,7 +1,7 @@
 {
-  "version": "0.8.4",
-  "versionCode": 18,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.4.apk",
-  "sha256": "bd6447737117a1b41c9fbaaa143f70733e91cce44c31e1e8ad35559ebbb13c58",
-  "notes": "공유 폴더 링크 · 원본 이동과 자동 동기화 · 단가표 편집 단축키"
+  "version": "0.8.5",
+  "versionCode": 19,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.5.apk",
+  "sha256": "65a80d071de1d5fca197cca3fc1a6b6f706b69e5e9a3e684592e409b89202b65",
+  "notes": "폴더 상하위·순서 이동 단축키 · 편집 기능 단축키 확장 · ? 안내 배지"
 }

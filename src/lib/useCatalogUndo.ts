@@ -78,7 +78,7 @@ export function useCatalogUndo(
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (
         document.querySelector(
-          "[data-catalog-history-dialog], .folder-inline-edit, .folder-decision",
+          "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], .folder-inline-edit, .folder-decision",
         ) ||
         target?.closest(".folder-inline-edit")
       )
@@ -91,7 +91,9 @@ export function useCatalogUndo(
         )
       )
         return;
-      const k = e.key.toLowerCase();
+      const k = e.code.startsWith("Key")
+        ? e.code.slice(3).toLowerCase()
+        : e.key.toLowerCase();
       if (k !== "z" && k !== "y") return;
       e.preventDefault();
       step(k === "y" || e.shiftKey);

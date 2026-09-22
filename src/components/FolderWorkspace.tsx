@@ -1,5 +1,10 @@
+import { catalogCommand } from "../lib/catalogShortcuts";
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
   ChevronRight,
   GripVertical,
   Plus,
@@ -12,6 +17,7 @@ import {
 } from "lucide-react";
 import type { Catalog } from "../core/model";
 import {
+  folderArrowTarget,
   catalogNodes,
   displayFolderNodes,
   sourceFolderId,
@@ -118,6 +124,11 @@ export function FolderWorkspace({
       onSelect("");
     if (renaming && !catalogNodes(next).some((f) => f.id === renaming))
       setRenaming("");
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(`[data-folder-target="${renaming}"]`)
+        ?.focus(),
+    );
   };
   const rename = () => {
     apply(renameFolder(catalog, renaming, name, color));
@@ -141,7 +152,18 @@ export function FolderWorkspace({
         }),
       );
       setCollision(undefined);
-      setExpanded((x) => [...x, parentId]);
+      setExpanded((x) => [
+        ...x,
+        ...folderPath(catalog, parentId).map((f) => f.id),
+      ]);
+      if (!copy)
+        requestAnimationFrame(() => {
+          const button = document.querySelector<HTMLElement>(
+            `[data-folder-target="${id}"]`,
+          );
+          button?.focus({ preventScroll: true });
+          button?.scrollIntoView({ block: "nearest" });
+        });
     } catch (e) {
       if (e instanceof FolderCollision)
         setCollision({
@@ -287,6 +309,7 @@ export function FolderWorkspace({
                     maxLength={60}
                     onChange={(e) => setName(e.target.value)}
                     onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return;
                       if (e.key === "Enter") {
                         e.preventDefault();
                         work(async () => rename());
@@ -360,6 +383,9 @@ export function FolderWorkspace({
               )}
               {(f.linkTo || f.virtual) && (
                 <button
+                  {...(selected === f.id
+                    ? catalogCommand("folderOriginal")
+                    : {})}
                   className="folder-link-icon"
                   title="원본 폴더로 이동"
                   aria-label={f.name + " 원본 폴더로 이동"}
@@ -378,8 +404,22 @@ export function FolderWorkspace({
     <aside
       className="card catalog-folders"
       aria-label="고민별 폴더 목록"
+      data-catalog-scope="folders"
       onKeyDown={(e) => {
         const target = e.target as HTMLElement;
+        if (
+          editing &&
+          e.key === "Escape" &&
+          !e.altKey &&
+          !e.nativeEvent.isComposing
+        ) {
+          if (collision || deleting) {
+            e.preventDefault();
+            setCollision(undefined);
+            setDeleting("");
+            return;
+          }
+        }
         if (
           !editing ||
           renaming ||
@@ -387,13 +427,23 @@ export function FolderWorkspace({
           deleting ||
           e.isDefaultPrevented() ||
           e.nativeEvent.isComposing ||
-          target.matches('input, textarea, select, [contenteditable="true"]')
+          e.repeat ||
+          document.querySelector(
+            "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], [data-catalog-product-editor]",
+          ) ||
+          target.closest(
+            'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+          )
         )
           return;
         const mod = e.ctrlKey || e.metaKey,
-          key = e.key.toLowerCase();
+          key = e.code.startsWith("Key")
+            ? e.code.slice(3).toLowerCase()
+            : e.key.toLowerCase();
         if (
           mod &&
+          !e.altKey &&
+          !e.shiftKey &&
           (key === "c" || key === "x") &&
           selected &&
           !selectedNode?.virtual
@@ -409,6 +459,7 @@ export function FolderWorkspace({
           );
         } else if (
           mod &&
+          !e.shiftKey &&
           key === "v" &&
           clipboard.current?.catalogId === catalog.id
         ) {
@@ -427,6 +478,9 @@ export function FolderWorkspace({
           });
         } else if (
           key === "f2" &&
+          !mod &&
+          !e.altKey &&
+          !e.shiftKey &&
           selected &&
           !selectedNode?.virtual &&
           !selectedNode?.linkTo
@@ -435,7 +489,14 @@ export function FolderWorkspace({
           setRenaming(selected);
           setName(selectedNode!.name);
           setColor(selectedNode!.color || "#155e59");
-        } else if (key === "delete" && selected && !selectedNode?.virtual) {
+        } else if (
+          key === "delete" &&
+          !mod &&
+          !e.altKey &&
+          !e.shiftKey &&
+          selected &&
+          !selectedNode?.virtual
+        ) {
           e.preventDefault();
           setDeleting(selected);
         }
@@ -451,11 +512,16 @@ export function FolderWorkspace({
         )}
       </div>
       <div className="catalog-fold-controls" aria-label="폴더 펼침 설정">
-        <button type="button" onClick={() => setExpanded([])}>
+        <button
+          {...catalogCommand("collapse")}
+          type="button"
+          onClick={() => setExpanded([])}
+        >
           모두 접기
         </button>
         <button
           type="button"
+          {...catalogCommand("expand")}
           onClick={() => setExpanded(nodes.map((f) => f.id))}
         >
           모두 펼치기
@@ -478,6 +544,7 @@ export function FolderWorkspace({
             폴더 저장
           </button>
           <button
+            {...catalogCommand("folderCancel")}
             onClick={() => {
               if (
                 window.confirm("폴더 수정 내용을 저장하지 않고 취소할까요?")
@@ -502,6 +569,7 @@ export function FolderWorkspace({
         className={
           "folder-root-target " + (drop?.id === "" ? "drop-inside" : "")
         }
+        {...catalogCommand("folderRoot")}
         data-tree-id=""
         onClick={() => onSelect("")}
       >
@@ -526,6 +594,7 @@ export function FolderWorkspace({
           )}
           <div className="button-row">
             <button
+              {...catalogCommand("folderNew")}
               disabled={!!selected && folderPath(catalog, selected).length >= 4}
               onClick={() =>
                 work(async () => {
@@ -574,6 +643,44 @@ export function FolderWorkspace({
               삭제
             </button>
           </div>
+          <div
+            className="button-row folder-arrow-actions"
+            role="group"
+            aria-label="폴더 순서·단계 이동"
+          >
+            {(
+              [
+                ["up", "folderUp", ArrowUp],
+                ["down", "folderDown", ArrowDown],
+                ["out", "folderOut", ArrowLeft],
+                ["in", "folderIn", ArrowRight],
+              ] as const
+            ).map(([direction, command, Icon]) => {
+              const target = folderArrowTarget(catalog, selected, direction);
+              return (
+                <button
+                  key={direction}
+                  {...catalogCommand(command)}
+                  aria-label={catalogCommand(command).title}
+                  disabled={!target}
+                  onClick={() =>
+                    work(async () => {
+                      if (target)
+                        transfer(
+                          selected,
+                          target.parentId,
+                          false,
+                          "beforeId" in target ? target.beforeId : undefined,
+                          "afterId" in target ? target.afterId : undefined,
+                        );
+                    })
+                  }
+                >
+                  <Icon size={16} />
+                </button>
+              );
+            })}
+          </div>
           <p className="small">
             복사한 상품은 비활성·추천기 숨김 상태로 생성됩니다.
           </p>
@@ -597,11 +704,13 @@ export function FolderWorkspace({
           <div className="button-row">
             <button
               disabled={!selected || !!selectedNode?.virtual}
+              {...catalogCommand("folderMove")}
               onClick={() => work(async () => transfer(selected, destination))}
             >
               폴더 이동
             </button>
             <button
+              {...catalogCommand("folderCopy")}
               disabled={!selected || !!selectedNode?.virtual}
               onClick={() =>
                 work(async () => transfer(selected, destination, true))
@@ -611,6 +720,7 @@ export function FolderWorkspace({
               폴더 복사
             </button>
             <button
+              {...catalogCommand("folderLink")}
               disabled={!selected}
               onClick={() =>
                 work(async () => {
@@ -627,6 +737,7 @@ export function FolderWorkspace({
               폴더 링크
             </button>
             <button
+              {...catalogCommand("moveProducts")}
               disabled={!destination || !selectedIds.length}
               onClick={() =>
                 work(async () => {

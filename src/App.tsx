@@ -1,3 +1,4 @@
+import { catalogCommand, dispatchCatalogCommand } from "./lib/catalogShortcuts";
 import { useCatalogUndo } from "./lib/useCatalogUndo";
 import { CatalogEditActions } from "./components/CatalogEditActions";
 import { DiscoveryDesk } from "./components/Discovery";
@@ -3814,17 +3815,31 @@ function CatalogView({
     }
   };
   useEffect(() => {
+    if (!can || (!folderDraft && !editable)) return;
+    window.addEventListener("keydown", dispatchCatalogCommand);
+    return () => window.removeEventListener("keydown", dispatchCatalogCommand);
+  }, [can, !!folderDraft, editable]);
+  useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if (
         !can ||
+        (!folderDraft && !editable) ||
+        e.defaultPrevented ||
+        e.repeat ||
+        e.shiftKey ||
         e.isComposing ||
         !(e.ctrlKey || e.metaKey) ||
-        e.key.toLowerCase() !== "s" ||
+        (e.code !== "KeyS" && e.key.toLowerCase() !== "s") ||
         e.altKey
       )
         return;
       e.preventDefault();
-      if (document.querySelector("[data-catalog-history-dialog]")) return;
+      if (
+        document.querySelector(
+          "[data-catalog-history-dialog], [data-catalog-shortcuts-dialog]",
+        )
+      )
+        return;
       if (document.querySelector(".folder-inline-edit, .folder-decision")) {
         work(async () => {
           throw new Error(
@@ -3846,7 +3861,7 @@ function CatalogView({
     return () => window.removeEventListener("keydown", key);
   });
   return (
-    <>
+    <div data-catalog-editor>
       <Title
         title="단가표 관리"
         description="미용·보험·이벤트별 원본과 게시 버전을 관리합니다. 맞춤 시술 찾기에서도 같은 상품을 사용합니다."
@@ -3925,22 +3940,6 @@ function CatalogView({
           </div>
         }
       />
-      <details className="catalog-shortcuts">
-        <summary>단축키 안내</summary>
-        <p>
-          저장 Ctrl/Cmd+S · 되돌리기 Ctrl/Cmd+Z · 다시 실행 Ctrl/Cmd+Shift+Z
-          또는 Ctrl+Y
-        </p>
-        <p>
-          폴더 목록: 이름 변경 F2 · 복사 Ctrl/Cmd+C · 잘라내기 Ctrl/Cmd+X ·
-          붙여넣기 Ctrl/Cmd+V · 링크 붙여넣기 Ctrl/Cmd+Alt+V · 삭제 Delete
-        </p>
-        <p>
-          복사 후 대상 폴더를 선택해 붙여넣으세요. 상품 목록에서 Ctrl/Cmd+A는
-          현재 표시된 상품을 모두 선택합니다. 입력칸에서는 기본 텍스트 편집
-          단축키가 동작합니다.
-        </p>
-      </details>
       {editable && (
         <div className="catalog-save-bar">
           <span>{book} SSOT 편집 중 · 변경 후 초안을 저장하세요</span>
@@ -4157,7 +4156,7 @@ function CatalogView({
         >
           <span />
         </div>
-        <div className="card">
+        <div className="card" data-catalog-scope="products">
           <div className="table-toolbar">
             <div className="search">
               <Search size={18} />
@@ -4195,6 +4194,8 @@ function CatalogView({
                 </button>
                 <button onClick={() => setBulkIds([])}>선택 해제</button>
                 <button
+                  {...catalogCommand("price")}
+                  disabled={!bulkIds.length}
                   onClick={() => {
                     const raw = window.prompt(
                       "선택 상품 옵션의 가격 조정률 (%) · 예: 5, -10",
@@ -4229,6 +4230,8 @@ function CatalogView({
                   선택 가격 일괄 조정
                 </button>
                 <button
+                  {...catalogCommand("deactivate")}
+                  disabled={!bulkIds.length}
                   onClick={() =>
                     setDraft({
                       ...current,
@@ -4319,6 +4322,7 @@ function CatalogView({
                 placeholder="탭으로 구분된 여러 행"
               />
               <button
+                {...catalogCommand("pasteRows")}
                 onClick={() =>
                   work(async () => {
                     const now = new Date().toISOString();
@@ -4422,21 +4426,21 @@ function CatalogView({
           {current && editable && (
             <div className="button-row">
               <button
+                {...catalogCommand("productNew")}
+                disabled={!catalogNodes(current).length}
                 onClick={() => {
+                  const targetFolder = category || catalogNodes(current)[0]?.id;
+                  if (!targetFolder) return;
                   const now = new Date().toISOString(),
                     p: Product = {
                       id: crypto.randomUUID(),
                       rev: 1,
                       createdAt: now,
                       updatedAt: now,
-                      category: category
-                        ? folderPath(current, category)
-                            .map((x) => x.name)
-                            .join(" / ")
-                        : "새 분류",
-                      folderId: category
-                        ? sourceFolderId(current, category)
-                        : undefined,
+                      category: folderPath(current, targetFolder)
+                        .map((x) => x.name)
+                        .join(" / "),
+                      folderId: sourceFolderId(current, targetFolder),
                       name: "새 상품",
                       description: "",
                       composition: "",
@@ -4460,6 +4464,7 @@ function CatalogView({
                 초안 저장
               </button>
               <button
+                {...catalogCommand("publish")}
                 className="primary"
                 onClick={() =>
                   work(async () => {
@@ -4715,6 +4720,7 @@ function CatalogView({
             {editable && (
               <div className="button-row">
                 <button
+                  {...catalogCommand("optionNew")}
                   onClick={() =>
                     change({
                       ...product,
@@ -4738,6 +4744,7 @@ function CatalogView({
                   옵션 추가
                 </button>
                 <button
+                  {...catalogCommand("productCopy")}
                   onClick={() => {
                     const copy = {
                       ...structuredClone(product),
@@ -4758,7 +4765,11 @@ function CatalogView({
                 >
                   상품 복제
                 </button>
-                <button className="primary" onClick={() => setSelected("")}>
+                <button
+                  {...catalogCommand("productKeep")}
+                  className="primary"
+                  onClick={() => setSelected("")}
+                >
                   편집 내용 유지
                 </button>
               </div>
@@ -4778,7 +4789,7 @@ function CatalogView({
           </div>
         </Modal>
       )}
-    </>
+    </div>
   );
 }
 function Stats({

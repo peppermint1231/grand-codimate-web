@@ -1,7 +1,7 @@
 {
-  "version": "0.10.4",
-  "versionCode": 30,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.4.apk",
-  "sha256": "a4c56cac2c2bf6f89c4ffa7e2a858326bd5003f15047eac15497b9bbded56ca0",
-  "notes": "상담사진 아래 의사 의견·사진별 코멘트 및 배치에 따른 사진 번호 자동 연동"
+  "version": "0.10.5",
+  "versionCode": 31,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.5.apk",
+  "sha256": "2dad5e9863462ba84c730f1216b27343324ec1e98d2625f17c4d9ae70cb085f0",
+  "notes": "사진별 의사 의견 파일명 숨김 및 큰 사진·코멘트 2열 배치"
 }

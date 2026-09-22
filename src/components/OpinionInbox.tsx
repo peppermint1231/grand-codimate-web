@@ -438,37 +438,35 @@ function OpinionAnswer({
             </p>
             {comments.map((comment) => (
               <div className="opinion-photo-comment" key={comment.photoId}>
-                <OpinionPhotoLink
-                  photos={photos}
-                  photoId={comment.photoId}
-                  photoName={comment.photoName}
-                />
-                <textarea
-                  aria-label={`${opinionPhotoLabel(photos, comment.photoId)} 코멘트`}
-                  placeholder="이 사진에 대한 의견을 작성하세요"
-                  value={comment.text}
-                  required
-                  maxLength={10000}
-                  onChange={(e) =>
-                    setComments(
-                      comments.map((c) =>
-                        c.photoId === comment.photoId
-                          ? { ...c, text: e.target.value }
-                          : c,
-                      ),
-                    )
-                  }
-                />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setComments(
-                      comments.filter((c) => c.photoId !== comment.photoId),
-                    )
-                  }
-                >
-                  이 사진 코멘트 삭제
-                </button>
+                <OpinionPhotoLink photos={photos} photoId={comment.photoId} />
+                <div className="opinion-comment-content">
+                  <textarea
+                    aria-label={`${opinionPhotoLabel(photos, comment.photoId)} 코멘트`}
+                    placeholder="이 사진에 대한 의견을 작성하세요"
+                    value={comment.text}
+                    required
+                    maxLength={10000}
+                    onChange={(e) =>
+                      setComments(
+                        comments.map((c) =>
+                          c.photoId === comment.photoId
+                            ? { ...c, text: e.target.value }
+                            : c,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setComments(
+                        comments.filter((c) => c.photoId !== comment.photoId),
+                      )
+                    }
+                  >
+                    이 사진 코멘트 삭제
+                  </button>
+                </div>
               </div>
             ))}
           </div>

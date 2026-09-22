@@ -8,15 +8,13 @@ import { useAppBack } from "../lib/navigation";
 export function OpinionPhotoLink({
   photos,
   photoId,
-  photoName,
 }: {
   photos: Photo[];
   photoId: string;
-  photoName: string;
 }) {
   const [large, setLarge] = useState(false);
   const photo = photos.find((p) => p.id === photoId);
-  const label = `${opinionPhotoLabel(photos, photoId)} · ${photo?.name || photoName}`;
+  const label = opinionPhotoLabel(photos, photoId);
   useAppBack(large, () => setLarge(false), 110);
   return (
     <>
@@ -68,12 +66,10 @@ export function OpinionBody({
       )}
       {(opinion.answerPhotoComments || []).map((comment) => (
         <div className="opinion-photo-comment" key={comment.photoId}>
-          <OpinionPhotoLink
-            photos={photos}
-            photoId={comment.photoId}
-            photoName={comment.photoName}
-          />
-          <p className="opinion-answer-text">{comment.text}</p>
+          <OpinionPhotoLink photos={photos} photoId={comment.photoId} />
+          <div className="opinion-comment-content">
+            <p className="opinion-answer-text">{comment.text}</p>
+          </div>
         </div>
       ))}
     </>

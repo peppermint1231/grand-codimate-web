@@ -1,7 +1,7 @@
 {
-  "version": "0.10.2",
-  "versionCode": 28,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.2.apk",
-  "sha256": "3d8c0cabcc8fe8cc71d0c12e25b95bc56ab3eed6dcd811087f78ef79848002cd",
-  "notes": "의사 답변 도착·읽음 알림, 상담이력 의사 의견 펼치기, 상담메모 저장 버튼"
+  "version": "0.10.3",
+  "versionCode": 29,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.3.apk",
+  "sha256": "12950c4007f49d6346cd47c3bb5ca7346d320c06b5b11edac220fb53e4461fc0",
+  "notes": "의사 답변 알림·공유 상담이력·상담메모 저장 및 모바일 상담이력 보완"
 }

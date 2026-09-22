@@ -1,12 +1,14 @@
 # 코디메이트 개발 인계
 
-## 2026-09-22 의사 답변 알림·공유 이력·메모 저장 — 0.10.2
+## 2026-09-22 의사 답변 알림·공유 이력·메모 저장 — 0.10.3
 
-[사용 안내](RELEASE-0.10.2.md). 답변의 `answerRevision`과 계정별 `answerReadBy`로 요청자/상담 담당자의 읽음을 구분합니다. 기존 답변은 answeredAt/legacy 식별자로 호환합니다. `opinion.read`는 자신에게 온 현재 답변 키만 확인하며 내용 rev를 올리지 않아 의사 작성 중 불필요한 충돌을 만들지 않습니다. 사진 주석 변경은 새 답변 알림을 발생시키지 않습니다. 기존 SQL/OneDrive 변경 비교는 JSON 값 기준이라 읽음 변경도 정상 저장합니다.
+[사용 안내](RELEASE-0.10.3.md). 답변의 `answerRevision`과 계정별 `answerReadBy`로 요청자/상담 담당자의 읽음을 구분합니다. 기존 답변은 answeredAt/legacy 식별자로 호환합니다. `opinion.read`는 자신에게 온 현재 답변 키만 확인하며 내용 rev를 올리지 않아 의사 작성 중 불필요한 충돌을 만들지 않습니다. 사진 주석 변경은 새 답변 알림을 발생시키지 않습니다. 기존 SQL/OneDrive 변경 비교는 JSON 값 기준이라 읽음 변경도 정상 저장합니다.
 
 인증된 `/api/opinions`는 opinions 테이블만 복호화해 반환하며 전체 SSOT State를 로드하지 않습니다. 화면 활성/온라인/대기열 없음일 때 15초 간격 및 visibilitychange로 조회합니다. 읽음 저장도 의견 상태만 갱신해 상담 폼을 다시 만들지 않습니다. `ConsultationOpinions`는 상담이력 사진 행 아래에 기본 접힌 답변을 표시하며 다른 직원도 열람 가능합니다. 답변이 없으면 생략합니다. 메모 버튼은 기존 consultation.save에 연결하고 함께 저장되는 범위를 안내합니다.
 
-184개 자동 테스트 및 경량 API의 인증/저장 상태 일치 검증 통과. `artifacts/replies-browser0102.json`과 `artifacts/opinions-regression0102.json`에 합성 자료 UI 검증을 기록합니다. 운영 검증과 APK/자산 결과는 배포 완료 후 `artifacts/deployment-0.10.2.json`에 기록합니다. 운영 실자료 읽음·상담 저장 등 쓰기는 검증에서 수행하지 않습니다.
+0.10.2 운영 검증에서 여러 대표사진과 긴 금액의 모바일 상담이력 가로 넘침을 발견해 0.10.3에서 좁은 화면의 제목/상태/금액과 사진을 두 줄로 배치했습니다. grid 카드의 최소 폭도 컨테이너를 따르게 했습니다.
+
+184개 자동 테스트 및 경량 API의 인증/저장 상태 일치 검증 통과. `artifacts/replies-browser0102.json`과 `artifacts/opinions-regression0102.json`에 합성 자료 UI 검증을 기록합니다. 운영 검증과 APK/자산 결과는 배포 완료 후 `artifacts/deployment-0.10.3.json`에 기록합니다. 운영 실자료 읽음·상담 저장 등 쓰기는 검증에서 수행하지 않습니다.
 
 ## 2026-09-22 상품 관리·취소·의견 요청 사진 — 0.10.1
 

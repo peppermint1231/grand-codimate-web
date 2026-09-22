@@ -1,4 +1,4 @@
-import { EventSourceInfo } from "./EventCatalog";
+import { EventSourceInfo, WebsiteSourceInfo } from "./EventCatalog";
 import { websiteFolderPresence } from "../core/websitePresence";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
@@ -277,6 +277,7 @@ export function CatalogProductRows({
                   </label>
                 )}
               </div>
+              <WebsiteSourceInfo product={p} />
               {p.webEvent && (
                 <EventSourceInfo
                   info={p.webEvent}

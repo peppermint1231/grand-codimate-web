@@ -526,7 +526,7 @@ export function FolderWorkspace({
           </button>
         )}
       </div>
-      {catalog.book === "이벤트" && (
+      {catalog.book !== "보험" && (
         <div
           className="website-presence-legend"
           aria-label="홈페이지 게시 상태 색상 안내"

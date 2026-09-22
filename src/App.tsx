@@ -1,6 +1,8 @@
+import { workingCatalog } from "./core/websiteCatalog";
 import {
   EventCatalogRefresh,
   EventSourceInfo,
+  WebsiteSourceInfo,
 } from "./components/EventCatalog";
 import { eventAvailability } from "./core/eventCatalog";
 import {
@@ -4010,25 +4012,33 @@ function CatalogView({
           </button>
         ))}
       </div>
-      {book === "이벤트" && can && (
+      {book !== "보험" && can && (
         <EventCatalogRefresh
-          catalog={current}
-          beauty={latestCatalog(s, "미용")}
+          catalog={workingCatalog(s, "이벤트")}
+          beauty={workingCatalog(s, "미용")}
+          bases={{
+            beauty: {
+              id: workingCatalog(s, "미용")?.id || "",
+              rev: workingCatalog(s, "미용")?.rev || 0,
+              publishedId: latestCatalog(s, "미용")?.id || "",
+            },
+            event: {
+              id: workingCatalog(s, "이벤트")?.id || "",
+              rev: workingCatalog(s, "이벤트")?.rev || 0,
+              publishedId: latestCatalog(s, "이벤트")?.id || "",
+            },
+          }}
           disabled={unsaved || !!folderDraft}
-          onImport={async (candidate) => {
+          onImport={async (pages, bases) => {
             if (
               await send(
-                "catalog.events.import",
-                {
-                  catalog: candidate,
-                  baseCatalogId: current?.id || "",
-                  baseCatalogRev: current?.rev || 0,
-                  basePublishedId: latest?.id || "",
-                },
-                candidate.id,
+                "catalog.website.import",
+                { pages, bases, complete: true },
+                crypto.randomUUID(),
               )
             ) {
-              setDraft(undefined);
+              edits.reset();
+              setDrafts({});
               setSelected("");
               setBulkIds([]);
               setCategory("");
@@ -4587,6 +4597,7 @@ function CatalogView({
                 </button>
               </div>
             )}
+            <WebsiteSourceInfo product={product} />
             <EventSourceInfo
               info={product.webEvent}
               salePrice={product.options[0]?.price}

@@ -7,13 +7,21 @@ export const websitePresenceStyles = {
   mixed: { color: "#a16207", label: "홈페이지 게시 상태 혼합" },
 };
 export function websiteFolderPresence(catalog: Catalog, folderId: string) {
-  if (catalogBook(catalog) !== "이벤트") return;
+  if (catalogBook(catalog) === "보험") return;
   const products = catalog.products.filter((p) =>
     inFolder(catalog, p, folderId),
   );
   const states = new Set(
-    products.map((p) =>
-      !p.webEvent ? "unknown" : p.webEvent.missing ? "missing" : "current",
+    products.flatMap((p) =>
+      p.websiteListings?.length
+        ? p.websiteListings.map((l) => (l.missing ? "missing" : "current"))
+        : [
+            !p.webEvent
+              ? "unknown"
+              : p.webEvent.missing
+                ? "missing"
+                : "current",
+          ],
     ),
   );
   if (!states.size) return;

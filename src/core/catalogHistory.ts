@@ -65,6 +65,13 @@ export function catalogChanges(
       JSON.stringify(p.webEvent && { ...p.webEvent, checkedAt: "" })
     )
       changes.push(`이벤트 기간·정가·할인율·할인가·포스터 갱신: ${p.name}`);
+    if (
+      JSON.stringify(
+        old.websiteListings?.map(({ checkedAt, ...link }) => link),
+      ) !==
+      JSON.stringify(p.websiteListings?.map(({ checkedAt, ...link }) => link))
+    )
+      changes.push(`홈페이지 게시 상태·원문 가격 점검: ${p.name}`);
     if (old.active !== p.active)
       changes.push(`판매 상태: ${p.name} → ${p.active ? "판매 중" : "비활성"}`);
     if (!!old.publicVisible !== !!p.publicVisible)

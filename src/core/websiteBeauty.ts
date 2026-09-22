@@ -31,6 +31,9 @@ export function addMissingWebsiteBeauty(
     for (const o of p.options) known.set(websiteNameKey(p.name + o.label), p);
   }
   const decisions: {
+    pageId: string;
+    offerId: string;
+    optionId?: string;
     id: string;
     name: string;
     status: "existing" | "added";
@@ -45,6 +48,9 @@ export function addMissingWebsiteBeauty(
         base.products.find(
           (p) =>
             p.id === id ||
+            p.websiteListings?.some(
+              (l) => l.pageId === page.id && l.offerId === offer.id,
+            ) ||
             p.sources.some((s) => s.sheet === page.url && s.cell === offer.id),
         ) || known.get(websiteNameKey(offer.name));
       if (
@@ -53,6 +59,20 @@ export function addMissingWebsiteBeauty(
           existing.options.some((o) => o.price === offer.price))
       ) {
         decisions.push({
+          pageId: page.id,
+          offerId: offer.id,
+          optionId:
+            existing.websiteListings?.find(
+              (l) => l.pageId === page.id && l.offerId === offer.id,
+            )?.optionId ||
+            existing.options.find(
+              (o) =>
+                websiteNameKey(existing.name + o.label) ===
+                websiteNameKey(offer.name),
+            )?.id ||
+            (existing.options.length === 1
+              ? existing.options[0].id
+              : undefined),
           id: existing.id,
           name: offer.name,
           status: "existing",
@@ -128,6 +148,9 @@ export function addMissingWebsiteBeauty(
       catalog.products.push(p);
       known.set(websiteNameKey(p.name), p);
       decisions.push({
+        pageId: page.id,
+        offerId: offer.id,
+        optionId: p.options[0].id,
         id,
         name: p.name,
         status: "added",

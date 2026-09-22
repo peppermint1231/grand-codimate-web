@@ -1,4 +1,10 @@
 import {
+  mergeWebsiteCatalogs,
+  websitePagesSchema,
+  websiteListingSchema,
+  workingCatalog,
+} from "./websiteCatalog";
+import {
   eventAvailability,
   isEventBanner,
   safeEventImage,
@@ -375,6 +381,17 @@ export function validateCatalog(c: Catalog, posting = false) {
     "단가표 형식을 확인하세요",
   );
   ensure(!c.book || catalogBooks.includes(c.book), "단가표 구분을 확인하세요");
+  if (c.websiteImport)
+    ensure(
+      catalogBook(c) !== "보험" &&
+        c.websiteImport.sourceUrl === EVENT_LIST_URL &&
+        !Number.isNaN(Date.parse(c.websiteImport.checkedAt)) &&
+        Number.isInteger(c.websiteImport.pageCount) &&
+        c.websiteImport.pageCount > 0 &&
+        Number.isInteger(c.websiteImport.offerCount) &&
+        c.websiteImport.offerCount > 0,
+      "홈페이지 갱신 정보를 확인하세요",
+    );
   if (c.eventImport)
     ensure(
       catalogBook(c) === "이벤트" &&
@@ -411,6 +428,8 @@ export function validateCatalog(c: Catalog, posting = false) {
         (p.publicVisible === undefined || typeof p.publicVisible === "boolean"),
       "상품 설명·구성·출처·사용 여부를 확인하세요",
     );
+    if (p.websiteListings)
+      z.array(websiteListingSchema).max(1000).parse(p.websiteListings);
     if (p.webEvent) {
       const e = p.webEvent;
       ensure(
@@ -576,6 +595,7 @@ export async function applyCommand(
     before: Catalog | undefined,
     after: Catalog,
     action: string,
+    suffix = "",
   ) => {
     if (
       before &&
@@ -585,7 +605,7 @@ export async function applyCommand(
     )
       s.catalogRevisions.push({
         ...base,
-        id: cmd.id + "-before",
+        id: cmd.id + suffix + "-before",
         catalogId: before.id,
         book: catalogBook(before),
         actorId: before.authorId || user.id,
@@ -595,7 +615,7 @@ export async function applyCommand(
       });
     s.catalogRevisions.push({
       ...base,
-      id: cmd.id,
+      id: cmd.id + suffix,
       catalogId: after.id,
       book: catalogBook(after),
       actorId: user.id,
@@ -1273,6 +1293,69 @@ export async function applyCommand(
       touch(x);
       patientId = x.id;
       text = p.gradeId ? "환자 등급 수동 고정" : "환자 등급 자동 산정 복귀";
+      break;
+    }
+    case "catalog.website.import": {
+      need("catalog.edit");
+      ensure(p.complete === true, "홈페이지 전체 조회를 완료한 뒤 저장하세요");
+      const pages = websitePagesSchema.parse(p.pages);
+      const bases = z
+        .object({
+          beauty: z.object({
+            id: z.string(),
+            rev: z.number().int(),
+            publishedId: z.string(),
+          }),
+          event: z.object({
+            id: z.string(),
+            rev: z.number().int(),
+            publishedId: z.string(),
+          }),
+        })
+        .parse(p.bases);
+      const beauty = workingCatalog(s, "미용"),
+        event = workingCatalog(s, "이벤트");
+      for (const [book, source, guard] of [
+        ["미용", beauty, bases.beauty],
+        ["이벤트", event, bases.event],
+      ] as const)
+        ensure(
+          (source?.id || "") === guard.id &&
+            (source?.rev || 0) === guard.rev &&
+            (latestCatalog(s, book)?.id || "") === guard.publishedId,
+          `${book} 단가표가 변경되었습니다. 최신 자료로 다시 갱신하세요`,
+          409,
+        );
+      ensure(beauty, "기준 미용 SSOT가 필요합니다");
+      const result = mergeWebsiteCatalogs(beauty, event, pages, now);
+      const candidates = [result.beauty, result.event];
+      for (const [i, candidate] of candidates.entries()) {
+        Object.assign(candidate, base, {
+          id: cmd.id + (i === 0 ? "-beauty" : "-event"),
+          authorId: user.id,
+        });
+        ensure(
+          !s.catalogs.some((c) => c.id === candidate.id),
+          "이미 저장된 갱신입니다",
+          409,
+        );
+        validateCatalog(candidate);
+      }
+      // Validate both before adding either; the worker persists one command atomically.
+      s.catalogs.push(...candidates);
+      recordCatalog(
+        beauty,
+        result.beauty,
+        "홈페이지 미용·이벤트 통합 갱신",
+        "-beauty",
+      );
+      recordCatalog(
+        event,
+        result.event,
+        "홈페이지 미용·이벤트 통합 갱신",
+        "-event",
+      );
+      text = "홈페이지 미용·이벤트 갱신 초안 저장";
       break;
     }
     case "catalog.events.import":

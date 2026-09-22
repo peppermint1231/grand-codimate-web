@@ -117,11 +117,12 @@ export function mergeWebsiteEvents(
   events: WebsiteEvent[],
   now = new Date().toISOString(),
   beauty?: Catalog,
+  allowEmpty = false,
 ) {
   if (base && base.book !== "이벤트")
     throw new Error("이벤트 SSOT에서만 갱신할 수 있습니다.");
   events = selectWebsiteOffers(events, "이벤트");
-  if (!events.length || !events.some((e) => e.offers.length))
+  if (!allowEmpty && (!events.length || !events.some((e) => e.offers.length)))
     throw new Error(
       "홈페이지에서 상품을 확인하지 못했습니다. 기존 단가표는 유지됩니다.",
     );

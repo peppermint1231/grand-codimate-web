@@ -89,6 +89,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  websiteListings?: WebsiteListing[];
   webEvent?: EventOriginInfo;
   folderId?: string;
   publicVisible?: boolean;
@@ -101,7 +102,29 @@ export interface Product extends Base {
   options: Option[];
   sources: Source[];
 }
+export interface WebsiteListing {
+  pageId: string;
+  offerId: string;
+  optionId?: string;
+  name: string;
+  description: string;
+  url: string;
+  book: "미용" | "이벤트";
+  price: number | null;
+  regularPrice: number | null;
+  tax: Option["tax"];
+  checkedAt: string;
+  missing: boolean;
+  changed: boolean;
+  priceDiffers: boolean;
+}
 export interface Catalog extends Base {
+  websiteImport?: {
+    sourceUrl: string;
+    checkedAt: string;
+    pageCount: number;
+    offerCount: number;
+  };
   eventImport?: {
     sourceUrl: string;
     checkedAt: string;

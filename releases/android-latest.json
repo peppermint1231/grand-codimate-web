@@ -1,7 +1,7 @@
 {
-  "version": "0.9.1",
-  "versionCode": 22,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.9.1.apk",
-  "sha256": "0ece8ee485baf85961c0b3a2f78bf742aa71ae7b9d30a83a57ddd3e2bbda549b",
+  "version": "0.9.2",
+  "versionCode": 23,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.9.2.apk",
+  "sha256": "6caba3f3b5b6d6e963a3563c6af5c3b7926adca54d061021eb089c9379bab7b3",
   "notes": "홈페이지 이벤트 갱신 · 기간·정가·할인율·할인가 · 포스터 링크"
 }

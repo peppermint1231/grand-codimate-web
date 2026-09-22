@@ -4012,7 +4012,6 @@ function CatalogView({
       </div>
       {book === "이벤트" && can && (
         <EventCatalogRefresh
-          key={`${current?.id || "new"}:${current?.rev || 0}`}
           catalog={current}
           disabled={unsaved || !!folderDraft}
           onImport={async (candidate) => {

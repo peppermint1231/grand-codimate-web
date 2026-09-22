@@ -1,3 +1,4 @@
+import { fetchEventSource } from "./eventCatalog";
 import {
   jobRoles,
   permissionLevels,
@@ -417,7 +418,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.9.0",
+        version: "0.9.1",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -756,6 +757,10 @@ export class Clinic extends DurableObject<Env> {
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
         409,
       );
+    if (path === "/api/catalog/event-source" && req.method === "GET") {
+      ensure(allowed(user, "catalog.edit"), "단가표 관리 권한이 필요합니다", 403);
+      return json(await fetchEventSource(url.searchParams));
+    }
     if (path === "/api/inquiries" && req.method === "GET")
       return json({ inquiries: await (await this.inquiryStore()).list() });
     if (path === "/api/inquiries/convert" && req.method === "POST") {

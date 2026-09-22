@@ -1,6 +1,18 @@
 # 코디메이트 개발 인계
 
+## 2026-09-22 홈페이지 이벤트 연동 — 0.9.1
+
+[0.9.1 사용 안내](RELEASE-0.9.1.md). 이벤트 SSOT에 홈페이지 갱신 → 미리보기 → 갱신 초안 저장을 추가했습니다. 사용자 확정 규칙은 **배너명 또는 분류명에 ‘이벤트’가 포함**된 항목만 수집하는 것입니다. 일반 가격표는 제외하고 미용/보험 SSOT는 보존합니다. 2026-09-22 실제 14개 배너·162개 상품 수집/저장/포스터 표시를 로컬에서 검증했습니다.
+
+`server/eventCatalog.ts`는 고정 grand4.co.kr 목록/상세 HTML만 Cheerio slim으로 해석합니다. 임의 URL·리다이렉트·2MB 초과·15초 초과·구조 불일치를 거절하고 이미지 본문은 요청하지 않습니다. Workers fetch는 `redirect: manual`을 사용해야 합니다. 이벤트 상세의 개별 옵션 ID/할인가/정가/할인율/기간/설명/포스터 URL을 분리합니다. `src/lib/eventSync.ts`는 페이지 순회·ID 중복 제거·2개 상세 요청 동시 처리·오류 시 전체 미리보기 중단을 담당합니다.
+
+`Product.webEvent`에 원문 메타데이터를 저장하고 `Catalog.eventImport`에 확인시각/수를 기록합니다. `mergeWebsiteEvents`는 이벤트+상품 ID로 기존 상품을 대조하고 원문이 같으면 개별 검토/설정/배치를 유지합니다. 변경 상품은 비활성 검토 초안, 누락 상품은 비활성으로 보존합니다. 가져온 상품은 고민별 상위 폴더 아래 이벤트 폴더에 배치합니다. `catalog.events.import`는 권한·기준 revision·최신 이벤트 단가표·최신 게시본을 검사하고 새 초안 및 이력을 기존 OneDrive 저장 흐름으로 저장합니다. 상담 신규 선택과 추천기는 서울 기준 이벤트 기간을 검사하며 기존 상담 라인은 보존합니다.
+
+검증 자료: `artifacts/events-browser-091.json`, `artifacts/check-091.log`, `artifacts/build-091.log`, 배포 결과는 `artifacts/deployment-0.9.1.json`. 테스트는 155개이며 원본·정가·할인율 파싱, 범위/미표기 보류, 이벤트 분류 필터, 재갱신·누락·기간·권한·동시 수정·공개 가격·기존 견적 보존을 포함합니다.
+
 ## 2026-09-22 직무·권한등급 분리 — 0.9.0
+
+운영 완료: 웹 커밋 `263bf13528f798c4ffd255c1b92b83d801bff6a0`의 GitHub 검사·Cloudflare 배포 성공. 운영 화면에서 4개 직무·3개 등급, 최신 기본값(관리자 전체 허용 / 임원 통계 차단 / 일반 단가표·통계 차단), 자료별 내보내기 상태 연동을 확인했습니다. 실제 계정 저장 0건·기존 유효권한 및 전체 자료 보존·미전송 0건. 자동 테스트 140개 통과. APK 0.9.0/versionCode 21 기존 서명 인증서·내장 및 운영 웹 자산 46개·공개 다운로드 SHA-256 `ebd4c694f1f1455ec06d2f85154a2496af91347486d0aa8543463b048b244fa3` 일치 확인.
 
 [0.9.0 사용 안내](RELEASE-0.9.0.md). 새 직무는 `doctor/coordinator/esthetician/desk`, `User.permissionLevel`은 `admin/executive/standard`입니다. 이전 `role=admin`은 호환 읽기 전용이며 직무 미지정으로 표시합니다. 세부 기본권한은 관리자 12개 허용, 임원은 `stats.read` 차단, 일반은 `catalog.edit`·`stats.read` 차단입니다. 단가표 CSV/XLSX는 `export`+`catalog.edit`, 통계 XLSX는 `export`+`stats.read`를 UI·서버에서 모두 검사합니다. 모든 등급에서 개별 override를 존중합니다. `isAdministrator`/`canUseExecutiveFeatures`를 API·도메인·UI에서 함께 사용하고, 임원에게는 환자 삭제/복원/병합·동의서 양식·백업/복구만 확대했습니다. 임상 의사 기능은 직무 의사 또는 관리자 등급을 검사합니다.
 

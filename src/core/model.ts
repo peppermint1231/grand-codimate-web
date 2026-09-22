@@ -1,3 +1,4 @@
+import type { EventOriginInfo } from "./eventCatalog";
 export const jobRoles = [
   "doctor",
   "coordinator",
@@ -88,6 +89,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  webEvent?: EventOriginInfo;
   folderId?: string;
   publicVisible?: boolean;
   careCategory?: "미용" | "보험";
@@ -100,6 +102,12 @@ export interface Product extends Base {
   sources: Source[];
 }
 export interface Catalog extends Base {
+  eventImport?: {
+    sourceUrl: string;
+    checkedAt: string;
+    eventCount: number;
+    offerCount: number;
+  };
   book?: CatalogBook;
   folders?: CatalogFolder[];
   folderTree?: CatalogFolder[];

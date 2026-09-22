@@ -1,4 +1,9 @@
 import {
+  EventCatalogRefresh,
+  EventSourceInfo,
+} from "./components/EventCatalog";
+import { eventAvailability } from "./core/eventCatalog";
+import {
   isAdministrator,
   canUseExecutiveFeatures,
   jobRoles,
@@ -2997,6 +3002,11 @@ function ConsultationView({
                     <div className="product" key={p.id}>
                       <b>{p.name}</b>
                       <small>{p.category}</small>
+                      <EventSourceInfo
+                        info={p.webEvent}
+                        salePrice={p.options[0]?.price}
+                        compact
+                      />
                       <details>
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
@@ -3005,7 +3015,12 @@ function ConsultationView({
                       {p.options.map((o) => (
                         <button
                           className="option-row"
-                          disabled={readonly || o.review || o.price === null}
+                          disabled={
+                            readonly ||
+                            o.review ||
+                            o.price === null ||
+                            eventAvailability(p.webEvent) !== "current"
+                          }
                           key={o.id}
                           onClick={() => {
                             const line = {
@@ -3995,6 +4010,34 @@ function CatalogView({
           </button>
         ))}
       </div>
+      {book === "이벤트" && can && (
+        <EventCatalogRefresh
+          key={`${current?.id || "new"}:${current?.rev || 0}`}
+          catalog={current}
+          disabled={unsaved || !!folderDraft}
+          onImport={async (candidate) => {
+            if (
+              await send(
+                "catalog.events.import",
+                {
+                  catalog: candidate,
+                  baseCatalogId: current?.id || "",
+                  baseCatalogRev: current?.rev || 0,
+                  basePublishedId: latest?.id || "",
+                },
+                candidate.id,
+              )
+            ) {
+              setDraft(undefined);
+              setSelected("");
+              setBulkIds([]);
+              setCategory("");
+              return true;
+            }
+            return false;
+          }}
+        />
+      )}
       <div className="card">
         <div className="table-toolbar">
           <select
@@ -4544,6 +4587,10 @@ function CatalogView({
                 </button>
               </div>
             )}
+            <EventSourceInfo
+              info={product.webEvent}
+              salePrice={product.options[0]?.price}
+            />
             <div className="form-grid">
               <Field label="상품명">
                 <input

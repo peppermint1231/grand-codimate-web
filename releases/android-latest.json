@@ -1,7 +1,7 @@
 {
-  "version": "0.9.0",
-  "versionCode": 21,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.9.0.apk",
-  "sha256": "ebd4c694f1f1455ec06d2f85154a2496af91347486d0aa8543463b048b244fa3",
-  "notes": "직무·권한등급 분리 · 임원·일반 기본권한 조정 · 단가표/통계 내보내기 권한 연동"
+  "version": "0.9.1",
+  "versionCode": 22,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.9.1.apk",
+  "sha256": "0ece8ee485baf85961c0b3a2f78bf742aa71ae7b9d30a83a57ddd3e2bbda549b",
+  "notes": "홈페이지 이벤트 갱신 · 기간·정가·할인율·할인가 · 포스터 링크"
 }

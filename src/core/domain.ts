@@ -1,3 +1,10 @@
+import {
+  eventAvailability,
+  isEventBanner,
+  safeEventImage,
+  EVENT_ORIGIN,
+  EVENT_LIST_URL,
+} from "./eventCatalog";
 import { isAdministrator, canUseExecutiveFeatures } from "./model";
 import { catalogChanges } from "./catalogHistory";
 import { folderError } from "./catalogFolders";
@@ -166,6 +173,10 @@ export function renewalQuote(
     ensure(
       product && option,
       `${old.name}: 현재 판매 단가·부가세를 검토·게시한 뒤 연장하세요`,
+    );
+    ensure(
+      eventAvailability(product.webEvent) === "current",
+      `${old.name}: 이벤트 기간이 지난 상품은 연장할 수 없습니다`,
     );
     return {
       ...old,
@@ -364,6 +375,15 @@ export function validateCatalog(c: Catalog, posting = false) {
     "단가표 형식을 확인하세요",
   );
   ensure(!c.book || catalogBooks.includes(c.book), "단가표 구분을 확인하세요");
+  if (c.eventImport)
+    ensure(
+      catalogBook(c) === "이벤트" &&
+        c.eventImport.sourceUrl === EVENT_LIST_URL &&
+        !Number.isNaN(Date.parse(c.eventImport.checkedAt)) &&
+        Number.isInteger(c.eventImport.eventCount) &&
+        Number.isInteger(c.eventImport.offerCount),
+      "이벤트 갱신 정보를 확인하세요",
+    );
   const error = folderError(c);
   ensure(!error, error || "폴더를 확인하세요");
   const ids = new Set<string>();
@@ -391,6 +411,60 @@ export function validateCatalog(c: Catalog, posting = false) {
         (p.publicVisible === undefined || typeof p.publicVisible === "boolean"),
       "상품 설명·구성·출처·사용 여부를 확인하세요",
     );
+    if (p.webEvent) {
+      const e = p.webEvent;
+      ensure(
+        e.provider === "grand4" &&
+          /^\d{1,10}$/.test(e.eventId) &&
+          /^\d{1,10}$/.test(e.offerId),
+        "이벤트 원본 ID를 확인하세요",
+      );
+      ensure(
+        typeof e.url === "string" &&
+          e.url.startsWith(EVENT_ORIGIN + "/clinicPrice/clinicView.php?"),
+        "이벤트 출처 주소를 확인하세요",
+      );
+      ensure(
+        Array.isArray(e.posterUrls) &&
+          e.posterUrls.length <= 30 &&
+          e.posterUrls.every(
+            (u) => typeof u === "string" && safeEventImage(u) === u,
+          ),
+        "이벤트 포스터 링크를 확인하세요",
+      );
+      for (const value of [e.regularPrice, e.salePrice])
+        if (value !== null) amount.parse(value);
+      if (e.discountRate !== null)
+        z.number().min(0).max(100).parse(e.discountRate);
+      for (const date of [e.startsOn, e.endsOn])
+        if (date !== undefined)
+          ensure(
+            /^20\d{2}-\d{2}-\d{2}$/.test(date) &&
+              !Number.isNaN(Date.parse(date)) &&
+              new Date(date).toISOString().slice(0, 10) === date,
+            "이벤트 날짜를 확인하세요",
+          );
+      ensure(
+        !e.startsOn || !e.endsOn || e.startsOn <= e.endsOn,
+        "이벤트 기간을 확인하세요",
+      );
+      ensure(
+        typeof e.eventName === "string" &&
+          (e.categoryName === undefined ||
+            typeof e.categoryName === "string") &&
+          isEventBanner(e.eventName, e.categoryName),
+        "이벤트 배너 또는 이벤트 분류의 상품만 연동할 수 있습니다",
+      );
+      ensure(
+        typeof e.period === "string" &&
+          typeof e.eventName === "string" &&
+          typeof e.priceText === "string" &&
+          typeof e.sourceSignature === "string" &&
+          typeof e.checkedAt === "string" &&
+          !Number.isNaN(Date.parse(e.checkedAt)),
+        "이벤트 원문 정보를 확인하세요",
+      );
+    }
     ensure(Array.isArray(p.options), "옵션이 필요합니다");
     for (const o of p.options) {
       ensure(
@@ -815,6 +889,10 @@ export async function applyCommand(
           product && o && o.price !== null && !o.review,
           "검증·게시된 상품만 담을 수 있습니다",
         );
+        ensure(
+          eventAvailability(product.webEvent, now) === "current",
+          "진행 중인 이벤트 상품만 새로 담을 수 있습니다",
+        );
         return {
           ...l,
           catalogVersion: lineCatalog!.version,
@@ -1178,10 +1256,46 @@ export async function applyCommand(
       text = p.gradeId ? "환자 등급 수동 고정" : "환자 등급 자동 산정 복귀";
       break;
     }
+    case "catalog.events.import":
     case "catalog.save": {
       need("catalog.edit");
       const catalog = p.catalog as unknown as Catalog;
       validateCatalog(catalog);
+      if (cmd.type === "catalog.events.import") {
+        ensure(
+          catalogBook(catalog) === "이벤트" && catalog.eventImport,
+          "이벤트 갱신 자료를 확인하세요",
+        );
+        ensure(
+          p.basePublishedId === (latestCatalog(s, "이벤트")?.id || ""),
+          "다른 기기에서 이벤트 단가표를 게시했습니다. 다시 갱신하세요",
+          409,
+        );
+        const source = s.catalogs.find((c) => c.id === p.baseCatalogId);
+        ensure(
+          p.baseCatalogId
+            ? source &&
+                source.rev === p.baseCatalogRev &&
+                catalogBook(source) === "이벤트"
+            : !s.catalogs.some((c) => catalogBook(c) === "이벤트"),
+          "기준 단가표가 변경되었습니다. 다시 갱신하세요",
+          409,
+        );
+        const newest = s.catalogs
+          .filter((c) => catalogBook(c) === "이벤트")
+          .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))
+          .at(-1);
+        ensure(
+          (newest?.id || "") === (p.baseCatalogId || ""),
+          "최신 이벤트 단가표를 선택하고 다시 갱신하세요",
+          409,
+        );
+        ensure(
+          !s.catalogs.some((c) => c.id === id),
+          "갱신 초안은 새 버전으로 저장해야 합니다",
+          409,
+        );
+      }
       const old = s.catalogs.find((x) => x.id === id);
       if (old) {
         find(s.catalogs);
@@ -1207,12 +1321,20 @@ export async function applyCommand(
         });
       }
       recordCatalog(
-        input.catalogs.find((c) => c.id === id) ||
-          latestCatalog(input, catalogBook(catalog)),
+        input.catalogs.find(
+          (c) =>
+            c.id ===
+            (cmd.type === "catalog.events.import" ? p.baseCatalogId : id),
+        ) || latestCatalog(input, catalogBook(catalog)),
         s.catalogs.find((c) => c.id === id)!,
-        "초안 저장",
+        cmd.type === "catalog.events.import"
+          ? "홈페이지 이벤트 갱신"
+          : "초안 저장",
       );
-      text = "단가표 초안 저장";
+      text =
+        cmd.type === "catalog.events.import"
+          ? "홈페이지 이벤트 갱신 초안 저장"
+          : "단가표 초안 저장";
       break;
     }
     case "catalog.publish": {

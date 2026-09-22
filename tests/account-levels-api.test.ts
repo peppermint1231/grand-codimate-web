@@ -344,3 +344,24 @@ it("enforces the requested default export policy without overrides", async () =>
     }
   }
 });
+it("restricts website event reads to catalog editors and never writes SSOT while fetching previews", async () => {
+  const f = await fixture();
+  const { eventList } = await import("./fixtures/websiteEvents");
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(
+      async () =>
+        new Response(eventList(), { headers: { "Content-Type": "text/html" } }),
+    );
+  const before = (await (await f.request(f.admin, "/state")).json()) as any;
+  expect((await f.request(f.standard, "/catalog/event-source")).status).toBe(
+    403,
+  );
+  expect(fetcher).not.toHaveBeenCalled();
+  const response = await f.request(f.executive, "/catalog/event-source");
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as any).items).toHaveLength(1);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const after = (await (await f.request(f.admin, "/state")).json()) as any;
+  expect(after.state).toEqual(before.state);
+});

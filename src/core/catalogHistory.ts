@@ -60,6 +60,11 @@ export function catalogChanges(
       changes.push(
         `상품 이동: ${p.name} → ${path(after, productFolder(after, p))}`,
       );
+    if (
+      JSON.stringify(old.webEvent && { ...old.webEvent, checkedAt: "" }) !==
+      JSON.stringify(p.webEvent && { ...p.webEvent, checkedAt: "" })
+    )
+      changes.push(`이벤트 기간·정가·할인율·할인가·포스터 갱신: ${p.name}`);
     if (old.active !== p.active)
       changes.push(`판매 상태: ${p.name} → ${p.active ? "판매 중" : "비활성"}`);
     if (!!old.publicVisible !== !!p.publicVisible)

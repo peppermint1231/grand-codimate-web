@@ -1,3 +1,4 @@
+import { EventPrice } from "./EventCatalog";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
@@ -343,6 +344,14 @@ export function Discovery() {
                         .join(" / ")}
                     </small>
                     <h3>{p.name}</h3>
+                    {p.event && (
+                      <div className="event-source-info">
+                        <p className="event-period">
+                          이벤트 기간: {p.event.period || "홈페이지 미표기"}
+                        </p>
+                        <EventPrice {...p.event} />
+                      </div>
+                    )}
                     {p.options.map((o) => {
                       const picked = selected.some(
                         (x) =>

@@ -1,3 +1,4 @@
+import { EventSourceInfo } from "./EventCatalog";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
 import { ChevronRight, GripVertical } from "lucide-react";
@@ -267,6 +268,13 @@ export function CatalogProductRows({
                   </label>
                 )}
               </div>
+              {p.webEvent && (
+                <EventSourceInfo
+                  info={p.webEvent}
+                  salePrice={p.options[0]?.price}
+                  compact
+                />
+              )}
               {isOpen(p.id) && (
                 <div className="catalog-options-visible">
                   {p.options.map((o) => (

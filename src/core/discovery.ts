@@ -1,3 +1,4 @@
+import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
 import { z } from "zod";
 import {
   latestCatalogs,
@@ -21,6 +22,10 @@ export interface PublicOption {
   tax: string;
 }
 export interface PublicProduct {
+  event?: Pick<
+    EventOriginInfo,
+    "period" | "regularPrice" | "discountRate" | "salePrice"
+  >;
   id: string;
   name: string;
   book: CatalogBook;
@@ -60,10 +65,27 @@ export interface Inquiry {
 export function publicProducts(state: State): PublicProduct[] {
   return latestCatalogs(state).flatMap((c) =>
     c.products
-      .filter((p) => p.publicVisible)
+      .filter(
+        (p) => p.publicVisible && eventAvailability(p.webEvent) === "current",
+      )
       .map((p) => ({
         id: p.id,
         name: p.name,
+        ...(p.webEvent &&
+        p.active &&
+        p.options.length === 1 &&
+        !p.options[0].review &&
+        p.options[0].tax !== "unknown" &&
+        p.options[0].price === p.webEvent.salePrice
+          ? {
+              event: {
+                period: p.webEvent.period,
+                regularPrice: p.webEvent.regularPrice,
+                discountRate: p.webEvent.discountRate,
+                salePrice: p.webEvent.salePrice,
+              },
+            }
+          : {}),
         book: catalogBook(c),
         catalogVersion: c.version,
         folder: folderPath(c, productFolder(c, p)).map((f) => ({

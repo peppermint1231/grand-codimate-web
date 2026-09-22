@@ -288,6 +288,7 @@ export const emptyQuote = (): Quote => ({
 export const catalogBooks = ["미용", "보험", "이벤트"] as const;
 export type CatalogBook = (typeof catalogBooks)[number];
 export interface CatalogFolder {
+  linkTo?: string;
   color?: string;
   id: string;
   parentId: string;

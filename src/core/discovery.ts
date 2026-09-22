@@ -7,7 +7,12 @@ import {
   type Patient,
 } from "./model";
 import { concerns as baseConcerns } from "./concerns";
-import { catalogNodes, folderPath, productFolder } from "./catalogFolders";
+import {
+  catalogNodes,
+  folderPath,
+  productFolder,
+  productFolderPaths,
+} from "./catalogFolders";
 export interface PublicOption {
   id: string;
   label: string;
@@ -21,6 +26,7 @@ export interface PublicProduct {
   book: CatalogBook;
   catalogVersion: string;
   folder: { id: string; name: string; color?: string }[];
+  folders?: { id: string; name: string; color?: string }[][];
   options: PublicOption[];
 }
 export interface Inquiry {
@@ -65,6 +71,9 @@ export function publicProducts(state: State): PublicProduct[] {
           name: f.name,
           color: f.color,
         })),
+        folders: productFolderPaths(c, p).map((path) =>
+          path.map((f) => ({ id: f.id, name: f.name, color: f.color })),
+        ),
         options: p.options.map((o) => ({
           id: o.id,
           label: o.label,
@@ -94,8 +103,9 @@ export function publicCategories(state: State): PublicCategory[] {
         name: f.name,
         color: f.color,
         questions: [
-          ...(baseConcerns.find((x) => x.id === f.id && x.name === f.name)
-            ?.questions || []),
+          ...(baseConcerns.find(
+            (x) => x.id === (f.linkTo || f.id) && x.name === f.name,
+          )?.questions || []),
         ],
       })),
   );

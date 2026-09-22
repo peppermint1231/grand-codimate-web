@@ -10,10 +10,74 @@ export const rootFolders = concerns.map((c) => ({
   name: c.name,
   parentId: "",
 }));
-export const catalogNodes = (catalog: Catalog): CatalogFolder[] =>
+const rawNodes = (catalog: Catalog): CatalogFolder[] =>
   catalog.folderTree || [...rootFolders, ...(catalog.folders || [])];
+export const catalogNodes = (catalog: Catalog): CatalogFolder[] => {
+  const nodes = rawNodes(catalog);
+  return nodes.map((f) => {
+    if (!f) return f;
+    const target = f.linkTo && nodes.find((x) => x?.id === f.linkTo);
+    return target ? { ...f, name: target.name, color: target.color } : f;
+  });
+};
+export interface DisplayFolder extends CatalogFolder {
+  sourceId: string;
+  virtual: boolean;
+}
+const displayCache = new WeakMap<Catalog, DisplayFolder[]>();
+const pathsCache = new WeakMap<Catalog, Map<string, CatalogFolder[][]>>();
+export function displayFolderNodes(catalog: Catalog): DisplayFolder[] {
+  const cached = displayCache.get(catalog);
+  if (cached) return cached;
+  const nodes = catalogNodes(catalog),
+    result: DisplayFolder[] = [];
+  const visit = (
+    f: CatalogFolder,
+    parentId: string,
+    alias: boolean,
+    seen: Set<string>,
+  ) => {
+    const sourceId = f.linkTo || f.id;
+    if (seen.has(sourceId) || result.length >= 5000) return;
+    const id = alias ? parentId + "~" + f.id : f.id;
+    result.push({ ...f, id, parentId, sourceId, virtual: alias });
+    const nextSeen = new Set([...seen, sourceId]);
+    for (const child of nodes.filter((x) => x.parentId === sourceId))
+      visit(child, id, alias || !!f.linkTo, nextSeen);
+  };
+  for (const f of nodes.filter((x) => !x.parentId))
+    visit(f, "", false, new Set());
+  displayCache.set(catalog, result);
+  return result;
+}
+export function sourceFolderId(c: Catalog, id: string) {
+  const f = displayFolderNodes(c).find((x) => x.id === id);
+  if (!f) throw new Error("폴더가 없습니다");
+  return f.sourceId;
+}
+export function productFolderPaths(c: Catalog, p: Product) {
+  let paths = pathsCache.get(c);
+  if (!paths) {
+    paths = new Map();
+    const nodes = displayFolderNodes(c),
+      byId = new Map(nodes.map((f) => [f.id, f]));
+    for (const f of nodes) {
+      const path: CatalogFolder[] = [];
+      let node: DisplayFolder | undefined = f;
+      while (node) {
+        path.unshift(node);
+        node = byId.get(node.parentId);
+      }
+      paths.set(f.sourceId, [...(paths.get(f.sourceId) || []), path]);
+    }
+    pathsCache.set(c, paths);
+  }
+  return paths.get(productFolder(c, p)) || [];
+}
 export function folderPath(catalog: Catalog, id?: string): CatalogFolder[] {
-  const nodes = catalogNodes(catalog);
+  const nodes = id?.includes("~")
+    ? displayFolderNodes(catalog)
+    : catalogNodes(catalog);
   const path: CatalogFolder[] = [],
     seen = new Set<string>();
   while (id) {
@@ -50,19 +114,21 @@ export const productFolder = (catalog: Catalog, product: Product) =>
 export function inFolder(catalog: Catalog, product: Product, selected: string) {
   return (
     !selected ||
-    folderPath(catalog, productFolder(catalog, product)).some(
-      (x) => x.id === selected,
+    productFolderPaths(catalog, product).some((path) =>
+      path.some((x) => x.id === selected),
     )
   );
 }
 export function folderError(catalog: Catalog): string | undefined {
+  displayCache.delete(catalog);
+  pathsCache.delete(catalog);
   const supplied = catalog.folderTree ?? catalog.folders;
   if (
     supplied !== undefined &&
     (!Array.isArray(supplied) || supplied.length > 500)
   )
     return "폴더는 500개까지 만들 수 있습니다";
-  const nodes = catalogNodes(catalog),
+  const nodes = rawNodes(catalog),
     ids = new Set<string>(),
     names = new Set<string>();
   for (const f of nodes) {
@@ -85,8 +151,12 @@ export function folderError(catalog: Catalog): string | undefined {
     if (f.color !== undefined && !/^#[0-9a-fA-F]{6}$/.test(f.color))
       return "폴더 색상을 확인하세요";
     const key = f.parentId + "/" + f.name.trim().toLocaleLowerCase();
-    if (names.has(key)) return "같은 위치에 같은 이름의 폴더가 있습니다";
-    names.add(key);
+    if (!f.linkTo) {
+      if (names.has(key)) return "같은 위치에 같은 이름의 폴더가 있습니다";
+      names.add(key);
+    }
+    if (f.linkTo !== undefined && (typeof f.linkTo !== "string" || !f.linkTo))
+      return "링크 원본을 확인하세요";
   }
   for (const f of nodes) {
     const path = folderPath(catalog, f.id);
@@ -94,6 +164,52 @@ export function folderError(catalog: Catalog): string | undefined {
       return "폴더를 자기 자신이나 하위 폴더 안으로 이동할 수 없습니다";
     if (path.length > 4)
       return "상위 분류 아래에는 세부 폴더를 3단계까지 만들 수 있습니다";
+  }
+  const byId = new Map(nodes.map((f) => [f.id, f]));
+  for (const f of nodes.filter((x) => x.linkTo)) {
+    const source = byId.get(f.linkTo!);
+    if (!source || source.linkTo)
+      return "링크 원본 폴더가 없거나 다른 링크입니다";
+    if (
+      nodes.some((x) => x.parentId === f.id) ||
+      catalog.products.some((p) => productFolder(catalog, p) === f.id)
+    )
+      return "링크 안의 항목은 원본 폴더에 저장해야 합니다";
+  }
+  const memo = new Map<string, { height: number; count: number }>();
+  const visit = (
+    id: string,
+    seen: Set<string>,
+  ): { height: number; count: number } => {
+    if (seen.has(id))
+      throw new Error(
+        "폴더 링크가 순환합니다. 원본 자신이나 하위 폴더에는 링크를 만들 수 없습니다",
+      );
+    if (memo.has(id)) return memo.get(id)!;
+    const f = byId.get(id)!;
+    const next = new Set([...seen, id]);
+    const children = f.linkTo
+      ? []
+      : nodes.filter((x) => x.parentId === id).map((x) => visit(x.id, next));
+    const size = f.linkTo
+      ? visit(f.linkTo, next)
+      : {
+          height: 1 + Math.max(0, ...children.map((x) => x.height)),
+          count: 1 + children.reduce((n, x) => n + x.count, 0),
+        };
+    memo.set(id, size);
+    return size;
+  };
+  try {
+    const sizes = nodes
+      .filter((x) => !x.parentId)
+      .map((x) => visit(x.id, new Set()));
+    if (sizes.some((x) => x.height > 4))
+      return "링크를 포함해 상위 분류 아래 세부 폴더는 3단계까지 가능합니다";
+    if (sizes.reduce((n, x) => n + x.count, 0) > 5000)
+      return "링크를 펼친 폴더 수가 너무 많습니다 (최대 5000개)";
+  } catch (e) {
+    return (e as Error).message;
   }
   if (catalog.products.some((p) => !ids.has(productFolder(catalog, p))))
     return "상품의 폴더가 존재하지 않습니다";
@@ -105,6 +221,7 @@ export function moveProducts(
 ): Catalog {
   if (!folderPath(catalog, folderId).length)
     throw new Error("이동할 폴더를 선택하세요");
+  folderId = sourceFolderId(catalog, folderId);
   return {
     ...catalog,
     products: catalog.products.map((p) =>
@@ -131,7 +248,7 @@ export function moveFolder(
 export function editableTree(catalog: Catalog): Catalog {
   return {
     ...structuredClone(catalog),
-    folderTree: structuredClone(catalogNodes(catalog)),
+    folderTree: structuredClone(rawNodes(catalog)),
     products: catalog.products.map((p) => ({
       ...structuredClone(p),
       folderId: productFolder(catalog, p),
@@ -163,12 +280,15 @@ export function renameFolder(
   color?: string,
 ) {
   const next = editableTree(c);
+  if (catalogNodes(c).find((f) => f.id === id)?.linkTo || id.includes("~"))
+    throw new Error("링크의 이름·색상은 원본 폴더에서 변경하세요");
   next.folderTree = next.folderTree!.map((f) =>
     f.id === id ? { ...f, name: name.trim(), color } : f,
   );
   return checked(next);
 }
 export function addFolder(c: Catalog, parentId: string, name: string) {
+  if (parentId) parentId = sourceFolderId(c, parentId);
   const next = editableTree(c),
     id = crypto.randomUUID();
   next.folderTree!.push({ id, parentId, name: name.trim(), color: "#155e59" });
@@ -179,7 +299,9 @@ export function deleteFolder(c: Catalog, id: string) {
     ids = subtreeIds(next, id);
   if (!ids.size) throw new Error("폴더가 없습니다");
   next.products = next.products.filter((p) => !ids.has(p.folderId!));
-  next.folderTree = next.folderTree!.filter((f) => !ids.has(f.id));
+  next.folderTree = next.folderTree!.filter(
+    (f) => !ids.has(f.id) && !(f.linkTo && ids.has(f.linkTo)),
+  );
   return checked(next);
 }
 export type CollisionPolicy = "merge" | "replace";
@@ -199,6 +321,9 @@ export function transferFolder(
     afterId?: string;
   } = {},
 ) {
+  if (id.includes("~"))
+    throw new Error("연결된 하위 폴더는 원본 위치에서 이동하거나 복사하세요");
+  if (parentId) parentId = sourceFolderId(c, parentId);
   let next = editableTree(c);
   const source = next.folderTree!.find((f) => f.id === id);
   if (!source) throw new Error("폴더가 없습니다");
@@ -215,6 +340,7 @@ export function transferFolder(
         ...f,
         id: remap.get(f.id)!,
         parentId: f.id === id ? parentId : remap.get(f.parentId)!,
+        ...(f.linkTo ? { linkTo: remap.get(f.linkTo) || f.linkTo } : {}),
       }));
     next.products.push(
       ...next.products
@@ -237,6 +363,8 @@ export function transferFolder(
   const conflict = next.folderTree!.find(
     (f) =>
       f.id !== id &&
+      !f.linkTo &&
+      !source.linkTo &&
       f.parentId === parentId &&
       f.name.trim().toLocaleLowerCase() ===
         source.name.trim().toLocaleLowerCase(),
@@ -248,6 +376,8 @@ export function transferFolder(
     next = deleteFolder(next, conflict.id);
   }
   const merge = (sourceId: string, targetId: string) => {
+    for (const f of next.folderTree!)
+      if (f.linkTo === sourceId) f.linkTo = targetId;
     for (const p of next.products)
       if (p.folderId === sourceId) p.folderId = targetId;
     for (const child of next.folderTree!.filter(
@@ -255,6 +385,8 @@ export function transferFolder(
     )) {
       const duplicate = next.folderTree!.find(
         (f) =>
+          !f.linkTo &&
+          !child.linkTo &&
           f.parentId === targetId &&
           f.name.trim().toLocaleLowerCase() ===
             child.name.trim().toLocaleLowerCase(),
@@ -287,4 +419,20 @@ export function transferFolder(
     next.folderTree = rest;
   }
   return checked(next);
+}
+
+export function addFolderLink(c: Catalog, sourceId: string, parentId: string) {
+  sourceId = sourceFolderId(c, sourceId);
+  if (parentId) parentId = sourceFolderId(c, parentId);
+  const next = editableTree(c),
+    source = catalogNodes(c).find((f) => f.id === sourceId)!;
+  const id = crypto.randomUUID();
+  next.folderTree!.push({ id, parentId, name: source.name, linkTo: sourceId });
+  return { catalog: checked(next), id };
+}
+export function dependentLinks(c: Catalog, id: string) {
+  const ids = subtreeIds(c, id);
+  return catalogNodes(c).filter(
+    (f) => f.linkTo && ids.has(f.linkTo) && !ids.has(f.id),
+  );
 }

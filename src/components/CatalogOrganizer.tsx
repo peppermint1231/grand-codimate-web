@@ -5,6 +5,7 @@ import {
   folderPath,
   moveProducts,
   productFolder,
+  productFolderPaths,
 } from "../core/catalogFolders";
 const needsReview = (p: Product) =>
   !p.options.length ||
@@ -13,6 +14,7 @@ type Work = (fn: () => Promise<unknown>) => unknown;
 export function CatalogProductRows({
   catalog,
   products,
+  selectedFolder = "",
   editable,
   folderEditing = false,
   selectedIds,
@@ -23,6 +25,7 @@ export function CatalogProductRows({
 }: {
   catalog: Catalog;
   products: Product[];
+  selectedFolder?: string;
   editable: boolean;
   folderEditing?: boolean;
   selectedIds: string[];
@@ -48,7 +51,12 @@ export function CatalogProductRows({
     );
   const groups = new Map<string, Product[]>();
   products.forEach((p) => {
-    const id = productFolder(catalog, p);
+    const path =
+      selectedFolder &&
+      productFolderPaths(catalog, p).find((path) =>
+        path.some((f) => f.id === selectedFolder),
+      );
+    const id = path ? path.at(-1)!.id : productFolder(catalog, p);
     groups.set(id, [...(groups.get(id) || []), p]);
   });
   const change = (next: Product) =>
@@ -57,7 +65,24 @@ export function CatalogProductRows({
       products: catalog.products.map((p) => (p.id === next.id ? next : p)),
     });
   return (
-    <div className="catalog-product-rows" role="region" aria-label="상품 목록">
+    <div
+      className="catalog-product-rows"
+      role="region"
+      aria-label="상품 목록"
+      onKeyDown={(e) => {
+        if (
+          (editable || folderEditing) &&
+          (e.ctrlKey || e.metaKey) &&
+          e.key.toLowerCase() === "a" &&
+          !(e.target as HTMLElement).matches(
+            'input:not([type="checkbox"]), textarea, select, [contenteditable="true"]',
+          )
+        ) {
+          e.preventDefault();
+          onSelection(products.map((p) => p.id));
+        }
+      }}
+    >
       <div className="product-list-heading">
         <h3>
           상품 목록 <small>{products.length}개</small>

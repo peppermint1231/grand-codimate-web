@@ -97,13 +97,18 @@ it("saves folder edits as one published revision and restores previous contents 
   s.catalogs = [fixture()];
   const old = structuredClone(s.catalogs[0]);
   const changed = renameFolder(old, "a", "새 고민", "#ff8800");
-  s = await applyCommand(s, catalogAdmin, {
-    id: "folder-operation",
-    type: "catalog.folders.commit",
-    entityId: old.id,
-    baseRev: old.rev,
-    payload: { catalog: changed, basePublishedId: old.id },
-  });
+  s = await applyCommand(
+    s,
+    catalogAdmin,
+    {
+      id: "folder-operation",
+      type: "catalog.folders.commit",
+      entityId: old.id,
+      baseRev: old.rev,
+      payload: { catalog: changed, basePublishedId: old.id },
+    },
+    "2026-09-21T12:00:00Z",
+  );
   const posted = latestCatalog(s)!;
   expect(posted.id).toBe("folder-operation");
   expect(s.catalogs.find((c) => c.id === old.id)).toEqual(old);

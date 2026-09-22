@@ -14,13 +14,21 @@ export function catalogChanges(
       .join(" / ");
   for (const f of oldNodes)
     if (!nodes.some((x) => x.id === f.id))
-      changes.push(`폴더 삭제: ${path(before, f.id)}`);
+      changes.push(
+        `${f.linkTo ? "폴더 링크 삭제" : "폴더 삭제"}: ${path(before, f.id)}`,
+      );
   for (const f of nodes) {
     const old = oldNodes.find((x) => x.id === f.id);
     if (!old) {
-      changes.push(`폴더 생성: ${path(after, f.id)}`);
+      changes.push(
+        `${f.linkTo ? "폴더 링크 생성" : "폴더 생성"}: ${path(after, f.id)}${f.linkTo ? " → " + path(after, f.linkTo) : ""}`,
+      );
       continue;
     }
+    if (old.linkTo !== f.linkTo)
+      changes.push(
+        `폴더 링크 원본 변경: ${f.name} → ${f.linkTo ? path(after, f.linkTo) : "일반 폴더"}`,
+      );
     if (old.name !== f.name) changes.push(`폴더 이름: ${old.name} → ${f.name}`);
     if ((old.color || "") !== (f.color || ""))
       changes.push(

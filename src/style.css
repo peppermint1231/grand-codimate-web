@@ -3327,3 +3327,29 @@ details p {
   margin: 0;
   min-width: 0;
 }
+
+.folder-tree-row .folder-link-icon {
+  color: #557ba0;
+  padding: 7px;
+  flex-shrink: 0;
+}
+.folder-link-note {
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 10px;
+  background: #edf3f8;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+.catalog-shortcuts {
+  margin: 12px 0 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.catalog-shortcuts summary {
+  cursor: pointer;
+  color: #315d60;
+}
+.catalog-shortcuts p {
+  margin: 8px 0;
+}

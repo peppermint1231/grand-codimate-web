@@ -10,6 +10,8 @@ import {
   productFolder,
   rootFolders,
   catalogNodes,
+  displayFolderNodes,
+  sourceFolderId,
   editableTree,
 } from "./core/catalogFolders";
 import { appBack, useAppBack } from "./lib/navigation";
@@ -2960,7 +2962,7 @@ function ConsultationView({
                   onChange={(e) => setCategory(e.target.value)}
                 >
                   <option value="">모든 카테고리</option>
-                  {(catalog ? catalogNodes(catalog) : rootFolders).map(
+                  {(catalog ? displayFolderNodes(catalog) : rootFolders).map(
                     (folder) => (
                       <option key={folder.id} value={folder.id}>
                         {catalog
@@ -3771,7 +3773,10 @@ function CatalogView({
       if (folderDraft) putFolderDraft(restored);
       else putDraft(restored);
       setBulkIds([]);
-      if (category && !catalogNodes(restored).some((f) => f.id === category))
+      if (
+        category &&
+        !displayFolderNodes(restored).some((f) => f.id === category)
+      )
         setCategory("");
       if (selected && !restored.products.some((p) => p.id === selected))
         setSelected("");
@@ -3788,6 +3793,58 @@ function CatalogView({
     if (!current) throw new Error("단가표를 선택하세요");
     return send("catalog.save", { catalog: current }, current.id, current.rev);
   };
+  const saveFolderChanges = async () => {
+    if (!current || !folderDraft) return;
+
+    if (
+      await send(
+        "catalog.folders.commit",
+        {
+          catalog: folderDraft,
+          basePublishedId: folderBasePublished.current,
+        },
+        current.id,
+        current.rev,
+      )
+    ) {
+      setFolderDraft(undefined);
+      setDraft(undefined);
+      setBulkIds([]);
+      setCategory("");
+    }
+  };
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (
+        !can ||
+        e.isComposing ||
+        !(e.ctrlKey || e.metaKey) ||
+        e.key.toLowerCase() !== "s" ||
+        e.altKey
+      )
+        return;
+      e.preventDefault();
+      if (document.querySelector("[data-catalog-history-dialog]")) return;
+      if (document.querySelector(".folder-inline-edit, .folder-decision")) {
+        work(async () => {
+          throw new Error(
+            "폴더 이름 적용이나 확인 창의 선택을 마친 뒤 저장하세요",
+          );
+        });
+        return;
+      }
+      if (folderDraft) work(saveFolderChanges);
+      else if (editable)
+        work(async () => {
+          if (await save()) {
+            setDraft(undefined);
+            setSelected("");
+          }
+        });
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  });
   return (
     <>
       <Title
@@ -3868,6 +3925,22 @@ function CatalogView({
           </div>
         }
       />
+      <details className="catalog-shortcuts">
+        <summary>단축키 안내</summary>
+        <p>
+          저장 Ctrl/Cmd+S · 되돌리기 Ctrl/Cmd+Z · 다시 실행 Ctrl/Cmd+Shift+Z
+          또는 Ctrl+Y
+        </p>
+        <p>
+          폴더 목록: 이름 변경 F2 · 복사 Ctrl/Cmd+C · 잘라내기 Ctrl/Cmd+X ·
+          붙여넣기 Ctrl/Cmd+V · 링크 붙여넣기 Ctrl/Cmd+Alt+V · 삭제 Delete
+        </p>
+        <p>
+          복사 후 대상 폴더를 선택해 붙여넣으세요. 상품 목록에서 Ctrl/Cmd+A는
+          현재 표시된 상품을 모두 선택합니다. 입력칸에서는 기본 텍스트 편집
+          단축키가 동작합니다.
+        </p>
+      </details>
       {editable && (
         <div className="catalog-save-bar">
           <span>{book} SSOT 편집 중 · 변경 후 초안을 저장하세요</span>
@@ -4041,24 +4114,7 @@ function CatalogView({
               setBulkIds([]);
               setCategory("");
             }}
-            save={async () => {
-              if (
-                await send(
-                  "catalog.folders.commit",
-                  {
-                    catalog: folderDraft,
-                    basePublishedId: folderBasePublished.current,
-                  },
-                  current.id,
-                  current.rev,
-                )
-              ) {
-                setFolderDraft(undefined);
-                setDraft(undefined);
-                setBulkIds([]);
-                setCategory("");
-              }
-            }}
+            save={saveFolderChanges}
             onChange={setFolderDraft}
             selectedIds={bulkIds}
             onSelection={setBulkIds}
@@ -4339,6 +4395,7 @@ function CatalogView({
               key={book}
               catalog={current}
               products={products}
+              selectedFolder={category}
               editable={!!editable}
               folderEditing={!!folderDraft}
               selectedIds={bulkIds}
@@ -4377,7 +4434,9 @@ function CatalogView({
                             .map((x) => x.name)
                             .join(" / ")
                         : "새 분류",
-                      folderId: category || undefined,
+                      folderId: category
+                        ? sourceFolderId(current, category)
+                        : undefined,
                       name: "새 상품",
                       description: "",
                       composition: "",
@@ -4472,7 +4531,10 @@ function CatalogView({
                   disabled={!editable}
                   value={productFolder(current!, product)}
                   onChange={(e) =>
-                    change({ ...product, folderId: e.target.value })
+                    change({
+                      ...product,
+                      folderId: sourceFolderId(current!, e.target.value),
+                    })
                   }
                 >
                   {(current ? catalogNodes(current) : rootFolders).map((f) => (

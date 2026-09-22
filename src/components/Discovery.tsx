@@ -94,8 +94,13 @@ export function Discovery() {
       p.book === book &&
       (!filterConcerns ||
         !selectedConcerns.length ||
-        p.folder.some((f) => selectedConcerns.includes(p.book + ":" + f.id))) &&
-      (!folderFilter || p.folder.some((f) => f.id === folderFilter)) &&
+        (p.folders || [p.folder]).some((path) =>
+          path.some((f) => selectedConcerns.includes(p.book + ":" + f.id)),
+        )) &&
+      (!folderFilter ||
+        (p.folders || [p.folder]).some((path) =>
+          path.some((f) => f.id === folderFilter),
+        )) &&
       [p.name, ...p.options.map((o) => o.label)].some((x) =>
         x.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
       ),
@@ -297,18 +302,20 @@ export function Discovery() {
                       products
                         .filter((p) => p.book === book)
                         .flatMap((p) =>
-                          p.folder.map(
-                            (f, i) =>
-                              [
-                                f.id,
-                                {
-                                  id: f.id,
-                                  name: p.folder
-                                    .slice(0, i + 1)
-                                    .map((x) => x.name)
-                                    .join(" / "),
-                                },
-                              ] as const,
+                          (p.folders || [p.folder]).flatMap((path) =>
+                            path.map(
+                              (f, i) =>
+                                [
+                                  f.id,
+                                  {
+                                    id: f.id,
+                                    name: path
+                                      .slice(0, i + 1)
+                                      .map((x) => x.name)
+                                      .join(" / "),
+                                  },
+                                ] as const,
+                            ),
                           ),
                         ),
                     ).values(),
@@ -322,7 +329,19 @@ export function Discovery() {
               <div className="discovery-products">
                 {filtered.map((p) => (
                   <article className="card" key={p.id}>
-                    <small>{p.folder.map((f) => f.name).join(" / ")}</small>
+                    <small>
+                      {(
+                        (p.folders || [p.folder]).find((path) =>
+                          folderFilter
+                            ? path.some((f) => f.id === folderFilter)
+                            : path.some((f) =>
+                                selectedConcerns.includes(p.book + ":" + f.id),
+                              ),
+                        ) || p.folder
+                      )
+                        .map((f) => f.name)
+                        .join(" / ")}
+                    </small>
                     <h3>{p.name}</h3>
                     {p.options.map((o) => {
                       const picked = selected.some(

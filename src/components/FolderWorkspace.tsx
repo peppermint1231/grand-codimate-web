@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   GripVertical,
@@ -8,10 +8,16 @@ import {
   Pencil,
   Save,
   X,
+  Link2,
 } from "lucide-react";
 import type { Catalog } from "../core/model";
 import {
   catalogNodes,
+  displayFolderNodes,
+  sourceFolderId,
+  addFolderLink,
+  dependentLinks,
+  inFolder,
   folderPath,
   folderError,
   renameFolder,
@@ -59,7 +65,33 @@ export function FolderWorkspace({
   editActions?: React.ReactNode;
   work: (f: () => Promise<unknown>) => unknown;
 }) {
-  const nodes = catalogNodes(catalog);
+  const nodes = displayFolderNodes(catalog);
+  const selectedNode = nodes.find((f) => f.id === selected);
+  const clipboard = useRef<{
+    id: string;
+    cut: boolean;
+    catalogId: string;
+  } | null>(null);
+  const [clipboardHint, setClipboardHint] = useState("");
+  useEffect(() => {
+    clipboard.current = null;
+    setClipboardHint("");
+  }, [catalog.id, editing]);
+  const goOriginal = (id: string) => {
+    const original = sourceFolderId(catalog, id);
+    onSelect(original);
+    setExpanded((x) => [
+      ...x,
+      ...folderPath(catalog, original).map((f) => f.id),
+    ]);
+    requestAnimationFrame(() => {
+      const button = document.querySelector<HTMLElement>(
+        `[data-folder-target="${original}"]`,
+      );
+      button?.scrollIntoView({ block: "nearest" });
+      button?.focus({ preventScroll: true });
+    });
+  };
   const [expanded, setExpanded] = useState<string[]>([]),
     [renaming, setRenaming] = useState(""),
     [name, setName] = useState(""),
@@ -82,7 +114,7 @@ export function FolderWorkspace({
     const error = folderError(next);
     if (error) throw new Error(error);
     onChange(next);
-    if (selected && !catalogNodes(next).some((f) => f.id === selected))
+    if (selected && !displayFolderNodes(next).some((f) => f.id === selected))
       onSelect("");
     if (renaming && !catalogNodes(next).some((f) => f.id === renaming))
       setRenaming("");
@@ -180,7 +212,7 @@ export function FolderWorkspace({
                   style={{ transform: open ? "rotate(90deg)" : undefined }}
                 />
               </button>
-              {editing && (
+              {editing && !f.virtual && (
                 <button
                   className="catalog-move-handle"
                   aria-label={f.name + " 폴더 이동"}
@@ -228,8 +260,16 @@ export function FolderWorkspace({
                         d.id,
                         parent,
                         false,
-                        t.position === "before" ? t.id : undefined,
-                        t.position === "after" ? t.id : undefined,
+                        t.position === "before"
+                          ? nodes.find((f) => f.id === t.id)?.virtual
+                            ? sourceFolderId(catalog, t.id)
+                            : t.id
+                          : undefined,
+                        t.position === "after"
+                          ? nodes.find((f) => f.id === t.id)?.virtual
+                            ? sourceFolderId(catalog, t.id)
+                            : t.id
+                          : undefined,
                       );
                     });
                   }}
@@ -302,7 +342,7 @@ export function FolderWorkspace({
                     setExpanded((x) => [...x, f.id]);
                   }}
                   onDoubleClick={() => {
-                    if (editing) {
+                    if (editing && !f.linkTo && !f.virtual) {
                       setRenaming(f.id);
                       setName(f.name);
                       setColor(f.color || "#155e59");
@@ -310,7 +350,22 @@ export function FolderWorkspace({
                   }}
                 >
                   <span style={{ color: f.color || "#155e59" }}>{f.name}</span>
-                  <small>{folderImpact(catalog, f.id).products}</small>
+                  <small>
+                    {
+                      catalog.products.filter((p) => inFolder(catalog, p, f.id))
+                        .length
+                    }
+                  </small>
+                </button>
+              )}
+              {(f.linkTo || f.virtual) && (
+                <button
+                  className="folder-link-icon"
+                  title="원본 폴더로 이동"
+                  aria-label={f.name + " 원본 폴더로 이동"}
+                  onClick={() => goOriginal(f.id)}
+                >
+                  <Link2 size={16} />
                 </button>
               )}
             </div>
@@ -320,7 +375,72 @@ export function FolderWorkspace({
       });
   const targetName = nodes.find((f) => f.id === selected)?.name || "최상위";
   return (
-    <aside className="card catalog-folders" aria-label="고민별 폴더 목록">
+    <aside
+      className="card catalog-folders"
+      aria-label="고민별 폴더 목록"
+      onKeyDown={(e) => {
+        const target = e.target as HTMLElement;
+        if (
+          !editing ||
+          renaming ||
+          collision ||
+          deleting ||
+          e.isDefaultPrevented() ||
+          e.nativeEvent.isComposing ||
+          target.matches('input, textarea, select, [contenteditable="true"]')
+        )
+          return;
+        const mod = e.ctrlKey || e.metaKey,
+          key = e.key.toLowerCase();
+        if (
+          mod &&
+          (key === "c" || key === "x") &&
+          selected &&
+          !selectedNode?.virtual
+        ) {
+          e.preventDefault();
+          clipboard.current = {
+            id: selected,
+            cut: key === "x",
+            catalogId: catalog.id,
+          };
+          setClipboardHint(
+            `${selectedNode?.name} · ${key === "x" ? "잘라내기" : "복사"} 준비. 대상 폴더를 선택하고 붙여넣으세요.`,
+          );
+        } else if (
+          mod &&
+          key === "v" &&
+          clipboard.current?.catalogId === catalog.id
+        ) {
+          e.preventDefault();
+          const clip = clipboard.current;
+          work(async () => {
+            if (e.altKey) {
+              const result = addFolderLink(catalog, clip.id, selected);
+              apply(result.catalog);
+            } else transfer(clip.id, selected, !clip.cut);
+            setExpanded((x) => [...x, selected]);
+            if (clip.cut) {
+              clipboard.current = null;
+              setClipboardHint("");
+            }
+          });
+        } else if (
+          key === "f2" &&
+          selected &&
+          !selectedNode?.virtual &&
+          !selectedNode?.linkTo
+        ) {
+          e.preventDefault();
+          setRenaming(selected);
+          setName(selectedNode!.name);
+          setColor(selectedNode!.color || "#155e59");
+        } else if (key === "delete" && selected && !selectedNode?.virtual) {
+          e.preventDefault();
+          setDeleting(selected);
+        }
+      }}
+    >
       <div className="folder-list-heading">
         <h3>고민별 폴더</h3>
         {canEdit && !editing && (
@@ -389,9 +509,21 @@ export function FolderWorkspace({
         {editing ? " / 최상위 위치" : ""}
       </button>
       {render("")}
+      {(selectedNode?.linkTo || selectedNode?.virtual) && (
+        <p className="folder-link-note">
+          원본과 항목을 공유합니다. 상품을 추가·이동·수정하면 모든 링크에
+          반영됩니다. 이름·색상·하위 폴더 이동은 링크 아이콘으로 원본에 이동해
+          수정하세요.
+        </p>
+      )}
       {editing && (
         <div className="folder-actions">
           <p className="small">선택: {targetName} · 하위 폴더 3단계까지</p>
+          {clipboardHint && (
+            <p className="small" role="status">
+              {clipboardHint}
+            </p>
+          )}
           <div className="button-row">
             <button
               disabled={!!selected && folderPath(catalog, selected).length >= 4}
@@ -407,7 +539,10 @@ export function FolderWorkspace({
                     label = "새 폴더 " + i++;
                   const result = addFolder(catalog, selected, label);
                   apply(result.catalog);
-                  setExpanded((x) => [...x, selected]);
+                  setExpanded((x) => [
+                    ...x,
+                    ...folderPath(result.catalog, result.id).map((f) => f.id),
+                  ]);
                   onSelect(result.id);
                   setRenaming(result.id);
                   setName(label);
@@ -419,7 +554,9 @@ export function FolderWorkspace({
               폴더 생성
             </button>
             <button
-              disabled={!selected}
+              disabled={
+                !selected || !!selectedNode?.linkTo || !!selectedNode?.virtual
+              }
               onClick={() => {
                 const f = nodes.find((f) => f.id === selected)!;
                 setRenaming(f.id);
@@ -429,7 +566,10 @@ export function FolderWorkspace({
             >
               이름·색상
             </button>
-            <button disabled={!selected} onClick={() => setDeleting(selected)}>
+            <button
+              disabled={!selected || !!selectedNode?.virtual}
+              onClick={() => setDeleting(selected)}
+            >
               <Trash2 size={15} />
               삭제
             </button>
@@ -438,7 +578,7 @@ export function FolderWorkspace({
             복사한 상품은 비활성·추천기 숨김 상태로 생성됩니다.
           </p>
           <label className="field">
-            <span>이동·복사할 위치</span>
+            <span>이동·복사·링크할 위치</span>
             <select
               aria-label="이동할 폴더"
               value={destination}
@@ -456,19 +596,35 @@ export function FolderWorkspace({
           </label>
           <div className="button-row">
             <button
-              disabled={!selected}
+              disabled={!selected || !!selectedNode?.virtual}
               onClick={() => work(async () => transfer(selected, destination))}
             >
               폴더 이동
             </button>
             <button
-              disabled={!selected}
+              disabled={!selected || !!selectedNode?.virtual}
               onClick={() =>
                 work(async () => transfer(selected, destination, true))
               }
             >
               <Copy size={15} />
               폴더 복사
+            </button>
+            <button
+              disabled={!selected}
+              onClick={() =>
+                work(async () => {
+                  const result = addFolderLink(catalog, selected, destination);
+                  apply(result.catalog);
+                  setExpanded((x) => [
+                    ...x,
+                    ...folderPath(result.catalog, result.id).map((f) => f.id),
+                  ]);
+                })
+              }
+            >
+              <Link2 size={15} />
+              폴더 링크
             </button>
             <button
               disabled={!destination || !selectedIds.length}
@@ -496,6 +652,13 @@ export function FolderWorkspace({
             개, 상품 {folderImpact(catalog, collision.targetId).products}개가
             있습니다.
           </p>
+          {!!dependentLinks(catalog, collision.targetId).length && (
+            <p>
+              덮어쓰면 대상 원본에 연결된 링크{" "}
+              {dependentLinks(catalog, collision.targetId).length}개도
+              제거됩니다. 합치기는 원본 연결을 유지합니다.
+            </p>
+          )}
           <p>
             합치기는 양쪽 하위 항목을 보존합니다. 덮어쓰기는 대상 폴더의 하위
             항목과 상품을 삭제하고 옮겨온 내용으로 교체합니다.
@@ -543,7 +706,19 @@ export function FolderWorkspace({
           role="dialog"
           aria-label="폴더 삭제 확인"
         >
-          <h4>하위 항목도 함께 삭제됩니다</h4>
+          <h4>
+            {nodes.find((f) => f.id === deleting)?.linkTo
+              ? "폴더 링크만 삭제합니다"
+              : "하위 항목도 함께 삭제됩니다"}
+          </h4>
+          {nodes.find((f) => f.id === deleting)?.linkTo ? (
+            <p>원본 폴더와 상품, 다른 위치의 링크는 그대로 유지됩니다.</p>
+          ) : (
+            <p>
+              이 원본을 참조하는 다른 위치의 링크{" "}
+              {dependentLinks(catalog, deleting).length}개도 함께 제거됩니다.
+            </p>
+          )}
           <p>
             {nodes.find((f) => f.id === deleting)?.name}: 폴더{" "}
             {folderImpact(catalog, deleting).folders}개와 상품{" "}
@@ -560,7 +735,9 @@ export function FolderWorkspace({
               })
             }
           >
-            하위항목 포함 삭제
+            {nodes.find((f) => f.id === deleting)?.linkTo
+              ? "링크만 삭제"
+              : "하위항목 포함 삭제"}
           </button>
           <button onClick={() => setDeleting("")}>취소하고 항목 옮기기</button>
         </div>

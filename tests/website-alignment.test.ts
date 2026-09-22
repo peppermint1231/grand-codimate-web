@@ -209,3 +209,43 @@ it("keeps decimal doses and ranges distinct and retains differently priced same-
     result.catalog.products.slice(1).map((p) => p.options[0].price),
   ).toEqual([10000, 20000]);
 });
+it("catalogue saves share immutable history without mutating the source catalogue or revision snapshots", async () => {
+  const { applyCommand } = await import("../src/core/domain");
+  const { catalogAdmin } = await import("./fixtures/catalogs");
+  const { beauty, event } = fixture();
+  event.status = "draft";
+  const state = emptyState();
+  state.catalogs = [beauty, event];
+  state.catalogRevisions = [
+    {
+      id: "revision-old",
+      rev: 1,
+      createdAt: "2026-09-20",
+      updatedAt: "2026-09-20",
+      catalogId: beauty.id,
+      book: "미용",
+      actorId: "admin",
+      action: "이전",
+      changes: [],
+      snapshot: structuredClone(beauty),
+    },
+  ];
+  const before = structuredClone(state);
+  const next = structuredClone(event);
+  next.products[0].name = "수정한 이벤트";
+  const after = await applyCommand(state, catalogAdmin, {
+    id: "save-memory-check",
+    type: "catalog.save",
+    entityId: event.id,
+    baseRev: event.rev,
+    payload: { catalog: next },
+  });
+  expect(state).toEqual(before);
+  expect(after.catalogs[0]).toBe(state.catalogs[0]);
+  expect(after.catalogRevisions[0]).toBe(state.catalogRevisions[0]);
+  expect(after.catalogs[1]).not.toBe(state.catalogs[1]);
+  expect(after.catalogs[1].products[0].name).toBe("수정한 이벤트");
+  expect(after.catalogRevisions.at(-1)!.snapshot.products[0].name).toBe(
+    "수정한 이벤트",
+  );
+});

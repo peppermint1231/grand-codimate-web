@@ -598,3 +598,20 @@ it("does not adopt an unrelated or incomplete folder when the previous root is m
   expect(f.files.has(".codimate-storage.enc")).toBe(false);
   expect(rename).not.toHaveBeenCalled();
 });
+
+it("flushes catalogue changes without loading the entire catalogue history a second time", async () => {
+  const f = await fixture();
+  const { threeCatalogs } = await import("./fixtures/catalogs");
+  const catalog = { ...threeCatalogs()[0], status: "draft" };
+  const query = vi.spyOn(f.db, "prepare");
+  const response = await f.cmd("catalog.save", { catalog }, catalog.id);
+  expect(response.status, await response.text()).toBe(200);
+  expect(
+    query.mock.calls.filter(
+      ([sql]) => sql === "SELECT section,value FROM entities",
+    ),
+  ).toHaveLength(1);
+  expect(
+    f.db.prepare("SELECT id FROM operations WHERE done=0").all(),
+  ).toHaveLength(0);
+});

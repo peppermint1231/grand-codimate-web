@@ -327,16 +327,26 @@ export class Clinic extends DurableObject<Env> {
         this.env.ENCRYPTION_KEY,
       );
       if (this.env.REQUIRE_ONEDRIVE === "true") {
-        const state = await this.state();
         for (const change of op.changes.filter(
           (x) => x.section === "consultations",
         )) {
           const c = change.value as State["consultations"][number];
-          const patient =
-            (op.changes.find(
-              (x) => x.section === "patients" && x.id === c.patientId,
-            )?.value as State["patients"][number]) ||
-            state.patients.find((x) => x.id === c.patientId);
+          let patient = op.changes.find(
+            (x) => x.section === "patients" && x.id === c.patientId,
+          )?.value as State["patients"][number] | undefined;
+          if (!patient) {
+            const row = this.sql
+              .exec<{ value: string }>(
+                "SELECT value FROM entities WHERE section='patients' AND id=?",
+                c.patientId,
+              )
+              .toArray()[0];
+            if (row)
+              patient = await open<State["patients"][number]>(
+                row.value,
+                this.env.ENCRYPTION_KEY,
+              );
+          }
           if (patient) {
             const photos = await Promise.all(
               c.photos.map(async (p) => {
@@ -418,7 +428,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.9.3",
+        version: "0.9.4",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -758,7 +768,11 @@ export class Clinic extends DurableObject<Env> {
         409,
       );
     if (path === "/api/catalog/event-source" && req.method === "GET") {
-      ensure(allowed(user, "catalog.edit"), "단가표 관리 권한이 필요합니다", 403);
+      ensure(
+        allowed(user, "catalog.edit"),
+        "단가표 관리 권한이 필요합니다",
+        403,
+      );
       return json(await fetchEventSource(url.searchParams));
     }
     if (path === "/api/inquiries" && req.method === "GET")
@@ -1272,10 +1286,11 @@ export class Clinic extends DurableObject<Env> {
       const changes: Change[] = [];
       for (const section of Object.keys(before) as (keyof State)[]) {
         if (section === "users") continue;
+        const prior = new Map(before[section].map((v) => [v.id, v]));
         for (const v of after[section])
           if (
-            JSON.stringify(before[section].find((x) => x.id === v.id)) !==
-            JSON.stringify(v)
+            prior.get(v.id) !== v &&
+            JSON.stringify(prior.get(v.id)) !== JSON.stringify(v)
           )
             changes.push({ section, id: v.id, value: v });
       }

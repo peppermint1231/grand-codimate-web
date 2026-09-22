@@ -520,10 +520,19 @@ export async function applyCommand(
       !Array.isArray(cmd.payload),
     "변경 내용을 확인하세요",
   );
-  const s = structuredClone(input);
-  s.catalogRevisions ||= [];
   const p = cmd.payload;
   const id = cmd.entityId || cmd.id;
+  // Historical catalogues and revision snapshots are immutable. Copy only the
+  // catalogue this command can modify instead of duplicating the entire history.
+  const s: State = {
+    ...structuredClone({ ...input, catalogs: [], catalogRevisions: [] }),
+    catalogs: input.catalogs.map((catalog) =>
+      cmd.type.startsWith("catalog.") && catalog.id === id
+        ? structuredClone(catalog)
+        : catalog,
+    ),
+    catalogRevisions: [...(input.catalogRevisions || [])],
+  };
   let patientId: string | undefined;
   let text = cmd.type;
   const need = (v: Permission) =>

@@ -950,16 +950,74 @@ tbody tr:hover {
 .option-edit .check {
   grid-column: 1/-1;
 }
-.permission {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  margin-bottom: 10px;
-  font-size: 13px;
+.account-permissions {
+  margin: 24px 0 16px;
+  min-width: 0;
 }
-.permission select {
+.permission-guide {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.permission-notice {
+  padding: 12px;
+  border-radius: 10px;
+  background: #f6f0df;
+  color: #685322;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.permission {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 164px;
+  align-items: start;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e4eeeb;
+}
+.permission-description label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: #155e59;
+}
+.permission-description p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+.permission-control {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.permission-control select {
+  width: 100%;
+  min-width: 0;
   font-size: 12px;
+}
+.permission-effective {
+  font-size: 12px;
+  text-align: right;
+}
+.permission-effective.is-allowed {
+  color: #155e59;
+}
+.permission-effective.is-blocked {
+  color: #696f73;
+}
+@media (max-width: 600px) {
+  .permission {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .permission-control {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
 }
 details {
   margin: 15px 0;

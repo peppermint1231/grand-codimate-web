@@ -1,3 +1,4 @@
+import { AccountPermissions } from "./components/AccountPermissions";
 import { catalogCommand, dispatchCatalogCommand } from "./lib/catalogShortcuts";
 import { useCatalogUndo } from "./lib/useCatalogUndo";
 import { CatalogEditActions } from "./components/CatalogEditActions";
@@ -64,7 +65,6 @@ import {
   allowed,
   age,
   money,
-  permissions,
   type State,
   type User,
   type Patient,
@@ -116,20 +116,6 @@ import {
   SignaturePad,
   annotatedBlob,
 } from "./components/PhotoEditor";
-const names: Record<string, string> = {
-  "patient.edit": "환자정보 편집",
-  "money.read": "금액 열람",
-  "receipt.create": "수납 등록",
-  "refund.create": "환불 등록",
-  "ledger.correct": "금액 정정",
-  "note.read": "환자 메모 열람",
-  "note.edit": "메모 작성",
-  "grade.edit": "등급 지정",
-  "catalog.edit": "단가표 관리",
-  "stats.read": "통계",
-  export: "내보내기",
-  "followup.edit": "후속 상태 변경",
-};
 const date = () =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
 const status = (c: Consultation) =>
@@ -5197,34 +5183,7 @@ function SettingsView({
                 />
                 사용 계정
               </label>
-              {permissions.map((p) => (
-                <div className="permission" key={p}>
-                  <span>{names[p]}</span>
-                  <select
-                    value={
-                      account.permissions[p] === undefined
-                        ? "default"
-                        : String(account.permissions[p])
-                    }
-                    onChange={(e) =>
-                      setAccount({
-                        ...account,
-                        permissions: {
-                          ...account.permissions,
-                          [p]:
-                            e.target.value === "default"
-                              ? undefined
-                              : e.target.value === "true",
-                        },
-                      })
-                    }
-                  >
-                    <option value="default">역할 기본값</option>
-                    <option value="true">허용</option>
-                    <option value="false">차단</option>
-                  </select>
-                </div>
-              ))}
+              <AccountPermissions account={account} onChange={setAccount} />
               <button className="primary">계정 저장</button>
             </form>
           )}

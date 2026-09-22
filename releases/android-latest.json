@@ -1,7 +1,7 @@
 {
-  "version": "0.8.5",
-  "versionCode": 19,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.5.apk",
-  "sha256": "65a80d071de1d5fca197cca3fc1a6b6f706b69e5e9a3e684592e409b89202b65",
-  "notes": "폴더 상하위·순서 이동 단축키 · 편집 기능 단축키 확장 · ? 안내 배지"
+  "version": "0.8.6",
+  "versionCode": 20,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.8.6.apk",
+  "sha256": "7b1fcce0749c546f1fd93ad13f29f026ce6f60372d02d0374516902c2b26c55a",
+  "notes": "직원 권한 12개 기능 설명 · 역할 기본값과 현재 적용 상태 표시"
 }

@@ -1,3 +1,9 @@
+import { OpinionInbox } from "./components/OpinionInbox";
+import {
+  matchesCatalogSearch,
+  deleteCatalogProducts,
+  type CatalogSearchScope,
+} from "./core/catalogProducts";
 import { workingCatalog } from "./core/websiteCatalog";
 import {
   EventCatalogRefresh,
@@ -70,6 +76,7 @@ import {
   Bell,
   PanelLeftClose,
   PanelLeftOpen,
+  Trash2,
 } from "lucide-react";
 import {
   emptyState,
@@ -1165,48 +1172,39 @@ export function App() {
         </Modal>
       )}
       {modal === "opinions" && (
-        <Modal title="의견 요청·답변" close={() => setModal("")}>
-          {state.opinions.length ? (
-            state.opinions
-              .slice()
-              .reverse()
-              .map((o) => (
-                <div className="card" key={o.id}>
-                  <b>
-                    {
-                      state.consultations.find((c) => c.id === o.consultationId)
-                        ?.patient.name
-                    }{" "}
-                    님
-                  </b>
-                  <p>{o.request}</p>
-                  {o.answer ? (
-                    <p className="notice">{o.answer}</p>
-                  ) : (
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const answer = new FormData(e.currentTarget).get(
-                          "answer",
-                        );
-                        work(() =>
-                          send("opinion.answer", { answer }, o.id, o.rev),
-                        );
-                      }}
-                    >
-                      <textarea
-                        name="answer"
-                        required
-                        placeholder="의견을 작성하세요"
-                      />
-                      <button className="primary">답변 저장</button>
-                    </form>
-                  )}
-                </div>
-              ))
-          ) : (
-            <Empty>의견 요청이 없습니다.</Empty>
-          )}
+        <Modal
+          title="의견 요청·답변"
+          close={() => {
+            if (
+              window.dispatchEvent(
+                new Event("codimate:before-opinion-photo-leave", {
+                  cancelable: true,
+                }),
+              )
+            )
+              setModal("");
+          }}
+        >
+          <OpinionInbox
+            state={state}
+            user={user}
+            send={send}
+            onOpen={(c) => {
+              if (
+                !window.dispatchEvent(
+                  new Event("codimate:before-photo-leave", {
+                    cancelable: true,
+                  }),
+                )
+              )
+                return;
+              setModal("");
+              setPatientId(c.patientId);
+              setConsultId(c.id);
+              setPage("consult");
+              setTab("consult");
+            }}
+          />
         </Modal>
       )}
     </div>
@@ -3687,6 +3685,7 @@ function CatalogView({
 }) {
   const can = allowed(user, "catalog.edit");
   const [folderDraft, putFolderDraft] = useState<Catalog>();
+  const [editPaused, setEditPaused] = useState(false);
   const folderBasePublished = useRef("");
   const [folderWidth, setFolderWidth] = useState(() => {
     const n = Number(localStorage.getItem("codimate-folder-width"));
@@ -3744,6 +3743,7 @@ function CatalogView({
   const putDraft = (value: Catalog | undefined) =>
     setDrafts((previous) => ({ ...previous, [book]: value }));
   const setDraft = (value: Catalog | undefined) => {
+    if (value) setEditPaused(false);
     if (value && value.id === current?.id && value.status === "draft")
       edits.record(value);
     else edits.reset();
@@ -3754,6 +3754,7 @@ function CatalogView({
     else edits.reset();
     putFolderDraft(value);
   };
+  const [searchScope, setSearchScope] = useState<CatalogSearchScope>("all");
   const [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
     [selected, setSelected] = useState(""),
@@ -3779,10 +3780,7 @@ function CatalogView({
     current?.products.filter(
       (p) =>
         (!category || (current && inFolder(current, p, category))) &&
-        [p.name, p.description, p.composition, ...p.options.map((o) => o.label)]
-          .join(" ")
-          .toLowerCase()
-          .includes(search.toLowerCase()) &&
+        matchesCatalogSearch(current, p, search, searchScope) &&
         (!onlyReview || p.options.some((o) => o.review)) &&
         (reviewFilter === "all" ||
           p.options.some((o) =>
@@ -3795,7 +3793,8 @@ function CatalogView({
           )),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
-  const editable = !folderDraft && current?.status === "draft" && can;
+  const editable =
+    !editPaused && !folderDraft && current?.status === "draft" && can;
   const edits = useCatalogUndo(
     `${book}:${folderDraft ? "folder" : "product"}:${current?.id}:${current?.rev}`,
     current,
@@ -3819,6 +3818,47 @@ function CatalogView({
         ...current,
         products: current.products.map((x) => (x.id === p.id ? p : x)),
       });
+  };
+  const cancelProductEdit = () => {
+    const changed =
+      draft &&
+      JSON.stringify(draft) !==
+        JSON.stringify(s.catalogs.find((c) => c.id === draft.id));
+    if (
+      changed &&
+      !window.confirm(
+        `${book} 단가표의 저장하지 않은 변경을 버리고 편집을 취소할까요?`,
+      )
+    )
+      return;
+    edits.reset();
+    putDraft(draft && s.catalogs.find((c) => c.id === draft.id));
+    setEditPaused(true);
+    setSelected("");
+    setBulkIds([]);
+  };
+  const removeProducts = (ids: string[]) => {
+    if (!editable || !current) return;
+    const removing = current.products.filter((p) => ids.includes(p.id));
+    if (!removing.length) return;
+    const names = removing
+      .slice(0, 5)
+      .map((p) => `• ${p.name} (옵션 ${p.options.length}개)`)
+      .join("\n");
+    if (
+      !window.confirm(
+        `상품 ${removing.length}개와 해당 옵션을 삭제할까요?\n\n${names}${removing.length > 5 ? `\n외 ${removing.length - 5}개` : ""}\n\n연결된 폴더에서도 함께 사라집니다. 삭제 후 초안을 저장하세요. 저장 전에는 되돌리기로 복구할 수 있고, 기존 상담 기록은 유지됩니다.`,
+      )
+    )
+      return;
+    setDraft(
+      deleteCatalogProducts(
+        current,
+        removing.map((p) => p.id),
+      ),
+    );
+    setBulkIds([]);
+    if (removing.some((p) => p.id === selected)) setSelected("");
   };
   const save = () => {
     if (!current) throw new Error("단가표를 선택하세요");
@@ -3981,15 +4021,48 @@ function CatalogView({
       {editable && (
         <div className="catalog-save-bar">
           <span>{book} SSOT 편집 중 · 변경 후 초안을 저장하세요</span>
+          <div className="button-row">
+            <button
+              type="button"
+              {...catalogCommand("productCancel")}
+              onClick={cancelProductEdit}
+            >
+              편집 취소
+            </button>
+            <button
+              className="primary"
+              onClick={() =>
+                work(async () => {
+                  if (await save()) setDraft(undefined);
+                })
+              }
+            >
+              초안 저장
+            </button>
+          </div>
+        </div>
+      )}
+      {editPaused && can && current && !folderDraft && (
+        <div className="catalog-save-bar">
+          <span>저장된 단가표를 보고 있습니다.</span>
           <button
-            className="primary"
-            onClick={() =>
-              work(async () => {
-                if (await save()) setDraft(undefined);
-              })
-            }
+            onClick={() => {
+              if (current.status === "draft") setEditPaused(false);
+              else {
+                const now = new Date().toISOString();
+                setDraft({
+                  ...structuredClone(current),
+                  id: crypto.randomUUID(),
+                  rev: 0,
+                  status: "draft",
+                  publishedAt: undefined,
+                  createdAt: now,
+                  updatedAt: now,
+                });
+              }
+            }}
           >
-            초안 저장
+            단가표 수정
           </button>
         </div>
       )}
@@ -4003,6 +4076,7 @@ function CatalogView({
             disabled={!!folderDraft}
             onClick={() => {
               setBook(kind);
+              setEditPaused(false);
               setCategory("");
               setSelected("");
               setBulkIds([]);
@@ -4057,6 +4131,7 @@ function CatalogView({
             onChange={(e) => {
               setDraft(s.catalogs.find((c) => c.id === e.target.value));
               setSelected("");
+              setBulkIds([]);
             }}
           >
             <option value="">단가표 선택</option>
@@ -4237,9 +4312,27 @@ function CatalogView({
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="상품 검색"
+                aria-label="단가표 검색"
+                placeholder={
+                  searchScope === "folder"
+                    ? "폴더명 검색"
+                    : searchScope === "product"
+                      ? "상품명 검색"
+                      : "폴더명 또는 상품명 검색"
+                }
               />
             </div>
+            <select
+              aria-label="검색 대상"
+              value={searchScope}
+              onChange={(e) =>
+                setSearchScope(e.target.value as CatalogSearchScope)
+              }
+            >
+              <option value="all">폴더명 + 상품명</option>
+              <option value="folder">폴더명만</option>
+              <option value="product">상품명만</option>
+            </select>
             <label className="check">
               <input
                 type="checkbox"
@@ -4259,6 +4352,14 @@ function CatalogView({
               <option value="missing">가격 미기재·범위</option>
             </select>
           </div>
+          {search.trim() && category && (
+            <p className="catalog-search-scope">
+              선택한 폴더 안에서 검색 중{" "}
+              <button type="button" onClick={() => setCategory("")}>
+                전체 폴더에서 검색
+              </button>
+            </p>
+          )}
           {editable && current && (
             <details className="bulk-edit">
               <summary>표 편집·선택 가격 조정·엑셀 붙여넣기</summary>
@@ -4478,8 +4579,10 @@ function CatalogView({
               folderEditing={!!folderDraft}
               selectedIds={bulkIds}
               onSelection={setBulkIds}
+              onDelete={removeProducts}
               onChange={folderDraft ? setFolderDraft : setDraft}
               onEdit={(id) => {
+                if (can && !folderDraft) setEditPaused(false);
                 if (can && !folderDraft && current.status === "published") {
                   const now = new Date().toISOString();
                   setDraft({
@@ -4843,6 +4946,14 @@ function CatalogView({
                   }}
                 >
                   상품 복제
+                </button>
+                <button
+                  type="button"
+                  className="catalog-delete-button"
+                  {...catalogCommand("productDelete")}
+                  onClick={() => removeProducts([product.id])}
+                >
+                  <Trash2 size={16} /> 상품 삭제
                 </button>
                 <button
                   {...catalogCommand("productKeep")}

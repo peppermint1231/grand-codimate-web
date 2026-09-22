@@ -1,7 +1,7 @@
 {
-  "version": "0.10.0",
-  "versionCode": 26,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.0.apk",
-  "sha256": "e865b4580809d88f9d011605a389b4e9e6107095e32735866311e001b0f53850",
-  "notes": "홈페이지 미용·이벤트 통합 갱신·게시 상태 색상·원문 가격 점검"
+  "version": "0.10.1",
+  "versionCode": 27,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.1.apk",
+  "sha256": "25f272e259419172820a94b7cda7dd57e20476ad94941805c5a1d00079611f76",
+  "notes": "상품 개별·일괄 삭제/검색·편집 취소·의견 요청 상담 사진/주석"
 }

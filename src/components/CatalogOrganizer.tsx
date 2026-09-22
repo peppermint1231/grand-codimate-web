@@ -2,7 +2,7 @@ import { EventSourceInfo, WebsiteSourceInfo } from "./EventCatalog";
 import { websiteFolderPresence } from "../core/websitePresence";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
-import { ChevronRight, GripVertical } from "lucide-react";
+import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
 import { money, type Catalog, type Product } from "../core/model";
 import {
   folderPath,
@@ -24,6 +24,7 @@ export function CatalogProductRows({
   onSelection,
   onChange,
   onEdit,
+  onDelete,
   work,
 }: {
   catalog: Catalog;
@@ -35,6 +36,7 @@ export function CatalogProductRows({
   onSelection: (ids: string[]) => void;
   onChange: (catalog: Catalog) => void;
   onEdit: (id: string) => void;
+  onDelete: (ids: string[]) => void;
   work: Work;
 }) {
   const drag = useRef<{
@@ -112,6 +114,18 @@ export function CatalogProductRows({
           >
             선택 해제
           </button>
+          {editable && (
+            <button
+              type="button"
+              className="catalog-delete-button"
+              {...catalogCommand("productsDelete")}
+              disabled={!selectedIds.length}
+              onClick={() => onDelete(selectedIds)}
+            >
+              <Trash2 size={16} /> 선택 상품 삭제
+              {selectedIds.length ? ` (${selectedIds.length})` : ""}
+            </button>
+          )}
           <span>
             {selectedIds.length}개 선택 · 이동 손잡이를 폴더로 끌어놓으세요
           </span>
@@ -275,6 +289,17 @@ export function CatalogProductRows({
                     />
                     맞춤 시술 찾기에 표시
                   </label>
+                )}
+                {editable && (
+                  <button
+                    type="button"
+                    className="catalog-delete-button"
+                    aria-label={p.name + " 삭제"}
+                    title="상품 삭제 · 편집 창에서는 Delete"
+                    onClick={() => onDelete([p.id])}
+                  >
+                    <Trash2 size={16} /> 삭제
+                  </button>
                 )}
               </div>
               <WebsiteSourceInfo product={p} />

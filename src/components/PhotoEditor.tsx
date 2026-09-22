@@ -273,16 +273,24 @@ export function PhotoEditor({
   readonly = false,
   canEraseAll = false,
   saveContainer,
+  annotationsOnly = false,
+  directSave = false,
+  leaveEvent = "codimate:before-photo-leave",
 }: {
   photo: Photo;
-  onChange: (p: Photo) => void;
+  onChange: (p: Photo) => void | Promise<void | boolean>;
   userId: string;
   readonly?: boolean;
   canEraseAll?: boolean;
   saveContainer?: HTMLElement | null;
+  annotationsOnly?: boolean;
+  directSave?: boolean;
+  leaveEvent?: string;
 }) {
   const [photo, onChange] = useState(savedPhoto);
   const [savedMessage, setSavedMessage] = useState("");
+  const [saving, setSaving] = useState(false),
+    [saveError, setSaveError] = useState("");
   const dirty =
     JSON.stringify({
       ...photo,
@@ -291,6 +299,10 @@ export function PhotoEditor({
     }) !== JSON.stringify(savedPhoto);
   useEffect(() => {
     const leave = (e: Event) => {
+      if (saving) {
+        e.preventDefault();
+        return;
+      }
       if (
         dirty &&
         !window.confirm("이 사진의 저장하지 않은 편집을 버리고 이동할까요?")
@@ -306,15 +318,15 @@ export function PhotoEditor({
         e.returnValue = "";
       }
     };
-    window.addEventListener("codimate:before-photo-leave", leave);
+    window.addEventListener(leaveEvent, leave);
     window.addEventListener("codimate:before-consult-save", beforeSave);
     window.addEventListener("beforeunload", beforeUnload);
     return () => {
-      window.removeEventListener("codimate:before-photo-leave", leave);
+      window.removeEventListener(leaveEvent, leave);
       window.removeEventListener("codimate:before-consult-save", beforeSave);
       window.removeEventListener("beforeunload", beforeUnload);
     };
-  }, [dirty]);
+  }, [dirty, saving, leaveEvent]);
   const [textOpen, setTextOpen] = useState(false),
     [styleOpen, setStyleOpen] = useState(false);
   const [frame, setFrame] = useState<{
@@ -1009,15 +1021,33 @@ export function PhotoEditor({
   const saveButton = (
     <button
       className="primary"
-      disabled={readonly || !dirty || !!frame || textOpen || styleOpen}
-      onClick={() => {
-        savePhoto(photo);
-        setSavedMessage(
-          "현재 사진을 작업 중인 상담에 반영했습니다. 상담 저장을 해야 다시 열 때 유지됩니다.",
-        );
+      disabled={
+        readonly || saving || !dirty || !!frame || textOpen || styleOpen
+      }
+      onClick={async () => {
+        setSaving(true);
+        setSaveError("");
+        try {
+          const result = await savePhoto(photo);
+          if (result === false) {
+            setSaveError(
+              "기기에 저장됨 · 동기화 완료 후 상담의 주석을 확인하세요.",
+            );
+            return;
+          }
+          setSavedMessage(
+            directSave
+              ? "해당 상담에 주석을 저장했습니다."
+              : "현재 사진을 작업 중인 상담에 반영했습니다. 상담 저장을 해야 다시 열 때 유지됩니다.",
+          );
+        } catch (e) {
+          setSaveError((e as Error).message);
+        } finally {
+          setSaving(false);
+        }
       }}
     >
-      사진 편집 저장
+      {saving ? "사진 편집 저장 중…" : "사진 편집 저장"}
     </button>
   );
   return (
@@ -1516,40 +1546,56 @@ export function PhotoEditor({
         <button disabled={readonly || !redo.length} onClick={redoOne}>
           다시실행
         </button>
-        <button disabled={readonly} onClick={() => rotate(photo.rotation - 90)}>
-          ↶ 좌 90°
-        </button>
-        <button disabled={readonly} onClick={() => rotate(photo.rotation + 90)}>
-          ↷ 우 90°
-        </button>
-        <button disabled={readonly} onClick={() => rotate(0)}>
-          0° 원래 회전
-        </button>
-        <label>
-          자유회전 {photo.rotation}°
-          <input
-            aria-label="자유회전"
-            disabled={readonly}
-            type="range"
-            min={-180}
-            max={180}
-            value={photo.rotation}
-            onChange={(e) => commit({ ...photo, rotation: +e.target.value })}
-          />
-        </label>
-        <button
-          disabled={readonly}
-          onClick={() =>
-            photo.crop || photo.viewportCrop
-              ? commit({ ...photo, crop: undefined, viewportCrop: undefined })
-              : setTool("crop")
-          }
-        >
-          {photo.crop || photo.viewportCrop ? "자르기 해제" : "영역 자르기"}
-        </button>
-        <button disabled={readonly || !!frame} onClick={beginFrame}>
-          영역 자르기 (포트레이트)
-        </button>
+        {!annotationsOnly && (
+          <>
+            <button
+              disabled={readonly}
+              onClick={() => rotate(photo.rotation - 90)}
+            >
+              ↶ 좌 90°
+            </button>
+            <button
+              disabled={readonly}
+              onClick={() => rotate(photo.rotation + 90)}
+            >
+              ↷ 우 90°
+            </button>
+            <button disabled={readonly} onClick={() => rotate(0)}>
+              0° 원래 회전
+            </button>
+            <label>
+              자유회전 {photo.rotation}°
+              <input
+                aria-label="자유회전"
+                disabled={readonly}
+                type="range"
+                min={-180}
+                max={180}
+                value={photo.rotation}
+                onChange={(e) =>
+                  commit({ ...photo, rotation: +e.target.value })
+                }
+              />
+            </label>
+            <button
+              disabled={readonly}
+              onClick={() =>
+                photo.crop || photo.viewportCrop
+                  ? commit({
+                      ...photo,
+                      crop: undefined,
+                      viewportCrop: undefined,
+                    })
+                  : setTool("crop")
+              }
+            >
+              {photo.crop || photo.viewportCrop ? "자르기 해제" : "영역 자르기"}
+            </button>
+            <button disabled={readonly || !!frame} onClick={beginFrame}>
+              영역 자르기 (포트레이트)
+            </button>
+          </>
+        )}
         {saveButton}
         <button
           onClick={() => canvas.current?.parentElement?.requestFullscreen?.()}
@@ -1557,9 +1603,16 @@ export function PhotoEditor({
           크게 보기
         </button>
       </div>
+      {saveError && (
+        <p className="error" role="alert">
+          {saveError}
+        </p>
+      )}
       <p className="small" role="status">
         {dirty
-          ? "사진 편집 미저장 · 사진 편집 저장 후 상담을 저장하세요."
+          ? directSave
+            ? "주석 편집 미저장 · 사진 편집 저장을 누르면 해당 상담에 저장됩니다."
+            : "사진 편집 미저장 · 사진 편집 저장 후 상담을 저장하세요."
           : savedMessage}
       </p>
       <p className="small">

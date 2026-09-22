@@ -120,6 +120,25 @@ export const catalogCommands = {
     mod: true,
     shift: true,
   },
+  productCancel: {
+    label: "상품 편집 취소 (확인 후)",
+    keys: "Alt+Escape",
+    scope: "상품 목록",
+    code: "Escape",
+    alt: true,
+  },
+  productsDelete: {
+    label: "선택 상품 삭제 (확인 후)",
+    keys: "Delete",
+    scope: "상품 목록",
+    code: "Delete",
+  },
+  productDelete: {
+    label: "현재 상품 삭제 (확인 후)",
+    keys: "Delete",
+    scope: "상품·옵션 편집 창",
+    code: "Delete",
+  },
   productNew: {
     label: "상품 추가",
     keys: "Alt+N",
@@ -230,9 +249,13 @@ export function dispatchCatalogCommand(e: KeyboardEvent) {
   for (const id of Object.keys(catalogCommands) as CatalogCommand[]) {
     if (!commandMatches(e, id)) continue;
     const buttons = [
-      ...(id === "help"
-        ? product || editor
-        : scope
+      ...(id === "productCancel" &&
+      !product &&
+      scope.dataset.catalogScope === "products"
+        ? editor
+        : id === "help"
+          ? product || editor
+          : scope
       ).querySelectorAll<HTMLButtonElement>(
         `button[data-catalog-command="${id}"]`,
       ),

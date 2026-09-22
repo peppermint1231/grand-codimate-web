@@ -1565,6 +1565,61 @@ export async function applyCommand(
       text = "의사 의견 요청";
       break;
     }
+    case "opinion.annotate": {
+      const o = find(s.opinions);
+      ensure(
+        (o.toId === user.id && user.role === "doctor") || isAdministrator(user),
+        "담당 의사만 주석을 저장할 수 있습니다",
+        403,
+      );
+      const c = s.consultations.find((c) => c.id === o.consultationId);
+      ensure(
+        c && c.status === "H" && !c.cancelled,
+        "보류 상담에만 의견 주석을 추가할 수 있습니다",
+      );
+      ensure(
+        c.rev === p.consultationRev,
+        "상담이 변경되었습니다. 사진을 다시 열어 주석을 확인하세요",
+        409,
+      );
+      const photo = c.photos.find((ph) => ph.id === p.photoId);
+      ensure(photo, "상담 사진을 찾을 수 없습니다", 404);
+      const incoming = photoSchema.shape.annotations.parse(p.annotations);
+      ensure(
+        incoming.every((a) => a.id) &&
+          new Set(incoming.map((a) => a.id)).size === incoming.length,
+        "주석 ID가 없거나 중복되었습니다",
+      );
+      const originalAnnotations = photoSchema.shape.annotations.parse(
+        photo.annotations,
+      );
+      for (const a of incoming.filter((a) => a.authorId !== user.id))
+        ensure(
+          originalAnnotations.some(
+            (old) => JSON.stringify(old) === JSON.stringify(a),
+          ),
+          "다른 작성자의 주석은 변경할 수 없습니다",
+          403,
+        );
+      const others = photo.annotations.filter((a) => a.authorId !== user.id);
+      ensure(
+        !incoming.some(
+          (a) =>
+            a.authorId === user.id && others.some((other) => other.id === a.id),
+        ),
+        "다른 작성자의 주석 ID를 사용할 수 없습니다",
+        403,
+      );
+      photo.annotations = [
+        ...others,
+        ...incoming.filter((a) => a.authorId === user.id),
+      ];
+      touch(c);
+      touch(o);
+      patientId = c.patientId;
+      text = "의견 요청 사진에 의사 주석 저장";
+      break;
+    }
     case "opinion.answer": {
       const o = find(s.opinions);
       ensure(

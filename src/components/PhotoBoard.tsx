@@ -53,7 +53,7 @@ export function ConsultationCover({ photos }: { photos: Photo[] }) {
     </span>
   ) : null;
 }
-function PhotoModal({
+export function PhotoModal({
   label,
   className,
   close,

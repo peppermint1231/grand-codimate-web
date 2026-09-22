@@ -1,7 +1,9 @@
 import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
+import { withBeautyRootLabels } from "./catalogClassification";
 import { z } from "zod";
 import {
   latestCatalogs,
+  latestCatalog,
   catalogBook,
   type CatalogBook,
   type State,
@@ -63,48 +65,52 @@ export interface Inquiry {
   consultationId?: string;
 }
 export function publicProducts(state: State): PublicProduct[] {
-  return latestCatalogs(state).flatMap((c) =>
-    c.products
-      .filter(
-        (p) => p.publicVisible && eventAvailability(p.webEvent) === "current",
-      )
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        ...(p.webEvent &&
-        p.active &&
-        p.options.length === 1 &&
-        !p.options[0].review &&
-        p.options[0].tax !== "unknown" &&
-        p.options[0].price === p.webEvent.salePrice
-          ? {
-              event: {
-                period: p.webEvent.period,
-                regularPrice: p.webEvent.regularPrice,
-                discountRate: p.webEvent.discountRate,
-                salePrice: p.webEvent.salePrice,
-              },
-            }
-          : {}),
-        book: catalogBook(c),
-        catalogVersion: c.version,
-        folder: folderPath(c, productFolder(c, p)).map((f) => ({
-          id: f.id,
-          name: f.name,
-          color: f.color,
+  return latestCatalogs(state)
+    .map((c) => withBeautyRootLabels(c, latestCatalog(state, "미용")))
+    .flatMap((c) =>
+      c.products
+        .filter(
+          (p) => p.publicVisible && eventAvailability(p.webEvent) === "current",
+        )
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          ...(p.webEvent &&
+          p.active &&
+          p.options.length === 1 &&
+          !p.options[0].review &&
+          p.options[0].tax !== "unknown" &&
+          p.options[0].price === p.webEvent.salePrice
+            ? {
+                event: {
+                  period: p.webEvent.period,
+                  regularPrice: p.webEvent.regularPrice,
+                  discountRate: p.webEvent.discountRate,
+                  salePrice: p.webEvent.salePrice,
+                },
+              }
+            : {}),
+          book: catalogBook(c),
+          catalogVersion: c.version,
+          folder: folderPath(c, productFolder(c, p)).map((f) => ({
+            id: f.id,
+            name: f.name,
+            color: f.color,
+          })),
+          folders: productFolderPaths(c, p).map((path) =>
+            path.map((f) => ({ id: f.id, name: f.name, color: f.color })),
+          ),
+          options: p.options.map((o) => ({
+            id: o.id,
+            label: o.label,
+            unit: o.unit,
+            price:
+              p.active && !o.review && o.tax !== "unknown" ? o.price : null,
+            tax:
+              p.active && !o.review && o.tax !== "unknown" ? o.tax : "unknown",
+          })),
         })),
-        folders: productFolderPaths(c, p).map((path) =>
-          path.map((f) => ({ id: f.id, name: f.name, color: f.color })),
-        ),
-        options: p.options.map((o) => ({
-          id: o.id,
-          label: o.label,
-          unit: o.unit,
-          price: p.active && !o.review && o.tax !== "unknown" ? o.price : null,
-          tax: p.active && !o.review && o.tax !== "unknown" ? o.tax : "unknown",
-        })),
-      })),
-  );
+    );
 }
 export interface PublicCategory {
   id: string;
@@ -115,22 +121,24 @@ export interface PublicCategory {
   questions: { id: string; label: string }[];
 }
 export function publicCategories(state: State): PublicCategory[] {
-  return latestCatalogs(state).flatMap((c) =>
-    catalogNodes(c)
-      .filter((f) => !f.parentId)
-      .map((f) => ({
-        id: catalogBook(c) + ":" + f.id,
-        folderId: f.id,
-        book: catalogBook(c),
-        name: f.name,
-        color: f.color,
-        questions: [
-          ...(baseConcerns.find(
-            (x) => x.id === (f.linkTo || f.id) && x.name === f.name,
-          )?.questions || []),
-        ],
-      })),
-  );
+  return latestCatalogs(state)
+    .map((c) => withBeautyRootLabels(c, latestCatalog(state, "미용")))
+    .flatMap((c) =>
+      catalogNodes(c)
+        .filter((f) => !f.parentId)
+        .map((f) => ({
+          id: catalogBook(c) + ":" + f.id,
+          folderId: f.id,
+          book: catalogBook(c),
+          name: f.name,
+          color: f.color,
+          questions: [
+            ...(baseConcerns.find(
+              (x) => x.id === (f.linkTo || f.id) && x.name === f.name,
+            )?.questions || []),
+          ],
+        })),
+    );
 }
 export const inquiryInput = z.object({
   token: z.string().max(2000),

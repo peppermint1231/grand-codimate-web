@@ -3627,3 +3627,19 @@ details p {
 .event-sync-preview .event-poster-grid {
   max-width: 600px;
 }
+
+.website-presence-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 10px 2px;
+  font-size: 12px;
+}
+.website-presence-legend small {
+  flex-basis: 100%;
+  line-height: 1.5;
+  color: var(--muted, #64748b);
+}
+.website-presence-legend span {
+  font-weight: 650;
+}

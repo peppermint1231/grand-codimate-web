@@ -414,6 +414,15 @@ export function validateCatalog(c: Catalog, posting = false) {
     if (p.webEvent) {
       const e = p.webEvent;
       ensure(
+        e.offerName === undefined || typeof e.offerName === "string",
+        "상품 원문 이름을 확인하세요",
+      );
+      ensure(
+        e.offerDescription === undefined ||
+          typeof e.offerDescription === "string",
+        "상품 원문 설명을 확인하세요",
+      );
+      ensure(
         e.provider === "grand4" &&
           /^\d{1,10}$/.test(e.eventId) &&
           /^\d{1,10}$/.test(e.offerId),
@@ -452,8 +461,9 @@ export function validateCatalog(c: Catalog, posting = false) {
         typeof e.eventName === "string" &&
           (e.categoryName === undefined ||
             typeof e.categoryName === "string") &&
-          isEventBanner(e.eventName, e.categoryName),
-        "이벤트 배너 또는 이벤트 분류의 상품만 연동할 수 있습니다",
+          (isEventBanner(e.eventName, e.categoryName) ||
+            isEventBanner(e.offerName || p.name)),
+        "배너·분류·상품명에 이벤트 또는 EVENT가 있는 상품만 연동할 수 있습니다",
       );
       ensure(
         typeof e.period === "string" &&

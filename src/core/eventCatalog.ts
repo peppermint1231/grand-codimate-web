@@ -1,9 +1,28 @@
-import type { Catalog, Option, Product } from "./model";
+import type { Catalog, CatalogFolder, Option, Product } from "./model";
 import { catalogNodes, inferRoot, rootFolders } from "./catalogFolders";
+import {
+  beautyClassifier,
+  classificationReviewId,
+} from "./catalogClassification";
 export const EVENT_ORIGIN = "https://www.grand4.co.kr";
 export const EVENT_LIST_URL = EVENT_ORIGIN + "/clinicPrice/eventListLeft.php";
 export const isEventBanner = (name: string, categoryName = "") =>
-  name.includes("이벤트") || categoryName.includes("이벤트");
+  /이벤트|event/i.test(name + " " + categoryName);
+export const selectWebsiteOffers = (
+  pages: WebsiteEvent[],
+  book: "미용" | "이벤트",
+) =>
+  pages
+    .map((page) => ({
+      ...page,
+      offers: page.offers.filter(
+        (offer) =>
+          (isEventBanner(page.name, page.categoryName) ||
+            isEventBanner(offer.name)) ===
+          (book === "이벤트"),
+      ),
+    }))
+    .filter((page) => page.offers.length);
 export interface EventCategory {
   id: string;
   name: string;
@@ -44,6 +63,8 @@ export interface WebsiteEvent {
   offers: EventOffer[];
 }
 export interface EventOriginInfo {
+  offerName?: string;
+  offerDescription?: string;
   provider: "grand4";
   eventId: string;
   offerId: string;
@@ -95,10 +116,11 @@ export function mergeWebsiteEvents(
   base: Catalog | undefined,
   events: WebsiteEvent[],
   now = new Date().toISOString(),
+  beauty?: Catalog,
 ) {
   if (base && base.book !== "이벤트")
     throw new Error("이벤트 SSOT에서만 갱신할 수 있습니다.");
-  events = events.filter((e) => isEventBanner(e.name, e.categoryName));
+  events = selectWebsiteOffers(events, "이벤트");
   if (!events.length || !events.some((e) => e.offers.length))
     throw new Error(
       "홈페이지에서 상품을 확인하지 못했습니다. 기존 단가표는 유지됩니다.",
@@ -124,7 +146,22 @@ export function mergeWebsiteEvents(
   catalog.updatedAt = now;
   delete catalog.publishedAt;
   catalog.version = "홈페이지 이벤트 · " + now.slice(0, 10);
-  const nodes = catalogNodes(catalog).map((f) => ({ ...f }));
+  const nodes: CatalogFolder[] = (
+    !base && beauty
+      ? catalogNodes(beauty)
+          .filter((f) => !f.parentId)
+          .map(({ id, name, color }) => ({ id, name, color, parentId: "" }))
+      : catalogNodes(catalog)
+  ).map((f) => ({ ...f }));
+  const classify = beauty && beautyClassifier(beauty);
+  const beautyRoots = beauty && catalogNodes(beauty).filter((f) => !f.parentId);
+  if (beautyRoots) {
+    for (const root of beautyRoots) {
+      const existing = nodes.find((f) => f.id === root.id && !f.parentId);
+      if (existing)
+        Object.assign(existing, { name: root.name, color: root.color });
+    }
+  }
   const oldBySource = new Map(
     catalog.products
       .filter((p) => p.webEvent)
@@ -171,6 +208,8 @@ export function mergeWebsiteEvents(
         old.webEvent!.sourceSignature !== signature ||
         !!old.webEvent!.missing;
       const info: EventOriginInfo = {
+        offerName: offer.name,
+        offerDescription: offer.description,
         provider: "grand4",
         eventId: event.id,
         offerId: offer.id,
@@ -248,9 +287,20 @@ export function mergeWebsiteEvents(
       }
       if (p.options.some((o) => o.review)) summary.review++;
       if (!p.folderId || !nodes.some((n) => n.id === p.folderId && !n.linkTo)) {
-        const root = inferRoot({ ...p, folderId: undefined });
+        const root = classify
+          ? classify(p).rootId
+          : inferRoot({ ...p, folderId: undefined });
         if (!nodes.some((n) => n.id === root))
-          nodes.push({ ...rootFolders.find((n) => n.id === root)! });
+          nodes.push(
+            root === classificationReviewId
+              ? {
+                  id: root,
+                  name: "미분류·검토 필요",
+                  parentId: "",
+                  color: "#9a6700",
+                }
+              : { ...(beautyRoots || rootFolders).find((n) => n.id === root)! },
+          );
         const folderId = `grand4-folder-${root}-${event.id}`;
         if (!nodes.some((n) => n.id === folderId)) {
           const label = event.name

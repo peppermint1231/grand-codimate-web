@@ -1,4 +1,5 @@
 import { EventSourceInfo } from "./EventCatalog";
+import { websiteFolderPresence } from "../core/websitePresence";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
 import { ChevronRight, GripVertical } from "lucide-react";
@@ -128,7 +129,15 @@ export function CatalogProductRows({
               <span
                 key={f.id}
                 className={i === 0 ? "group-root" : "group-child"}
-                style={{ color: f.color || "#155e59" }}
+                title={websiteFolderPresence(catalog, f.id)?.label}
+                style={{
+                  color:
+                    i > 0
+                      ? websiteFolderPresence(catalog, f.id)?.color ||
+                        f.color ||
+                        "#155e59"
+                      : f.color || "#155e59",
+                }}
               >
                 {i > 0 && <ChevronRight size={12} />}
                 {f.name}

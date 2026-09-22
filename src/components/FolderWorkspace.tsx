@@ -1,4 +1,8 @@
 import { catalogCommand } from "../lib/catalogShortcuts";
+import {
+  websiteFolderPresence,
+  websitePresenceStyles,
+} from "../core/websitePresence";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
@@ -372,7 +376,18 @@ export function FolderWorkspace({
                     }
                   }}
                 >
-                  <span style={{ color: f.color || "#155e59" }}>{f.name}</span>
+                  <span
+                    title={websiteFolderPresence(catalog, f.id)?.label}
+                    style={{
+                      color: f.parentId
+                        ? websiteFolderPresence(catalog, f.id)?.color ||
+                          f.color ||
+                          "#155e59"
+                        : f.color || "#155e59",
+                    }}
+                  >
+                    {f.name}
+                  </span>
                   <small>
                     {
                       catalog.products.filter((p) => inFolder(catalog, p, f.id))
@@ -511,6 +526,23 @@ export function FolderWorkspace({
           </button>
         )}
       </div>
+      {catalog.book === "이벤트" && (
+        <div
+          className="website-presence-legend"
+          aria-label="홈페이지 게시 상태 색상 안내"
+        >
+          <small>하위 폴더 색상 · 마지막 홈페이지 갱신 기준</small>
+          {Object.values(websitePresenceStyles).map((status) => (
+            <span key={status.label} style={{ color: status.color }}>
+              ● {status.label}
+            </span>
+          ))}
+          <small>
+            이벤트 기간 종료와 게시 여부는 별개입니다. 대분류의 지정 색상은
+            유지합니다.
+          </small>
+        </div>
+      )}
       <div className="catalog-fold-controls" aria-label="폴더 펼침 설정">
         <button
           {...catalogCommand("collapse")}

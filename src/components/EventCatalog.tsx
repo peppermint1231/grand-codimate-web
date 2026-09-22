@@ -110,10 +110,12 @@ function PosterLinks({ urls, name }: { urls: string[]; name: string }) {
 }
 export function EventCatalogRefresh({
   catalog,
+  beauty,
   disabled,
   onImport,
 }: {
   catalog?: Catalog;
+  beauty?: Catalog;
   disabled: boolean;
   onImport: (candidate: Catalog) => Promise<boolean>;
 }) {
@@ -151,7 +153,7 @@ export function EventCatalogRefresh({
     previewError = "";
   if (events) {
     try {
-      preview = mergeWebsiteEvents(catalog, events);
+      preview = mergeWebsiteEvents(catalog, events, undefined, beauty);
     } catch (e) {
       previewError = (e as Error).message;
     }
@@ -170,9 +172,10 @@ export function EventCatalogRefresh({
         </button>
       </div>
       <p>
-        배너명 또는 분류명에 ‘이벤트’가 있는 항목의
+        배너명·분류명·상품명에 ‘이벤트’ 또는 ‘EVENT’가 있는 항목의
         시술·기간·정가·할인율·할인가를 가져옵니다. 일반 미용 가격표는
-        제외합니다. 포스터는 원본 링크로 표시합니다.
+        제외합니다. 포스터는 원본 링크로 표시합니다. 신규 상품은 게시된 미용
+        SSOT의 분류를 따르며, 판단이 어려우면 ‘미분류·검토 필요’에 둡니다.
       </p>
       <a href={EVENT_LIST_URL} target="_blank" rel="noopener noreferrer">
         홈페이지 이벤트 목록 열기 <ExternalLink size={14} />

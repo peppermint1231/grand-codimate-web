@@ -1,6 +1,6 @@
-import { isEventBanner } from "../core/eventCatalog";
+import { selectWebsiteOffers } from "../core/eventCatalog";
 import type { EventPage, EventItem, WebsiteEvent } from "../core/eventCatalog";
-export async function scanWebsiteEvents(
+export async function scanWebsiteCatalog(
   load: (query: string) => Promise<EventPage | WebsiteEvent>,
   progress: (message: string) => void,
   signal?: AbortSignal,
@@ -32,8 +32,7 @@ export async function scanWebsiteEvents(
         `?category=${category.id}&page=${page}`,
       )) as EventPage;
       for (const item of result.items)
-        if (isEventBanner(item.name, item.categoryName) && !items.has(item.id))
-          items.set(item.id, item);
+        if (!items.has(item.id)) items.set(item.id, item);
       if (items.size > 400)
         throw new Error(
           "이벤트 수가 제한을 넘었습니다. 기존 단가표를 유지합니다.",
@@ -61,8 +60,6 @@ export async function scanWebsiteEvents(
       )) as WebsiteEvent;
       if (event.id !== item.id || !Array.isArray(event.offers))
         throw new Error("이벤트 상세를 확인할 수 없습니다.");
-      if (!isEventBanner(event.name, event.categoryName))
-        throw new Error("배너명이 변경되었습니다. 다시 갱신하세요.");
       events[index] = event;
       completed++;
       progress(
@@ -82,4 +79,14 @@ export async function scanWebsiteEvents(
   if (failed) throw failed.reason;
   check();
   return events;
+}
+export async function scanWebsiteEvents(
+  load: (query: string) => Promise<EventPage | WebsiteEvent>,
+  progress: (message: string) => void,
+  signal?: AbortSignal,
+) {
+  return selectWebsiteOffers(
+    await scanWebsiteCatalog(load, progress, signal),
+    "이벤트",
+  );
 }

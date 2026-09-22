@@ -4013,6 +4013,7 @@ function CatalogView({
       {book === "이벤트" && can && (
         <EventCatalogRefresh
           catalog={current}
+          beauty={latestCatalog(s, "미용")}
           disabled={unsaved || !!folderDraft}
           onImport={async (candidate) => {
             if (

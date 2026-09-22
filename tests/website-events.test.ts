@@ -148,11 +148,20 @@ it("rejects arbitrary endpoints and reads HTML only; image bodies are never fetc
     ),
   ).rejects.toThrow("크기");
 });
-it("scans event banners only, follows pages, deduplicates events and never fetches ordinary price details", async () => {
+it("scans all banner details to find offer-level events, follows pages and deduplicates events", async () => {
   const calls: string[] = [];
   const load = async (q: string) => {
     calls.push(q);
-    if (q.includes("item=")) return event();
+    if (q.includes("item="))
+      return q.includes("item=102")
+        ? {
+            ...event(),
+            id: "102",
+            name: "일반 가격표",
+            categoryName: "미용",
+            offers: [{ ...event().offers[0], name: "일반 시술" }],
+          }
+        : event();
     const page = parseEventPage(
       eventList(
         '<a href="./clinicView.php?i=101&cate=20"><div class="Name">시험 이벤트</div></a><a href="./clinicView.php?i=102&cate=30"><div class="Name">일반 가격표</div></a>',
@@ -166,6 +175,7 @@ it("scans event banners only, follows pages, deduplicates events and never fetch
   expect(events).toHaveLength(1);
   expect(calls.filter((q) => q.includes("item="))).toEqual([
     "?category=20&item=101",
+    "?category=30&item=102",
   ]);
   expect(calls).toContain("?category=20&page=2");
 });
@@ -408,13 +418,18 @@ it("includes event-category banners even when their individual title does not co
   const events = await scanWebsiteEvents(
     async (q) => {
       calls.push(q);
-      return q.includes("item=") ? special : page;
+      return q.includes("item=104")
+        ? ordinary
+        : q.includes("item=")
+          ? special
+          : page;
     },
     () => {},
   );
   expect(events.map((e) => e.id)).toEqual(["103"]);
   expect(calls.filter((q) => q.includes("item="))).toEqual([
     "?category=20&item=103",
+    "?category=30&item=104",
   ]);
   const merged = mergeWebsiteEvents(undefined, [special, ordinary], now);
   expect(merged.catalog.products).toHaveLength(1);

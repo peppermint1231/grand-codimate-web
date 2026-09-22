@@ -1,3 +1,10 @@
+import {
+  jobRoles,
+  permissionLevels,
+  normalizeUser,
+  isAdministrator,
+  canUseExecutiveFeatures,
+} from "../src/core/model";
 import { Inquiries } from "./inquiries";
 import {
   inquiryInput,
@@ -111,7 +118,8 @@ export class Clinic extends DurableObject<Env> {
     );
   }
   private async account(id: string) {
-    return this.secret<Account>("user:" + id);
+    const account = await this.secret<Account>("user:" + id);
+    return account ? normalizeUser(account) : undefined;
   }
   private async state() {
     const s = emptyState();
@@ -130,7 +138,7 @@ export class Clinic extends DurableObject<Env> {
       const a = await this.secret<Account>(r.id);
       if (a) {
         const { passwordHash, ...u } = a;
-        s.users.push(u);
+        s.users.push(normalizeUser(u));
       }
     }
     return s;
@@ -409,7 +417,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.8.6",
+        version: "0.9.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -442,11 +450,16 @@ export class Clinic extends DurableObject<Env> {
           b.name.trim(),
         "계정 정보를 확인하세요",
       );
+      ensure(
+        b.role === undefined || jobRoles.includes(b.role),
+        "직무 역할을 확인하세요",
+      );
       const a: Account = {
         id: crypto.randomUUID(),
         username: b.username,
         name: b.name,
-        role: "admin",
+        role: jobRoles.includes(b.role) ? b.role : "admin",
+        permissionLevel: "admin",
         active: true,
         permissions: {},
         passwordHash: await hashPassword(b.password),
@@ -724,7 +737,9 @@ export class Clinic extends DurableObject<Env> {
     const user = await this.user(req);
     await this.settleStorageRename();
     const admin = () =>
-      ensure(user.role === "admin", "관리자만 가능합니다", 403);
+      ensure(isAdministrator(user), "관리자만 가능합니다", 403);
+    const executive = () =>
+      ensure(canUseExecutiveFeatures(user), "관리자·임원만 가능합니다", 403);
     if (
       [
         "/api/commands",
@@ -982,7 +997,7 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true, rootFolder: await this.storageRoot() });
     }
     if (path === "/api/backup" && req.method === "POST") {
-      admin();
+      executive();
       const snapshot = {
         version: 1,
         createdAt: new Date().toISOString(),
@@ -1086,7 +1101,8 @@ export class Clinic extends DurableObject<Env> {
       admin();
       const b = await body();
       ensure(
-        ["admin", "doctor", "coordinator"].includes(b.role) &&
+        jobRoles.includes(b.role) &&
+          permissionLevels.includes(b.permissionLevel) &&
           typeof b.username === "string" &&
           /^[a-zA-Z0-9_.-]{3,40}$/.test(b.username) &&
           typeof b.name === "string" &&
@@ -1102,7 +1118,7 @@ export class Clinic extends DurableObject<Env> {
         "이미 사용 중인 아이디입니다",
       );
       ensure(
-        id !== user.id || (b.active && b.role === "admin"),
+        id !== user.id || (b.active && b.permissionLevel === "admin"),
         "현재 관리자 계정은 비활성화하거나 강등할 수 없습니다",
       );
       const a: Account = {
@@ -1110,6 +1126,7 @@ export class Clinic extends DurableObject<Env> {
         username: b.username,
         name: b.name,
         role: b.role,
+        permissionLevel: b.permissionLevel,
         active: !!b.active,
         permissions: Object.fromEntries(
           Object.entries(b.permissions || {}).filter(
@@ -1269,7 +1286,7 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true });
     }
     if (path === "/api/restore" && req.method === "POST") {
-      admin();
+      executive();
       ensure(
         this.sql.exec("SELECT id FROM operations WHERE done=0").toArray()
           .length === 0,
@@ -1315,12 +1332,12 @@ export class Clinic extends DurableObject<Env> {
           const value = await (await this.drive().get(item.id)).text();
           const record = await open<{
             id: string;
-            role?: string;
-            active?: boolean;
+            role: User["role"];
+            permissionLevel?: User["permissionLevel"];
+            active: boolean;
           }>(value, this.env.ENCRYPTION_KEY);
           ensure(record.id, "복구 파일 ID가 없습니다");
-          if (folder === "accounts" && record.role === "admin" && record.active)
-            activeAdmins++;
+          if (folder === "accounts" && isAdministrator(record)) activeAdmins++;
           restored.push({
             table: folder === "accounts" ? "secrets" : "media",
             id: (folder === "accounts" ? "user:" : "") + record.id,
@@ -1419,7 +1436,7 @@ export class Clinic extends DurableObject<Env> {
         c = s.consultations.find((c) => c.id === consultationId);
       ensure(
         c &&
-          (user.role === "admin" ||
+          (isAdministrator(user) ||
             (c.ownerId === user.id && c.status === "H")),
         "사진·문서 업로드 권한이 없습니다",
         403,

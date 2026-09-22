@@ -26,6 +26,7 @@ const staff = {
   name: "견적검증직원",
   password: crypto.randomUUID(),
   role: "coordinator",
+  permissionLevel: "standard",
   active: true,
   permissions: {},
 };

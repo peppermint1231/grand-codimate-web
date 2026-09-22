@@ -1,3 +1,13 @@
+import {
+  isAdministrator,
+  canUseExecutiveFeatures,
+  jobRoles,
+  jobRoleLabels,
+  permissionLevels,
+  permissionLevelLabels,
+  permissionLevelOf,
+  normalizeUser,
+} from "./core/model";
 import { AccountPermissions } from "./components/AccountPermissions";
 import { catalogCommand, dispatchCatalogCommand } from "./lib/catalogShortcuts";
 import { useCatalogUndo } from "./lib/useCatalogUndo";
@@ -271,6 +281,7 @@ export function App() {
   };
   const refresh = async (preserveConsult = false) => {
     const d = await api("/state");
+    setUser(d.user);
     setState((previous) => {
       const open =
         preserveConsult && page === "consult"
@@ -662,6 +673,23 @@ export function App() {
                   <Field label="관리자 이름">
                     <input name="name" required />
                   </Field>
+                  <Field label="직무 역할">
+                    <select
+                      name="role"
+                      aria-label="직무 역할"
+                      defaultValue=""
+                      required
+                    >
+                      <option value="" disabled>
+                        직무를 선택하세요
+                      </option>
+                      {jobRoles.map((role) => (
+                        <option key={role} value={role}>
+                          {jobRoleLabels[role]}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
                 </>
               )}
               {!health.needsSetup && loginIds.length > 0 && (
@@ -824,11 +852,8 @@ export function App() {
           <div>
             <b>{user.name}</b>
             <small>
-              {user.role === "admin"
-                ? "관리자"
-                : user.role === "doctor"
-                  ? "의사"
-                  : "코디네이터"}
+              {jobRoleLabels[user.role]} ·{" "}
+              {permissionLevelLabels[permissionLevelOf(user)]}
             </small>
           </div>
           <button aria-label="로그아웃" onClick={logout}>
@@ -1329,7 +1354,7 @@ function Patients({
             />
             중복 의심만
           </label>
-          {user.role === "admin" && (
+          {canUseExecutiveFeatures(user) && (
             <label className="check">
               <input
                 type="checkbox"
@@ -1500,7 +1525,7 @@ function Patients({
                           수정
                         </button>
                       )}
-                      {user.role === "admin" && (
+                      {canUseExecutiveFeatures(user) && (
                         <button
                           aria-label={`${p.name} 환자 ${p.archived ? "복원" : "삭제"}`}
                           onClick={() => void archive(p)}
@@ -1577,7 +1602,7 @@ function Patients({
                 >
                   이 환자 기록 열기
                 </button>
-                {user.role === "admin" && (
+                {canUseExecutiveFeatures(user) && (
                   <>
                     <button
                       onClick={() =>
@@ -1607,7 +1632,9 @@ function Patients({
           {!candidates(duplicatePatient).length && (
             <p>현재 중복 의심 환자가 없습니다.</p>
           )}
-          {user.role !== "admin" && <p>병합은 관리자가 할 수 있습니다.</p>}
+          {!canUseExecutiveFeatures(user) && (
+            <p>병합은 관리자·임원이 할 수 있습니다.</p>
+          )}
           {mergePair && (
             <form
               onSubmit={async (e) => {
@@ -2101,7 +2128,7 @@ function PatientDetail({
                     {s.users.find((u) => u.id === n.authorId)?.name} ·{" "}
                     {n.updatedAt.slice(0, 10)}
                   </small>
-                  {(n.authorId === user.id || user.role === "admin") && (
+                  {(n.authorId === user.id || isAdministrator(user)) && (
                     <button
                       onClick={() => {
                         const text = window.prompt("메모 수정", n.text);
@@ -2237,7 +2264,7 @@ function PatientDetail({
               <button className="primary">등급 적용</button>
             </form>
           )}
-          {user.role === "admin" && (
+          {canUseExecutiveFeatures(user) && (
             <details>
               <summary>중복 환자 병합</summary>
               <p>
@@ -2435,7 +2462,7 @@ function ConsultationView({
       source.patientId !== c.patientId ||
       source.category !== c.category);
   const readonly = !(
-    user.role === "admin" ||
+    isAdministrator(user) ||
     (c.status === "H" && !c.cancelled && c.ownerId === user.id)
   );
   const availableProducts = (catalog?.products || []).filter((p) => p.active);
@@ -2841,7 +2868,7 @@ function ConsultationView({
               userId={user.id}
               readonly={readonly}
               canAnnotate={!readonly || user.role === "doctor"}
-              admin={user.role === "admin"}
+              admin={isAdministrator(user)}
               onChange={(photos) => setDraft((d) => ({ ...d, photos }))}
               onColumns={(photoColumns) =>
                 setDraft((d) => ({ ...d, photoColumns }))
@@ -3284,7 +3311,7 @@ function ConsultationView({
             <h3>의사 의견 요청</h3>
             <select name="toId" required>
               {s.users
-                .filter((u) => u.role === "doctor" || u.role === "admin")
+                .filter((u) => u.role === "doctor" || isAdministrator(u))
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
@@ -3465,7 +3492,7 @@ function ConsultationView({
                 </button>
               </div>
             )}
-            {user.role === "admin" && c.status !== "H" && (
+            {isAdministrator(user) && c.status !== "H" && (
               <div className="button-row">
                 <button
                   onClick={() => {
@@ -3883,11 +3910,14 @@ function CatalogView({
             )}
             <button
               disabled={
-                current?.status !== "published" || !allowed(user, "export")
+                current?.status !== "published" ||
+                !allowed(user, "export") ||
+                !allowed(user, "catalog.edit")
               }
               onClick={() =>
                 work(async () => {
-                  await send("audit.export", { format: "catalog-csv" });
+                  if (!(await send("audit.export", { format: "catalog-csv" })))
+                    return;
                   download(
                     catalogCSV(current!),
                     `코디메이트_${book}_단가표.csv`,
@@ -3898,12 +3928,17 @@ function CatalogView({
               CSV 자료 교환
             </button>
             <button
-              disabled={!current || !allowed(user, "export")}
+              disabled={
+                current?.status !== "published" ||
+                !allowed(user, "export") ||
+                !allowed(user, "catalog.edit")
+              }
               onClick={() =>
                 work(async () => {
                   if (!current || current.status !== "published")
                     throw new Error("게시된 버전을 선택하세요.");
-                  await send("audit.export", { format: "catalog-xlsx" });
+                  if (!(await send("audit.export", { format: "catalog-xlsx" })))
+                    return;
                   await downloadWorkbook(
                     await catalogWorkbook(
                       {
@@ -4814,10 +4849,13 @@ function Stats({
         description="계약과 실제 수납을 구분해 성과를 확인하세요."
         action={
           <button
-            disabled={!allowed(user, "export")}
+            disabled={!allowed(user, "export") || !allowed(user, "stats.read")}
             onClick={() =>
               work(async () => {
-                await send("audit.export", { format: "statistics-xlsx" });
+                if (
+                  !(await send("audit.export", { format: "statistics-xlsx" }))
+                )
+                  return;
                 return downloadWorkbook(
                   await statisticsWorkbook(s),
                   "코디메이트_통계_" + date() + ".xlsx",
@@ -4921,7 +4959,7 @@ function SettingsView({
   refresh: () => Promise<any>;
   health: any;
 }) {
-  const [tab, setTab] = useState("grade"),
+  const [tab, setTab] = useState(isAdministrator(user) ? "grade" : "consent"),
     [grades, setGrades] = useState(s.policies[0]?.grades || []),
     [account, setAccount] = useState<User | undefined>(),
     [storageRoot, setStorageRoot] = useState(health.storageRoot || "상담"),
@@ -4929,12 +4967,16 @@ function SettingsView({
   useEffect(() => {
     setStorageRoot(health.storageRoot || "상담");
   }, [health.storageRoot]);
-  if (user.role !== "admin")
-    return <Empty>관리자만 설정을 변경할 수 있습니다.</Empty>;
+  if (!canUseExecutiveFeatures(user))
+    return <Empty>설정은 관리자·임원 권한등급에서 사용할 수 있습니다.</Empty>;
+  const activeTab =
+    !isAdministrator(user) && !["consent", "connection"].includes(tab)
+      ? "consent"
+      : tab;
   return (
     <>
       <Title
-        title="관리자 설정"
+        title="운영 설정"
         description="병원 운영 기준과 직원별 권한을 관리합니다."
       />
       <div className="tabs">
@@ -4942,19 +4984,24 @@ function SettingsView({
           ["grade", "환자 등급"],
           ["users", "직원·권한"],
           ["consent", "동의서 양식"],
-          ["connection", "연결·복구"],
+          ["connection", isAdministrator(user) ? "연결·복구" : "백업·복구"],
           ["updates", "앱 업데이트"],
-        ].map(([k, l]) => (
-          <button
-            key={k}
-            onClick={() => setTab(k)}
-            className={tab === k ? "active" : ""}
-          >
-            {l}
-          </button>
-        ))}
+        ]
+          .filter(
+            ([k]) =>
+              isAdministrator(user) || ["consent", "connection"].includes(k),
+          )
+          .map(([k, l]) => (
+            <button
+              key={k}
+              onClick={() => setTab(k)}
+              className={activeTab === k ? "active" : ""}
+            >
+              {l}
+            </button>
+          ))}
       </div>
-      {tab === "updates" && (
+      {activeTab === "updates" && (
         <form
           className="card"
           onSubmit={(e) => {
@@ -5003,7 +5050,7 @@ function SettingsView({
           <button className="primary">업데이트 게시</button>
         </form>
       )}
-      {tab === "grade" && (
+      {activeTab === "grade" && (
         <div className="card">
           <h3>누적 기여매출 기준</h3>
           <p>
@@ -5090,19 +5137,21 @@ function SettingsView({
           </div>
         </div>
       )}
-      {tab === "users" && (
-        <div className="detail-grid">
+      {activeTab === "users" && (
+        <div className="detail-grid employee-settings">
           <div className="card">
             <h3>직원 계정</h3>
             {s.users.map((u) => (
               <button
                 className="list-row"
                 key={u.id}
-                onClick={() => setAccount(u)}
+                onClick={() => setAccount(normalizeUser(u))}
               >
                 <b>{u.name}</b>
                 <span>
-                  {u.username} · {u.role} · {u.active ? "사용" : "중지"}
+                  {u.username} · {jobRoleLabels[u.role]} ·{" "}
+                  {permissionLevelLabels[permissionLevelOf(u)]} ·{" "}
+                  {u.active ? "사용" : "중지"}
                 </span>
               </button>
             ))}
@@ -5113,6 +5162,7 @@ function SettingsView({
                   name: "",
                   username: "",
                   role: "coordinator",
+                  permissionLevel: "standard",
                   active: true,
                   permissions: {},
                 })
@@ -5163,14 +5213,46 @@ function SettingsView({
               </Field>
               <Field label="역할">
                 <select
-                  value={account.role}
+                  aria-label="역할"
+                  required
+                  value={account.role === "admin" ? "" : account.role}
                   onChange={(e) =>
                     setAccount({ ...account, role: e.target.value as any })
                   }
                 >
-                  <option value="coordinator">코디네이터</option>
-                  <option value="doctor">의사</option>
-                  <option value="admin">관리자</option>
+                  <option value="" disabled>
+                    직무를 선택하세요
+                  </option>
+                  {jobRoles.map((role) => (
+                    <option key={role} value={role}>
+                      {jobRoleLabels[role]}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {account.role === "admin" && (
+                <p className="permission-notice">
+                  기존 관리자 계정에는 직무가 기록되어 있지 않습니다. 저장 전에
+                  직무를 선택하세요. 관리자 권한등급은 유지됩니다.
+                </p>
+              )}
+              <Field label="권한등급">
+                <select
+                  aria-label="권한등급"
+                  value={permissionLevelOf(account)}
+                  onChange={(e) =>
+                    setAccount({
+                      ...account,
+                      permissionLevel: e.target
+                        .value as User["permissionLevel"],
+                    })
+                  }
+                >
+                  {permissionLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {permissionLevelLabels[level]}
+                    </option>
+                  ))}
                 </select>
               </Field>
               <label className="check">
@@ -5189,7 +5271,7 @@ function SettingsView({
           )}
         </div>
       )}
-      {tab === "consent" && (
+      {activeTab === "consent" && (
         <div className="detail-grid">
           <div className="card">
             <h3>양식 목록</h3>
@@ -5262,93 +5344,101 @@ function SettingsView({
           </form>
         </div>
       )}
-      {tab === "connection" && (
+      {activeTab === "connection" && (
         <div className="detail-grid">
-          <form
-            className="card"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setStorageNotice("");
-              work(async () => {
-                const result = await api("/storage", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    rootFolder: storageRoot.trim(),
-                    baseRoot: health.storageRoot || "상담",
-                  }),
-                });
-                await refresh();
-                setStorageNotice(
-                  `저장 폴더를 ${result.rootFolder}(으)로 변경했습니다.`,
-                );
-              });
-            }}
-          >
-            <h3>OneDrive 저장 폴더</h3>
-            <p>현재 위치: 내 파일 / {health.storageRoot || "상담"}</p>
-            <Field label="저장 폴더 이름">
-              <input
-                value={storageRoot}
-                onChange={(e) => {
-                  setStorageRoot(e.target.value);
-                  setStorageNotice("");
-                }}
-                required
-                maxLength={80}
-                placeholder="코디메이트"
-              />
-            </Field>
-            <button
-              type="button"
-              onClick={() => {
-                setStorageRoot("코디메이트");
+          {isAdministrator(user) && (
+            <form
+              className="card"
+              onSubmit={(event) => {
+                event.preventDefault();
                 setStorageNotice("");
+                work(async () => {
+                  const result = await api("/storage", {
+                    method: "POST",
+                    body: JSON.stringify({
+                      rootFolder: storageRoot.trim(),
+                      baseRoot: health.storageRoot || "상담",
+                    }),
+                  });
+                  await refresh();
+                  setStorageNotice(
+                    `저장 폴더를 ${result.rootFolder}(으)로 변경했습니다.`,
+                  );
+                });
               }}
             >
-              코디메이트로 입력
-            </button>
-            <p>
-              변경 후: {storageRoot.trim() || "폴더 이름"} / 미용 ·{" "}
-              {storageRoot.trim() || "폴더 이름"} / 보험
-            </p>
-            <p className="small">
-              기존 폴더의 이름을 변경합니다. 사진·상담 기록·단가표·복구 자료가
-              함께 유지되며 병원 전체에 적용됩니다. 같은 이름의 폴더가 있으면
-              다른 이름을 입력하세요.
-            </p>
-            <button
-              className="primary"
-              disabled={
-                storageRoot.trim() === (health.storageRoot || "상담") ||
-                !!health.restoreRequired ||
-                (health.mode !== "local-development" && !health.driveConnected)
-              }
-            >
-              저장 폴더 변경
-            </button>
-            {storageNotice && <p role="status">{storageNotice}</p>}
-          </form>
+              <h3>OneDrive 저장 폴더</h3>
+              <p>현재 위치: 내 파일 / {health.storageRoot || "상담"}</p>
+              <Field label="저장 폴더 이름">
+                <input
+                  value={storageRoot}
+                  onChange={(e) => {
+                    setStorageRoot(e.target.value);
+                    setStorageNotice("");
+                  }}
+                  required
+                  maxLength={80}
+                  placeholder="코디메이트"
+                />
+              </Field>
+              <button
+                type="button"
+                onClick={() => {
+                  setStorageRoot("코디메이트");
+                  setStorageNotice("");
+                }}
+              >
+                코디메이트로 입력
+              </button>
+              <p>
+                변경 후: {storageRoot.trim() || "폴더 이름"} / 미용 ·{" "}
+                {storageRoot.trim() || "폴더 이름"} / 보험
+              </p>
+              <p className="small">
+                기존 폴더의 이름을 변경합니다. 사진·상담 기록·단가표·복구 자료가
+                함께 유지되며 병원 전체에 적용됩니다. 같은 이름의 폴더가 있으면
+                다른 이름을 입력하세요.
+              </p>
+              <button
+                className="primary"
+                disabled={
+                  storageRoot.trim() === (health.storageRoot || "상담") ||
+                  !!health.restoreRequired ||
+                  (health.mode !== "local-development" &&
+                    !health.driveConnected)
+                }
+              >
+                저장 폴더 변경
+              </button>
+              {storageNotice && <p role="status">{storageNotice}</p>}
+            </form>
+          )}
           <div className="card">
-            <h3>OneDrive 연결</h3>
-            <p>
-              {health.driveConnected
-                ? "병원 OneDrive가 연결되어 있습니다."
-                : "운영 데이터를 저장할 병원 계정을 연결하세요."}
-            </p>
-            <button
-              className="primary"
-              onClick={() =>
-                work(async () => {
-                  const d = await api("/onedrive/connect");
-                  window.location.assign(d.url);
-                })
-              }
-            >
-              Microsoft 계정 연결
-            </button>
-            <p className="small">
-              연결 정보는 서버에서 관리하며 직원에게 전달하지 않습니다.
-            </p>
+            {isAdministrator(user) && (
+              <>
+                <h3>OneDrive 연결</h3>
+                <p>
+                  {health.driveConnected
+                    ? "병원 OneDrive가 연결되어 있습니다."
+                    : "운영 데이터를 저장할 병원 계정을 연결하세요."}
+                </p>
+                <button
+                  className="primary"
+                  onClick={() =>
+                    work(async () => {
+                      const d = await api("/onedrive/connect");
+                      window.location.assign(d.url);
+                    })
+                  }
+                >
+                  Microsoft 계정 연결
+                </button>
+                <p className="small">
+                  연결 정보는 서버에서 관리하며 직원에게 전달하지 않습니다.
+                </p>
+              </>
+            )}
+            <h3>백업·복구</h3>
             <button
               onClick={() =>
                 work(async () => {

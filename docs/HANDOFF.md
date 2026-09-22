@@ -1,6 +1,16 @@
 # 코디메이트 개발 인계
 
+## 2026-09-22 직무·권한등급 분리 — 0.9.0
+
+[0.9.0 사용 안내](RELEASE-0.9.0.md). 새 직무는 `doctor/coordinator/esthetician/desk`, `User.permissionLevel`은 `admin/executive/standard`입니다. 이전 `role=admin`은 호환 읽기 전용이며 직무 미지정으로 표시합니다. 세부 기본권한은 관리자 12개 허용, 임원은 `stats.read` 차단, 일반은 `catalog.edit`·`stats.read` 차단입니다. 단가표 CSV/XLSX는 `export`+`catalog.edit`, 통계 XLSX는 `export`+`stats.read`를 UI·서버에서 모두 검사합니다. 모든 등급에서 개별 override를 존중합니다. `isAdministrator`/`canUseExecutiveFeatures`를 API·도메인·UI에서 함께 사용하고, 임원에게는 환자 삭제/복원/병합·동의서 양식·백업/복구만 확대했습니다. 임상 의사 기능은 직무 의사 또는 관리자 등급을 검사합니다.
+
+`normalizeUser`는 이전 계정을 읽을 때 레벨과 필요한 override를 만들어 유효권한을 보존하며 암호화 원본을 수정하지 않습니다. 원래 기본 허용이던 `receipt.create`/`followup.edit`를 명시적 true로 만들면 다른 담당자 상담 접근까지 확대되므로, 새 기본값과 다를 때만 override를 생성하고 기존 명시적 값을 보존합니다. 기존 관리자에서 무시되던 개별 false는 삭제해 기존 실제 허용을 보존합니다. 계정 저장 시 새 구조로 저장하고 호환 표시 플래그는 제거합니다. 자기 관리자 강등/중지 및 관리자 없는 복구를 차단합니다. 클라이언트 refresh에서도 최신 로그인 사용자 권한을 갱신합니다.
+
+140개 테스트와 실제 로컬 계정 생성·재로그인 UI 검증 통과. 운영에서는 계정을 저장하지 않고 UI 및 이전 유효권한·환자/상담 데이터 보존을 검증합니다. 결과는 `artifacts/deployment-0.9.0.json` 참고.
+
 ## 2026-09-22 직원 권한 설명 — 0.8.6
+
+운영 완료: 웹 커밋 `2ca2d96187557d6d2d626c424179cb995c6bebaa`의 GitHub·Cloudflare 검사 성공. 운영 설정에서 12개 설명, 역할별 기본값과 개별 설정 변경의 적용 상태, 관리자 예외와 계정 중지 상태, 모바일 표시를 확인했습니다. 실제 계정 저장 0건·전체 State 보존·미전송 0건. 기존 테스트 124개 통과. APK 0.8.6/versionCode 20 기존 서명 인증서·내장 및 운영 웹 자산 46개·공개 다운로드 SHA-256 `7b1fcce0749c546f1fd93ad13f29f026ce6f60372d02d0374516902c2b26c55a` 일치 확인.
 
 [0.8.6 사용 안내](RELEASE-0.8.6.md). 사용자가 채팅 설명 대신 실제 설정 화면에서 설명이 보이도록 요청했습니다. `AccountPermissions`가 12개 권한의 설명과 역할 기본값·현재 적용 상태를 표시합니다. 판정은 기존 `allowed`를 재사용하며 권한 정책·저장 API를 변경하지 않았습니다. 관리자 우선 적용, 중지 계정 차단, 계정 저장 후 반영을 안내합니다. 설명과 선택지를 label/aria-describedby로 연결하고 모바일에서는 세로 배치합니다. 확인 자료는 `artifacts/permissions-local-086.json`, 운영·APK·배포 기록은 `artifacts/deployment-0.8.6.json`입니다.
 

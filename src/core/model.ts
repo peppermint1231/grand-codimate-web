@@ -1,4 +1,26 @@
-export type Role = "admin" | "coordinator" | "doctor";
+export const jobRoles = [
+  "doctor",
+  "coordinator",
+  "esthetician",
+  "desk",
+] as const;
+export type JobRole = (typeof jobRoles)[number];
+// "admin" is accepted only when reading accounts saved before job/level separation.
+export type Role = JobRole | "admin";
+export const permissionLevels = ["admin", "executive", "standard"] as const;
+export type PermissionLevel = (typeof permissionLevels)[number];
+export const jobRoleLabels: Record<Role, string> = {
+  doctor: "의사",
+  coordinator: "코디네이터",
+  esthetician: "피부관리사",
+  desk: "데스크",
+  admin: "직무 미지정",
+};
+export const permissionLevelLabels: Record<PermissionLevel, string> = {
+  admin: "관리자",
+  executive: "임원",
+  standard: "일반",
+};
 export const permissions = [
   "patient.edit",
   "money.read",
@@ -19,6 +41,8 @@ export interface User {
   name: string;
   username: string;
   role: Role;
+  permissionLevel?: PermissionLevel;
+  legacyPermissionDefaults?: boolean;
   active: boolean;
   permissions: Partial<Record<Permission, boolean>>;
 }
@@ -317,28 +341,74 @@ export const packageActive = (c: Consultation) =>
   c.status === "P" &&
   c.kind !== "interim" &&
   !c.packageProgress?.complete;
-export function allowed(u: User, p: Permission) {
-  if (!u.active) return false;
+export function permissionLevelOf(
+  u: Pick<User, "role" | "permissionLevel">,
+): PermissionLevel {
+  if (u.permissionLevel !== undefined)
+    return permissionLevels.includes(u.permissionLevel)
+      ? u.permissionLevel
+      : "standard";
+  return u.role === "admin" ? "admin" : "standard";
+}
+const validUserRole = (u: Pick<User, "role">) =>
+  u.role === "admin" || jobRoles.includes(u.role);
+export const isAdministrator = (
+  u: Pick<User, "role" | "permissionLevel" | "active">,
+) => u.active && validUserRole(u) && permissionLevelOf(u) === "admin";
+export const canUseExecutiveFeatures = (
+  u: Pick<User, "role" | "permissionLevel" | "active">,
+) =>
+  u.active &&
+  validUserRole(u) &&
+  ["admin", "executive"].includes(permissionLevelOf(u));
+export const defaultPermission = (level: PermissionLevel, p: Permission) =>
+  level === "admin" ||
+  (p !== "stats.read" && (level !== "standard" || p !== "catalog.edit"));
+function legacyAllowed(u: User, p: Permission) {
   if (u.role === "admin") return true;
-  if (
-    u.permissions[p] === undefined &&
-    u.role === "doctor" &&
-    ["money.read", "note.read", "note.edit", "export"].includes(p)
-  )
-    return true;
   return (
     u.permissions[p] ??
-    ([
-      "money.read",
-      "note.read",
-      "note.edit",
-      "receipt.create",
-      "followup.edit",
-      "export",
-    ].includes(p) &&
-      u.role === "coordinator")
+    (u.role === "doctor"
+      ? ["money.read", "note.read", "note.edit", "export"].includes(p)
+      : u.role === "coordinator" &&
+        [
+          "money.read",
+          "note.read",
+          "note.edit",
+          "receipt.create",
+          "followup.edit",
+          "export",
+        ].includes(p))
   );
 }
+// Normalize on read; keep the encrypted source untouched until an administrator saves.
+// Preserve old effective rights and whether cross-owner access was explicitly granted.
+// Only differing defaults need overrides; writing a default receipt/followup true
+// as an explicit grant would accidentally expand access to other staff's consultations.
+export function normalizeUser<T extends User>(u: T): T {
+  if (u.permissionLevel !== undefined) return u;
+  return {
+    ...u,
+    permissionLevel: permissionLevelOf(u),
+    legacyPermissionDefaults: true,
+    permissions: Object.fromEntries(
+      permissions.flatMap((p) => {
+        const value = legacyAllowed(u, p);
+        return u.role !== "admin" &&
+          (u.permissions[p] !== undefined ||
+            value !== defaultPermission(permissionLevelOf(u), p))
+          ? [[p, value]]
+          : [];
+      }),
+    ),
+  };
+}
+export function allowed(u: User, p: Permission) {
+  if (!u.active || !validUserRole(u)) return false;
+  if (u.permissionLevel === undefined) return legacyAllowed(u, p);
+  return u.permissions[p] ?? defaultPermission(permissionLevelOf(u), p);
+}
+
 export function age(dob: string, date = new Date()) {
   const now = new Date(
     date.toLocaleString("en-US", { timeZone: "Asia/Seoul" }),

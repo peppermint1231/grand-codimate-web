@@ -1,6 +1,11 @@
 import { useId } from "react";
 import {
   allowed,
+  defaultPermission,
+  permissionLevelOf,
+  permissionLevelLabels,
+  isAdministrator,
+  canUseExecutiveFeatures,
   permissions,
   type Permission,
   type User,
@@ -49,11 +54,11 @@ const descriptions: Record<Permission, { name: string; text: string }> = {
   },
   export: {
     name: "내보내기",
-    text: "상담 PDF·견적 이미지, 단가표 CSV·Excel, 통계 Excel을 내보냅니다. 해당 자료의 열람 권한도 함께 필요합니다.",
+    text: "상담 PDF·견적 이미지, 단가표 CSV·Excel, 통계 Excel을 내보냅니다. 단가표 내보내기는 단가표 관리, 통계 내보내기는 통계 권한도 함께 허용되어야 합니다. 해당 자료의 열람 권한도 필요합니다.",
   },
   "followup.edit": {
     name: "후속 상태 변경",
-    text: "예약일과 미정·예약·방문·노쇼 상태, 패키지 진행·완료 상태를 변경합니다. 코디네이터의 기본값은 담당 상담의 예약·방문 변경을 허용하며, 개별 허용 시 다른 담당자의 예약·방문 상태도 변경할 수 있습니다.",
+    text: "예약일과 미정·예약·방문·노쇼 상태, 패키지 진행·완료 상태를 변경합니다. 기본값은 담당 상담의 예약·방문 변경을 허용하며, 개별 허용 시 다른 담당자의 예약·방문 상태도 변경할 수 있습니다.",
   },
 };
 
@@ -65,35 +70,90 @@ export function AccountPermissions({
   onChange: (account: User) => void;
 }) {
   const prefix = useId();
+  const level = permissionLevelOf(account);
   return (
     <section className="account-permissions" aria-label="직원 권한 설정">
       <h3>권한 설정</h3>
       <p className="permission-guide">
-        ‘역할 기본값’은 선택한 역할에 정해진 허용·차단 값을 따릅니다. 아래 적용
-        상태는 현재 선택 기준이며, 계정 저장을 눌러야 반영됩니다.
+        ‘등급 기본값’은 선택한 권한등급의 허용·차단 값을 따릅니다. 직무 역할은
+        기본값에 영향을 주지 않습니다. 세부권한의 개별 허용·차단은 모든 등급에서
+        기본값보다 우선합니다. 아래 적용 상태는 현재 선택 기준이며, 계정 저장을
+        눌러야 반영됩니다.
       </p>
       <p className="permission-guide">
         수납·환불 ‘등록’은 앱 장부에 내역을 기록하는 기능입니다. 계정
         생성·관리와 직원 권한 변경은 관리자 전용입니다.
       </p>
-      {account.role === "admin" && (
+      {account.legacyPermissionDefaults && (
         <p className="permission-notice">
-          관리자는 개별 설정값보다 역할이 우선하여 아래 권한이 모두 허용됩니다.
-          ‘차단’을 선택해도 관리자 역할에서는 적용되지 않습니다.
+          기존 계정의 접근 범위를 개별 설정으로 유지했습니다. 새 권한등급의
+          기본값을 사용하려면 아래 ‘등급 기본값 적용’을 누르세요.
         </p>
       )}
+      <button
+        type="button"
+        className="permission-default-reset"
+        onClick={() => {
+          if (
+            window.confirm(
+              `${permissionLevelLabels[level]} 등급의 기본값으로 12개 세부권한을 바꿀까요? 계정 저장 후 반영됩니다.`,
+            )
+          )
+            onChange({
+              ...account,
+              permissionLevel: level,
+              legacyPermissionDefaults: false,
+              permissions: {},
+            });
+        }}
+      >
+        등급 기본값 적용
+      </button>
+      <div className="permission-special-features">
+        <section aria-label="관리자 전용 기능">
+          <h4>
+            관리자 전용 기능{" "}
+            <small>
+              {isAdministrator(account) ? "사용 가능" : "사용 불가"}
+            </small>
+          </h4>
+          <ul>
+            <li>
+              직원 계정 생성·수정·중지, 비밀번호 재설정, 역할·권한등급·세부권한
+              변경
+            </li>
+            <li>환자 등급명·기준금액·색상 설정</li>
+            <li>상담 취소·재작성, 다른 담당자의 상담 수정</li>
+            <li>
+              다른 작성자의 메모·사진 주석 수정, 담당 의사 제한 없는 의견 답변
+            </li>
+            <li>OneDrive 연결·저장 폴더 변경, 앱 업데이트 게시</li>
+          </ul>
+        </section>
+        <section aria-label="임원 전용 기능">
+          <h4>
+            임원 전용 기능{" "}
+            <small>
+              {canUseExecutiveFeatures(account) ? "사용 가능" : "사용 불가"}
+            </small>
+          </h4>
+          <p>관리자도 함께 사용할 수 있는 등급 기본 기능입니다.</p>
+          <ul>
+            <li>환자 삭제·복원·병합</li>
+            <li>동의서 양식 등록·수정·게시</li>
+            <li>암호화 백업 내보내기·OneDrive 원본 복구</li>
+          </ul>
+        </section>
+      </div>
       {!account.active && (
         <p className="permission-notice">
-          사용 중지 계정은 로그인할 수 없으며, 아래 권한도 모두 차단됩니다. 역할
+          사용 중지 계정은 로그인할 수 없으며, 아래 권한도 모두 차단됩니다. 등급
           기본값은 계정을 다시 사용할 때의 기준입니다.
         </p>
       )}
       {permissions.map((p) => {
         const { name, text } = descriptions[p];
-        const defaultAllowed = allowed(
-          { ...account, active: true, permissions: {} },
-          p,
-        );
+        const defaultAllowed = defaultPermission(level, p);
         const effective = allowed(account, p);
         const id = `${prefix}-${p}`;
         return (
@@ -101,6 +161,18 @@ export function AccountPermissions({
             <div className="permission-description">
               <label htmlFor={id}>{name}</label>
               <p id={`${id}-description`}>{text}</p>
+              {p === "export" && (
+                <p aria-label="자료별 내보내기 적용 상태">
+                  단가표 내보내기:{" "}
+                  {effective && allowed(account, "catalog.edit")
+                    ? "허용"
+                    : "차단"}
+                  {" · "}통계 내보내기:{" "}
+                  {effective && allowed(account, "stats.read")
+                    ? "허용"
+                    : "차단"}
+                </p>
+              )}
             </div>
             <div className="permission-control">
               <select
@@ -125,7 +197,7 @@ export function AccountPermissions({
                 }
               >
                 <option value="default">
-                  역할 기본값 · {defaultAllowed ? "허용" : "차단"}
+                  등급 기본값 · {defaultAllowed ? "허용" : "차단"}
                 </option>
                 <option value="true">허용</option>
                 <option value="false">차단</option>

@@ -200,6 +200,7 @@ const employee = {
   name: "검증직원",
   password: crypto.randomUUID(),
   role: "coordinator",
+  permissionLevel: "standard",
   active: true,
   permissions: { "money.read": false, export: false },
 };

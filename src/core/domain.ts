@@ -1,3 +1,4 @@
+import { isAdministrator, canUseExecutiveFeatures } from "./model";
 import { catalogChanges } from "./catalogHistory";
 import { folderError } from "./catalogFolders";
 import { safeName } from "./storagePaths";
@@ -444,7 +445,13 @@ export async function applyCommand(
   const need = (v: Permission) =>
     ensure(allowed(user, v), "이 작업의 권한이 없습니다", 403);
   const admin = () =>
-    ensure(user.role === "admin", "관리자만 변경할 수 있습니다", 403);
+    ensure(isAdministrator(user), "관리자만 변경할 수 있습니다", 403);
+  const executive = () =>
+    ensure(
+      canUseExecutiveFeatures(user),
+      "관리자·임원만 변경할 수 있습니다",
+      403,
+    );
   const find = <T extends { id: string; rev: number }>(list: T[]) => {
     const x = list.find((x) => x.id === id);
     ensure(x, "자료를 찾을 수 없습니다", 404);
@@ -467,7 +474,7 @@ export async function applyCommand(
   };
   const edit = (c: Consultation) =>
     ensure(
-      user.role === "admin" ||
+      isAdministrator(user) ||
         (c.ownerId === user.id && c.status === "H" && !c.cancelled),
       "이 상담을 수정할 권한이 없습니다",
       403,
@@ -541,7 +548,7 @@ export async function applyCommand(
       break;
     }
     case "patient.archive": {
-      admin();
+      executive();
       const x = find(s.patients);
       ensure(!x.mergedInto, "병합된 환자는 변경할 수 없습니다");
       ensure(typeof p.archived === "boolean", "삭제·복원 상태를 확인하세요");
@@ -552,7 +559,7 @@ export async function applyCommand(
       break;
     }
     case "patient.merge": {
-      admin();
+      executive();
       const from = find(s.patients),
         target = patientFor(s, String(p.targetId));
       ensure(
@@ -599,7 +606,7 @@ export async function applyCommand(
       if (x) {
         find(s.notes);
         ensure(
-          x.authorId === user.id || user.role === "admin",
+          x.authorId === user.id || isAdministrator(user),
           "작성자만 메모를 수정할 수 있습니다",
           403,
         );
@@ -706,7 +713,7 @@ export async function applyCommand(
     case "consultation.annotate": {
       const c = consultation();
       ensure(
-        user.role === "doctor" || user.role === "admin",
+        user.role === "doctor" || isAdministrator(user),
         "의사 주석 권한이 필요합니다",
         403,
       );
@@ -859,13 +866,13 @@ export async function applyCommand(
           const old = original?.annotations.find((x) => x.id === a.id);
           ensure(
             a.authorId === user.id ||
-              user.role === "admin" ||
+              isAdministrator(user) ||
               JSON.stringify(old) === JSON.stringify(a),
             "다른 작성자의 주석을 변경할 수 없습니다",
             403,
           );
         }
-      if (user.role !== "admin")
+      if (!isAdministrator(user))
         for (const previous of c.photos) {
           for (const a of previous.annotations.filter(
             (a) => a.authorId !== user.id,
@@ -1020,7 +1027,7 @@ export async function applyCommand(
       need("followup.edit");
       ensure(
         c.ownerId === user.id ||
-          user.role === "admin" ||
+          isAdministrator(user) ||
           user.permissions["followup.edit"] === true,
         "담당 상담만 변경 가능합니다",
         403,
@@ -1048,7 +1055,7 @@ export async function applyCommand(
       const c = s.consultations.find((c) => c.id === p.consultationId);
       ensure(c, "상담을 선택하세요");
       ensure(
-        user.role === "admin" ||
+        isAdministrator(user) ||
           c.ownerId === user.id ||
           user.permissions["receipt.create"] === true,
         "담당 상담만 수납할 수 있습니다",
@@ -1295,17 +1302,19 @@ export async function applyCommand(
     }
     case "audit.export": {
       need("export");
-      text =
-        "자료 내보내기: " +
-        z
-          .enum([
-            "consultation-pdf",
-            "quote-jpg",
-            "catalog-xlsx",
-            "statistics-xlsx",
-            "catalog-csv",
-          ])
-          .parse(p.format);
+      const format = z
+        .enum([
+          "consultation-pdf",
+          "quote-jpg",
+          "catalog-xlsx",
+          "statistics-xlsx",
+          "catalog-csv",
+        ])
+        .parse(p.format);
+      if (format === "catalog-xlsx" || format === "catalog-csv")
+        need("catalog.edit");
+      if (format === "statistics-xlsx") need("stats.read");
+      text = "자료 내보내기: " + format;
       break;
     }
     case "opinion.request": {
@@ -1316,7 +1325,7 @@ export async function applyCommand(
           (u) =>
             u.id === p.toId &&
             u.active &&
-            (u.role === "doctor" || u.role === "admin"),
+            (u.role === "doctor" || isAdministrator(u)),
         ),
         "의사를 선택하세요",
       );
@@ -1335,7 +1344,7 @@ export async function applyCommand(
     case "opinion.answer": {
       const o = find(s.opinions);
       ensure(
-        o.toId === user.id || user.role === "admin",
+        o.toId === user.id || isAdministrator(user),
         "담당 의사만 답변할 수 있습니다",
         403,
       );
@@ -1349,7 +1358,7 @@ export async function applyCommand(
       break;
     }
     case "consent.save": {
-      admin();
+      executive();
       const d = z
         .object({
           name: z.string().min(1),

@@ -398,6 +398,7 @@ it("stores folder history atomically with its published catalog and hides draft 
     .get() as any;
   const account = await open<any>(accountRow.value, f.key);
   account.role = "doctor";
+  account.permissionLevel = "standard";
   account.permissions = {};
   f.db
     .prepare("UPDATE secrets SET value=? WHERE id=?")

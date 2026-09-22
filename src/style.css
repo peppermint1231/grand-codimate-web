@@ -3465,3 +3465,54 @@ details p {
     text-align: left;
   }
 }
+
+.permission-special-features {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0;
+}
+.permission-special-features section {
+  background: #f3f7f5;
+  border: 1px solid #dce9e4;
+  border-radius: 12px;
+  padding: 14px;
+}
+.permission-special-features h4 {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: #155e59;
+}
+.permission-special-features small {
+  font-size: 12px;
+  font-weight: 500;
+}
+.permission-special-features ul {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.permission-special-features p {
+  font-size: 13px;
+  margin: 8px 0;
+  color: var(--muted);
+}
+
+.employee-settings > .card {
+  min-width: 0;
+}
+.employee-settings .list-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .employee-settings .list-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}

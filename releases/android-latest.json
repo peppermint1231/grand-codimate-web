@@ -1,7 +1,7 @@
 {
-  "version": "0.10.8",
-  "versionCode": 34,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.8.apk",
-  "sha256": "1e5d08c4f8edc9c2fbc931ff9488cb5d713b8ab8c859fb84b05485b60ab3100e",
-  "notes": "상품 편집칸 저장 상태 구분, 상담 판매 일괄 활성화, 상담 최신 단가표 불러오기, 한국시간 표시"
+  "version": "0.10.9",
+  "versionCode": 35,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.9.apk",
+  "sha256": "37a5d77ad66aab6a527393fc5c65ccf7405711e801bc5c4076b2dc3acd0aebd4",
+  "notes": "활동 타임라인 페이지·내부 스크롤, 시술 선택/장바구니 크기 조절, 사진 아래 상담메모·의견 요청, 모바일 하단 메뉴와 당겨 새로고침"
 }

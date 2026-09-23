@@ -4041,3 +4041,294 @@ details p {
 .catalog-product-save button {
   white-space: nowrap;
 }
+/* Consultation workspace: bounded lists, independent scroll, reachable touch controls. */
+.timeline-list {
+  max-height: min(520px, 60dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 8px;
+}
+.timeline-pages {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.timeline-pages span {
+  font-size: 12px;
+  text-align: center;
+}
+.consultation-notes {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+.consultation-notes > .card {
+  margin: 0;
+  min-width: 0;
+}
+.consultation-opinion-request {
+  display: grid;
+  gap: 12px;
+}
+.consultation-opinion-request textarea {
+  min-height: 100px;
+}
+.consultation-photo-column {
+  width: 100%;
+  min-width: 0;
+}
+.consult-quick-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 14px;
+  padding-bottom: 4px;
+}
+.consult-quick-nav button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.catalog-panel {
+  display: grid;
+  height: clamp(760px, calc(100dvh - 210px), 1080px);
+  min-width: 0;
+  grid-template-rows: minmax(0, var(--product-split, 50%)) 36px minmax(0, 1fr);
+}
+.catalog-panel > .card {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  scrollbar-gutter: stable;
+}
+/* Keep one scroll surface per pane and leave room for the first treatment. */
+.procedure-picker > .section-title {
+  margin-bottom: 10px;
+}
+.procedure-picker > .tabs {
+  margin-bottom: 10px;
+}
+.procedure-picker > .tabs button {
+  padding: 8px 14px;
+}
+.procedure-picker > .small {
+  margin: 8px 0;
+}
+.procedure-picker > .product-list {
+  max-height: none;
+  overflow: visible;
+  margin-top: 4px;
+}
+.procedure-picker .product {
+  padding: 10px 0;
+}
+.product-cart-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #dce9e3;
+  color: #315e50;
+  cursor: row-resize;
+  touch-action: none;
+  border-radius: 8px;
+  font-size: 12px;
+  user-select: none;
+}
+.product-cart-divider button {
+  padding: 2px 8px;
+  font-size: 11px;
+  min-height: 28px;
+}
+.product-cart-divider:focus-visible,
+.timeline-list:focus-visible {
+  outline: 3px solid #368574;
+  outline-offset: 2px;
+}
+.consultation-cart .inline-fields {
+  flex-wrap: wrap;
+}
+.consultation-cart .inline-fields > *,
+.consultation-cart input,
+.consultation-cart select {
+  min-width: 0;
+}
+.consultation-cart .inline-fields > .field {
+  flex: 1 1 110px;
+}
+.mobile-nav-text,
+.mobile-logout {
+  display: none;
+}
+.pull-refresh-indicator {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  border: 1px solid #bfd5cd;
+  background: #f8fffb;
+  color: #155e59;
+  border-radius: 24px;
+  padding: 12px 20px;
+  box-shadow: 0 4px 20px #163b2520;
+  pointer-events: none;
+  white-space: nowrap;
+}
+html.custom-pull-refresh {
+  overscroll-behavior-y: contain;
+}
+@media (pointer: coarse) {
+  button,
+  .button,
+  select {
+    min-height: 44px;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+  .product-cart-divider {
+    height: 44px;
+  }
+  .catalog-panel {
+    grid-template-rows: minmax(0, var(--product-split, 50%)) 44px minmax(0, 1fr);
+  }
+}
+@media (max-width: 1100px) and (orientation: landscape) {
+  .app-shell .sidebar {
+    width: 76px;
+    padding: 20px 8px;
+    align-items: center;
+  }
+  .app-shell .workspace {
+    margin-left: 76px;
+    width: calc(100% - 76px);
+  }
+  .sidebar .logo > div,
+  .sidebar .nav-label,
+  .sidebar .nav-text,
+  .sidebar .sidebar-bottom > div:not(.avatar) {
+    display: none;
+  }
+  .sidebar .nav-item {
+    padding: 12px;
+  }
+  .sidebar-bottom {
+    flex-direction: column;
+  }
+  .content {
+    padding: 18px 14px;
+  }
+  .consult-layout .card {
+    padding: 14px;
+  }
+}
+@media (max-width: 600px) {
+  .app-shell .sidebar {
+    inset: auto 0 0;
+    height: calc(66px + env(safe-area-inset-bottom));
+    width: 100%;
+    padding: 5px 4px env(safe-area-inset-bottom);
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: space-around;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+    z-index: 30;
+  }
+  .sidebar .logo,
+  .sidebar .nav-label,
+  .sidebar .sidebar-bottom,
+  .sidebar .nav-text {
+    display: none;
+  }
+  .sidebar .nav-item {
+    display: flex;
+    flex: 1 1 0;
+    min-width: 0;
+    margin: 0;
+    padding: 7px 1px;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 10px;
+  }
+  .sidebar .mobile-nav-text {
+    display: block;
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+  .sidebar .nav-item svg {
+    width: 22px;
+    height: 22px;
+  }
+  .app-shell .workspace {
+    margin-left: 0;
+    width: 100%;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  .content {
+    padding: 18px 12px;
+  }
+  .topbar {
+    height: auto;
+    min-height: 70px;
+    padding: 10px 12px;
+  }
+  .topbar .sidebar-toggle,
+  .topbar > div:not(.top-actions) {
+    display: none;
+  }
+  .top-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+  }
+  .top-actions button {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+  .top-actions .mobile-logout {
+    display: inline-flex;
+  }
+  .card {
+    padding: 16px;
+  }
+  .tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+  }
+  .tabs button {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .catalog-panel {
+    height: 780px;
+    max-height: none;
+  }
+  .consult-layout {
+    gap: 12px;
+  }
+  .consult-layout .card {
+    padding: 14px;
+  }
+  .consultation-photo-column,
+  .catalog-panel,
+  .consultation-notes {
+    max-width: 100%;
+  }
+  .consultation-cart .cart-line {
+    overflow-wrap: anywhere;
+  }
+  .timeline-list {
+    max-height: 420px;
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "version": "0.10.11",
-  "versionCode": 37,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.11.apk",
-  "sha256": "c12d43796cbd99861a01f3e81e1fec63d368221ec4efe942bd09a5aa4088a1e5",
-  "notes": "저장·업로드 진행 안내창과 실제 전송률, 서버 저장/화면 갱신 단계 표시, 시술 선택의 단가표 탭·검색·분류 한 줄 배치 및 스크롤 고정"
+  "version": "0.10.12",
+  "versionCode": 38,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.12.apk",
+  "sha256": "e569fa8fdd5b3ef4d7740f3d876e4dc05ef0a90464748f2d95defb0e4d25a649",
+  "notes": "저장·업로드 진행 안내창과 실제 전송률, 서버 저장/화면 갱신 단계 표시, 시술 선택의 단가표 탭·검색·분류 한 줄 배치 및 스크롤 고정 · 팝업 저장 후 스크롤 잠금 수정"
 }

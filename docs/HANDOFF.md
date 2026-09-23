@@ -1,12 +1,14 @@
 # 코디메이트 개발 인계
 
-## 2026-09-23 저장 진행 안내·고정 검색 — 0.10.11
+## 2026-09-23 저장 진행 안내·고정 검색 — 0.10.12
 
-[사용 안내](RELEASE-0.10.11.md). operationProgress 외부 스토어/useSyncExternalStore로 진행 모달을 메인/하위 팝업 위에 표시합니다. App.work와 send, PatientQuote.run을 연결해 작업 준비부터 서버 저장/refresh까지 유지. 측정 불가 단계는 indeterminate, 15초 안내와 경과 초, 종료/실패 시 정리, 늦은 비동기 콜백은 작업 ID로 차단. 메인/팝업 중복 조작·키보드·앱 뒤로가기를 막습니다.
+[사용 안내](RELEASE-0.10.12.md). operationProgress 외부 스토어/useSyncExternalStore로 진행 모달을 메인/하위 팝업 위에 표시합니다. App.work와 send, PatientQuote.run을 연결해 작업 준비부터 서버 저장/refresh까지 유지. 측정 불가 단계는 indeterminate, 15초 안내와 경과 초, 종료/실패 시 정리, 늦은 비동기 콜백은 작업 ID로 차단. 메인/팝업 중복 조작·키보드·앱 뒤로가기를 막습니다.
 
 uploadRequest는 기존 쿠키/Bearer 인증·HTTP 오류코드/기기 대기열 동작을 유지하는 XHR 전송 경로입니다. upload.progress/load만 실제 전송 백분율로 사용, load 후에도 응답이 확인될 때까지 기다립니다. API mutation 중 활성 작업과 사진 업로드에 사용. stagePhoto의 기존 백그라운드 업로드를 상담 저장에서 구독하여 여러 사진의 전체 바이트와 저장 확인 수 표시. 실패한 업로드 재시도 시 구독 해제/finally, 오프라인 이미지들은 크기만 미리 집계하고 한 장씩 복호화/전송하여 메모리 증가 제한.
 
-시술 선택 카드 내부 scroll 하나 유지, sticky 검색 컨트롤과 한 줄 탭/검색/분류, 작은 메타정보. 컨테이너 360px 이하에서는 2줄, 터치 입력 16px/44px 높이 유지. 검색·분류·단가표 변경 시 scrollTop=0. 합성 테스트 artifacts/progress-browser0111.json 및 자동 테스트232개. 운영/APK 최종 검증은 artifacts/deployment-0.10.11.json에 기록합니다.
+시술 선택 카드 내부 scroll 하나 유지, sticky 검색 컨트롤과 한 줄 탭/검색/분류, 작은 메타정보. 컨테이너 360px 이하에서는 2줄, 터치 입력 16px/44px 높이 유지. 검색·분류·단가표 변경 시 scrollTop=0. 합성 테스트 artifacts/progress-browser0111.json 및 자동 테스트232개. 운영/APK 최종 검증은 artifacts/deployment-0.10.12.json에 기록합니다.
+
+0.10.11 운영 점검 뒤, 팝업 저장 시 기존 PhotoModal이 닫히며 진행창과 body.overflow 복원이 충돌하는 것을 추가 재현했습니다. 최종 0.10.12/versionCode38에서 진행창은 body.overflow를 변경하지 않고 wheel/touchmove/keydown만 막도록 수정. 팝업이 닫히는 경우와 남아 있는 경우 모두 기존 소유자의 스크롤 잠금을 보존합니다. 합성 견적서 변경 저장 뒤 body 스크롤 해제 회귀 검증(private/verify-scroll-lock0111.ts).
 
 ## 2026-09-23 상담 작업 팝업·정가 할인 — 0.10.10
 

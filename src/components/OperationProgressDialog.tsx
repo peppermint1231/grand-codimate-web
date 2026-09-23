@@ -10,8 +10,11 @@ export function OperationProgressDialog() {
   useEffect(() => {
     if (!progress) return;
     const previous = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Existing dialogs own their body scroll locks and may close during save.
+    // Block gestures here without restoring another dialog's stale overflow value.
+    const preventScroll = (e: Event) => e.preventDefault();
+    document.addEventListener("wheel", preventScroll, { passive: false });
+    document.addEventListener("touchmove", preventScroll, { passive: false });
     ref.current?.focus();
     const key = (e: KeyboardEvent) => {
       // The status dialog has no inputs. Keep underlying save shortcuts inactive.
@@ -31,7 +34,8 @@ export function OperationProgressDialog() {
       clearInterval(timer);
       document.removeEventListener("keydown", key, true);
       window.removeEventListener("beforeunload", leave);
-      document.body.style.overflow = overflow;
+      document.removeEventListener("wheel", preventScroll);
+      document.removeEventListener("touchmove", preventScroll);
       if (previous?.isConnected) previous.focus();
     };
   }, [progress?.id]);

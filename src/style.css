@@ -2367,6 +2367,8 @@ details p {
   object-fit: contain;
 }
 .consultation-viewer-panel {
+  position: static;
+  top: auto;
   display: flex;
   flex-direction: column;
   height: calc(100dvh - 200px);

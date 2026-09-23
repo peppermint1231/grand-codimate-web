@@ -1,7 +1,7 @@
 {
-  "version": "0.10.5",
-  "versionCode": 31,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.5.apk",
-  "sha256": "2dad5e9863462ba84c730f1216b27343324ec1e98d2625f17c4d9ae70cb085f0",
-  "notes": "사진별 의사 의견 파일명 숨김 및 큰 사진·코멘트 2열 배치"
+  "version": "0.10.6",
+  "versionCode": 32,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.6.apk",
+  "sha256": "96baa9b3119560c8bb4b887e582b8620c60fbb8408e13fbc82f41bda28629a10",
+  "notes": "PC 상담탭 사진 고정으로 의사 답변이 가려지는 문제 수정"
 }

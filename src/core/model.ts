@@ -156,6 +156,8 @@ export interface Discount {
   value: number;
 }
 export interface Line {
+  /** Unit list price at selection; price remains the actual sale price. */
+  regularPrice?: number;
   catalogVersion?: string;
   book?: CatalogBook;
   description?: string;
@@ -291,6 +293,15 @@ export interface Signature extends Base {
   contentHash: string;
   actorId: string;
 }
+export interface QuoteConsent extends Base {
+  consultationId: string;
+  actorId: string;
+  signer: string;
+  image: string;
+  version: string;
+  text: string;
+  contentHash: string;
+}
 export interface Event extends Base {
   patientId?: string;
   actorId: string;
@@ -309,6 +320,7 @@ export interface State {
   opinions: Opinion[];
   consents: Consent[];
   signatures: Signature[];
+  quoteConsents: QuoteConsent[];
   events: Event[];
   users: User[];
 }
@@ -330,6 +342,7 @@ export const emptyState = (): State => ({
   opinions: [],
   consents: [],
   signatures: [],
+  quoteConsents: [],
   events: [],
   users: [],
 });

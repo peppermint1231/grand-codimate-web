@@ -1,4 +1,9 @@
+import { PatientQuote } from "./components/PatientQuote";
 import { PatientTimeline } from "./components/PatientTimeline";
+import { DisplaySettings } from "./components/DisplaySettings";
+import { saveDocuments, type ExportDocument } from "./lib/saveDocuments";
+import { catalogRegularPrice, catalogDiscount } from "./core/quotePrices";
+import { QuoteLinePrice } from "./components/QuoteLinePrice";
 import { PullToRefresh } from "./components/PullToRefresh";
 import {
   catalogHasChanges,
@@ -58,6 +63,7 @@ import { QuoteTotals } from "./components/QuoteTotals";
 import { AddressSearch } from "./components/AddressSearch";
 import {
   PhotoBoard,
+  PhotoModal,
   HistoryPhotoPicker,
   ConsultationCover,
 } from "./components/PhotoBoard";
@@ -156,6 +162,8 @@ import {
 } from "./components/PhotoEditor";
 const date = () =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "Asia/Seoul" });
+const sexLabel = (sex: string) =>
+  sex === "M" ? "남성" : sex === "F" ? "여성" : "미상";
 const status = (c: Consultation) =>
   c.cancelled
     ? "취소"
@@ -236,6 +244,9 @@ export function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
   );
+  useEffect(() => {
+    if (page === "consult") setSidebarCollapsed(true);
+  }, [page, consultId]);
   const [loginIds, setLoginIds] = useState<string[]>([]);
   const [loginName, setLoginName] = useState("");
   useEffect(() => {
@@ -995,6 +1006,7 @@ export function App() {
             </span>
           </div>
           <div className="top-actions">
+            <DisplaySettings />
             <button
               className="mobile-logout"
               aria-label="로그아웃"
@@ -1316,16 +1328,21 @@ function Title({
   title,
   description,
   action,
+  badge,
 }: {
   title: string;
   description: string;
   action?: ReactNode;
+  badge?: ReactNode;
 }) {
   return (
     <div className="page-title">
       <div>
         <p className="eyebrow">CODIMATE WORKSPACE</p>
-        <h1>{title}</h1>
+        <h1>
+          {title}
+          {badge}
+        </h1>
         <p>{description}</p>
       </div>
       {action}
@@ -1942,7 +1959,7 @@ function PatientDetail({
       </button>
       <Title
         title={`${p.name} 님`}
-        description={`${age(p.dob)}세 · ${p.dob} · ${p.phone}`}
+        description={`${sexLabel(p.sex)} · ${age(p.dob)}세 · ${p.dob} · ${p.phone}`}
         action={
           <div className="button-row">
             <button
@@ -2528,15 +2545,50 @@ function ConsultationView({
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
   const [book, setBook] = useState<CatalogBook>(c.category);
-  const [productRatio, setProductRatio] = useState(() => {
-    const stored = Number(localStorage.getItem("codimate-product-split"));
-    return stored >= 30 && stored <= 70 ? stored : 50;
+  const [viewerHeight, setViewerHeight] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem("codimate-viewer-height"));
+    return saved >= 480 && saved <= 1600 ? saved : null;
   });
-  const resizeProducts = (value: number) => {
-    const next = Math.max(30, Math.min(70, Math.round(value)));
-    setProductRatio(next);
-    localStorage.setItem("codimate-product-split", String(next));
+  const resizeViewer = (height: number | null) => {
+    const next =
+      height === null
+        ? null
+        : Math.max(480, Math.min(1600, Math.round(height)));
+    setViewerHeight(next);
+    if (next === null) localStorage.removeItem("codimate-viewer-height");
+    else localStorage.setItem("codimate-viewer-height", String(next));
   };
+  const [cartOpen, setCartOpen] = useState(false);
+  const [exportFiles, setExportFiles] = useState<ExportDocument[]>([]);
+  const [exportMessage, setExportMessage] = useState("");
+  const saveExportFiles = async (files: ExportDocument[]) => {
+    const result = await saveDocuments(files);
+    setExportMessage(
+      result === "saved"
+        ? `${files.length}개 파일을 선택한 위치에 저장했습니다.`
+        : result === "cancelled"
+          ? "저장을 취소했습니다. 아래 버튼으로 다시 저장할 수 있습니다."
+          : "다운로드를 요청했습니다. 브라우저 다운로드 목록을 확인해주세요.",
+    );
+  };
+  const prepareExport = async (files: ExportDocument[]) => {
+    setExportFiles(files);
+    if (native || files.length === 1) await saveExportFiles(files);
+    else
+      setExportMessage(
+        `견적서 ${files.length}장을 만들었습니다. 아래에서 페이지별로 저장해주세요.`,
+      );
+  };
+  const [notePopup, setNotePopup] = useState<"memo" | "opinion" | null>(null);
+  const [opinionRequest, setOpinionRequest] = useState("");
+  const [opinionTo, setOpinionTo] = useState(
+    () =>
+      s.users.find((u) => u.role === "doctor" || isAdministrator(u))?.id || "",
+  );
+  const [opinionFailed, setOpinionFailed] = useState(false);
+  useAppBack(!!notePopup, () => setNotePopup(null), 85);
+
+  useAppBack(cartOpen, () => setCartOpen(false), 85);
 
   const bookVersion =
     draft.catalogVersions?.[book] ||
@@ -2592,7 +2644,8 @@ function ConsultationView({
   const dirty = JSON.stringify(draft) !== JSON.stringify(c);
   const validationError =
     quoteError ||
-    (quote.discountTotal > 0 && !draft.quote.reason.trim()
+    (quote.discountTotal > catalogDiscount(quote.lines) &&
+    !draft.quote.reason.trim()
       ? "할인 사유를 입력하세요."
       : "") ||
     (c.status !== "H" && dirty && !readonly && !draft.quote.reason.trim()
@@ -2741,27 +2794,35 @@ function ConsultationView({
           기기 초안 저장됨 · 공유하려면 보류 저장을 눌러주세요
         </p>
       )}
-      <button className="back" onClick={back}>
-        <ArrowLeft size={18} />
-        환자 상세
-      </button>
-      <Title
-        title={`${c.patient.name} 님의 상담`}
-        description={`${consultationKind(c)} · ${c.category} · ${age(c.patient.dob)}세 · ${status(c)} · ${c.createdAt.slice(0, 10)}`}
-        action={
-          <>
+      <header className="consultation-header">
+        <button
+          type="button"
+          className="back"
+          aria-label="환자 상세로 돌아가기"
+          title="환자 상세"
+          onClick={back}
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <div className="consultation-heading-text">
+          <h1>
+            {c.patient.name} 님의 상담
             <span className={"badge " + c.status}>{status(c)}</span>
-            <button
-              className="primary"
-              disabled={readonly || !!validationError}
-              onClick={() => work(save)}
-            >
-              <Check size={18} />
-              보류·변경 저장
-            </button>
-          </>
-        }
-      />
+          </h1>
+          <p>
+            {consultationKind(c)} · {c.category} · {sexLabel(c.patient.sex)} ·{" "}
+            {age(c.patient.dob)}세 · {c.createdAt.slice(0, 10)}
+          </p>
+        </div>
+        <button
+          className="primary consultation-save"
+          disabled={readonly || !!validationError}
+          onClick={() => work(save)}
+        >
+          <Check size={18} />
+          보류·변경 저장
+        </button>
+      </header>
       {c.sourceConsultationId && c.kind !== "initial" && (
         <div className="followup-preview" aria-label="기준 상담 정보">
           <strong>{consultationKind(c)}의 기준 상담</strong>
@@ -2796,7 +2857,7 @@ function ConsultationView({
           )}
         </div>
       )}
-      <div className="tabs">
+      <div className="tabs consultation-tabs">
         {[
           ["photo", "01  사진"],
           ["consult", "02  상담"],
@@ -2831,35 +2892,6 @@ function ConsultationView({
           <option value="portrait">세로 고정</option>
         </select>
       </div>
-      {tab === "consult" && (
-        <nav className="consult-quick-nav" aria-label="상담 영역 바로가기">
-          {[
-            ["사진", ".consultation-photo-column"],
-            ["시술 선택", ".procedure-picker"],
-            ["장바구니", ".consultation-cart"],
-            ["메모", ".consultation-memo"],
-            ["의견 요청", ".consultation-opinion-request"],
-          ]
-            .filter(
-              ([label]) =>
-                c.kind !== "interim" ||
-                !["시술 선택", "장바구니"].includes(label),
-            )
-            .map(([label, target]) => (
-              <button
-                key={label}
-                type="button"
-                onClick={() =>
-                  document
-                    .querySelector(target)
-                    ?.scrollIntoView({ block: "start", behavior: "auto" })
-                }
-              >
-                {label}
-              </button>
-            ))}
-        </nav>
-      )}
       {(tab === "photo" || tab === "consult") && (
         <div
           className={
@@ -2878,6 +2910,11 @@ function ConsultationView({
               className={
                 "card photo-panel" +
                 (tab === "consult" ? " consultation-viewer-panel" : "")
+              }
+              style={
+                tab === "consult" && viewerHeight
+                  ? { height: viewerHeight }
+                  : undefined
               }
             >
               {tab === "photo" ? (
@@ -2983,16 +3020,10 @@ function ConsultationView({
                     </Modal>
                   )}
                 </>
-              ) : (
-                <div className="section-title">
-                  <h3>상담 사진</h3>
-                  <button onClick={() => setTab("photo")}>
-                    사진 선택·추가
-                  </button>
-                </div>
-              )}
+              ) : null}
               <PhotoBoard
                 viewer={tab === "consult"}
+                onChoosePhotos={() => setTab("photo")}
                 photos={draft.photos}
                 columns={draft.photoColumns || 2}
                 userId={user.id}
@@ -3004,6 +3035,68 @@ function ConsultationView({
                   setDraft((d) => ({ ...d, photoColumns }))
                 }
               />
+              {tab === "consult" && (
+                <div
+                  className="photo-viewer-resize"
+                  role="separator"
+                  tabIndex={0}
+                  aria-label="상담 사진뷰어 높이 조절"
+                  aria-orientation="horizontal"
+                  aria-valuemin={480}
+                  aria-valuemax={1600}
+                  aria-valuenow={viewerHeight ?? undefined}
+                  onDoubleClick={() => resizeViewer(null)}
+                  onKeyDown={(e) => {
+                    if (
+                      !["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)
+                    )
+                      return;
+                    e.preventDefault();
+                    const current =
+                      e.currentTarget.parentElement!.getBoundingClientRect()
+                        .height;
+                    resizeViewer(
+                      e.key === "Home"
+                        ? 480
+                        : e.key === "End"
+                          ? 1600
+                          : current + (e.key === "ArrowUp" ? -40 : 40),
+                    );
+                  }}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    const el = e.currentTarget;
+                    el.dataset.start = String(e.clientY);
+                    el.dataset.height = String(
+                      el.parentElement!.getBoundingClientRect().height,
+                    );
+                    el.setPointerCapture(e.pointerId);
+                  }}
+                  onPointerMove={(e) => {
+                    const el = e.currentTarget;
+                    if (el.hasPointerCapture(e.pointerId))
+                      resizeViewer(
+                        Number(el.dataset.height) +
+                          e.clientY -
+                          Number(el.dataset.start),
+                      );
+                  }}
+                  onPointerUp={(e) => {
+                    if (e.currentTarget.hasPointerCapture(e.pointerId))
+                      e.currentTarget.releasePointerCapture(e.pointerId);
+                  }}
+                >
+                  <span>↕ 사진뷰어 높이 조절</span>
+                  <button
+                    type="button"
+                    aria-label="상담 사진뷰어 높이 초기화"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => resizeViewer(null)}
+                  >
+                    초기화
+                  </button>
+                </div>
+              )}
             </section>
             {tab === "consult" && (
               <ConsultationOpinions
@@ -3013,107 +3106,13 @@ function ConsultationView({
                 send={send}
               />
             )}
-            {tab === "consult" && (
-              <div className="consultation-notes">
-                <div className="card consultation-memo">
-                  <Field label="상담 메모">
-                    <textarea
-                      disabled={readonly}
-                      value={draft.memo}
-                      onChange={(e) =>
-                        setDraft({ ...draft, memo: e.target.value })
-                      }
-                    />
-                  </Field>
-                  {!readonly && (
-                    <div className="memo-save-actions">
-                      <button
-                        className="primary"
-                        disabled={!dirty}
-                        onClick={() => work(save)}
-                      >
-                        상담메모 저장
-                      </button>
-                      <small>
-                        메모와 현재 사진·장바구니 변경사항을 함께 저장합니다.
-                      </small>
-                    </div>
-                  )}
-                  {c.kind !== "interim" &&
-                    latestCatalogs(s).some(
-                      (x) =>
-                        x.version !==
-                        (draft.catalogVersions?.[catalogBook(x)] ||
-                          (catalogBook(x) === "미용"
-                            ? draft.catalogVersion
-                            : undefined)),
-                    ) && (
-                      <button
-                        disabled={readonly}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "가격 갱신은 장바구니를 비운 뒤 최신 상품을 다시 선택합니다. 진행할까요?",
-                            )
-                          )
-                            setDraft({
-                              ...draft,
-                              catalogVersion: latestCatalog(s)?.version || "",
-                              catalogVersions: Object.fromEntries(
-                                latestCatalogs(s).map((x) => [
-                                  catalogBook(x),
-                                  x.version,
-                                ]),
-                              ),
-                              quote: emptyQuote(),
-                            });
-                        }}
-                      >
-                        최신 단가표 가져오기
-                      </button>
-                    )}
-                </div>
-                <form
-                  className="card consultation-opinion-request"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    const d = new FormData(e.currentTarget);
-                    work(() =>
-                      send("opinion.request", {
-                        consultationId: c.id,
-                        toId: d.get("toId"),
-                        request: d.get("request"),
-                      }),
-                    );
-                  }}
-                >
-                  <h3>의사 의견 요청</h3>
-                  <select name="toId" aria-label="의견 요청 의사" required>
-                    {s.users
-                      .filter((u) => u.role === "doctor" || isAdministrator(u))
-                      .map((u) => (
-                        <option key={u.id} value={u.id}>
-                          {u.name}
-                        </option>
-                      ))}
-                  </select>
-                  <textarea
-                    name="request"
-                    aria-label="의사 의견 요청 내용"
-                    required
-                    placeholder="확인받고 싶은 내용을 적어주세요."
-                  />
-                  <button>요청 보내기</button>
-                </form>
-              </div>
-            )}
           </div>
           {tab === "consult" && c.kind !== "interim" && (
             <div
               className="split-handle"
               role="separator"
               tabIndex={0}
-              aria-label="사진과 장바구니 분할선"
+              aria-label="사진과 시술 선택 분할선"
               aria-valuenow={ratio}
               aria-valuemin={25}
               aria-valuemax={75}
@@ -3168,12 +3167,7 @@ function ConsultationView({
             </div>
           )}
           {tab === "consult" && c.kind !== "interim" && (
-            <section
-              className="catalog-panel"
-              style={
-                { "--product-split": `${productRatio}%` } as React.CSSProperties
-              }
-            >
+            <section className="catalog-panel">
               <div
                 className="card procedure-picker"
                 role="region"
@@ -3307,6 +3301,7 @@ function ConsultationView({
                               quantity: 1,
                               unit: o.unit,
                               price: o.price!,
+                              regularPrice: catalogRegularPrice(p, o),
                               tax: o.tax,
                               discount: { kind: "amount" as const, value: 0 },
                             };
@@ -3371,79 +3366,236 @@ function ConsultationView({
                   </Empty>
                 )}
               </div>
-              <div
-                className="product-cart-divider"
-                role="separator"
-                tabIndex={0}
-                aria-label="시술 선택과 장바구니 높이 조절"
-                aria-orientation="horizontal"
-                aria-valuemin={30}
-                aria-valuemax={70}
-                aria-valuenow={productRatio}
-                onDoubleClick={() => resizeProducts(50)}
-                onKeyDown={(e) => {
-                  if (["ArrowUp", "ArrowDown", "Home", "End"].includes(e.key)) {
-                    e.preventDefault();
-                    resizeProducts(
-                      e.key === "Home"
-                        ? 30
-                        : e.key === "End"
-                          ? 70
-                          : productRatio + (e.key === "ArrowUp" ? -5 : 5),
-                    );
-                  }
-                }}
-                onPointerDown={(e) => {
-                  if (e.button !== 0) return;
-                  const el = e.currentTarget;
-                  el.dataset.start = String(e.clientY);
-                  el.dataset.ratio = String(productRatio);
-                  el.dataset.height = String(el.parentElement!.clientHeight);
-                  el.setPointerCapture(e.pointerId);
-                }}
-                onPointerMove={(e) => {
-                  const el = e.currentTarget;
-                  if (el.hasPointerCapture(e.pointerId))
-                    resizeProducts(
-                      Number(el.dataset.ratio) +
-                        ((e.clientY - Number(el.dataset.start)) * 100) /
-                          Number(el.dataset.height),
-                    );
-                }}
-                onPointerUp={(e) => {
-                  if (e.currentTarget.hasPointerCapture(e.pointerId))
-                    e.currentTarget.releasePointerCapture(e.pointerId);
+            </section>
+          )}
+        </div>
+      )}
+      {tab === "consult" && (
+        <>
+          <div
+            className="consult-floating-actions"
+            role="group"
+            aria-label="상담 작업"
+          >
+            <button
+              type="button"
+              aria-label="상담메모 열기"
+              aria-haspopup="dialog"
+              onClick={() => {
+                setCartOpen(false);
+                setNotePopup("memo");
+              }}
+            >
+              메모
+            </button>
+            <button
+              type="button"
+              aria-label="의사 의견 요청 열기"
+              aria-haspopup="dialog"
+              onClick={() => {
+                setCartOpen(false);
+                setNotePopup("opinion");
+              }}
+            >
+              의견 요청
+            </button>
+            {c.kind !== "interim" && (
+              <button
+                type="button"
+                className="floating-cart"
+                aria-label="장바구니 열기"
+                aria-haspopup="dialog"
+                aria-expanded={cartOpen}
+                onClick={() => {
+                  setNotePopup(null);
+                  setCartOpen(true);
                 }}
               >
-                <span>↕ 시술 선택 / 장바구니</span>
-                <button
-                  type="button"
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => resizeProducts(50)}
-                  aria-label="시술 선택과 장바구니 높이 초기화"
+                <span>장바구니 {draft.quote.lines.length}</span>
+                <strong>
+                  {quoteError ? "금액 확인 필요" : money(quote.total)}
+                </strong>
+              </button>
+            )}
+          </div>
+          <span className="sr-only" role="status">
+            장바구니 {draft.quote.lines.length}개 항목
+          </span>
+          {notePopup && (
+            <PhotoModal
+              label={notePopup === "memo" ? "상담메모" : "의사 의견 요청"}
+              className="overlay consultation-note-overlay"
+              close={() => setNotePopup(null)}
+            >
+              {notePopup === "memo" ? (
+                <div className="card consultation-memo">
+                  <div className="section-title">
+                    <h2>상담메모</h2>
+                    <button type="button" onClick={() => setNotePopup(null)}>
+                      닫기
+                    </button>
+                  </div>
+                  <Field label="상담 메모">
+                    <textarea
+                      disabled={readonly}
+                      value={draft.memo}
+                      onChange={(e) =>
+                        setDraft({ ...draft, memo: e.target.value })
+                      }
+                    />
+                  </Field>
+                  {validationError && (
+                    <p className="error" role="alert">
+                      {validationError}
+                    </p>
+                  )}
+                  <small>닫아도 작성 중인 메모는 유지됩니다.</small>
+                  {!readonly && (
+                    <div className="memo-save-actions">
+                      <button
+                        className="primary"
+                        disabled={!dirty || !!validationError}
+                        onClick={() => work(save)}
+                      >
+                        상담메모 저장
+                      </button>
+                      <small>
+                        메모와 현재 사진·장바구니 변경사항을 함께 저장합니다.
+                      </small>
+                    </div>
+                  )}
+                  {c.kind !== "interim" &&
+                    latestCatalogs(s).some(
+                      (x) =>
+                        x.version !==
+                        (draft.catalogVersions?.[catalogBook(x)] ||
+                          (catalogBook(x) === "미용"
+                            ? draft.catalogVersion
+                            : undefined)),
+                    ) && (
+                      <button
+                        disabled={readonly}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "가격 갱신은 장바구니를 비운 뒤 최신 상품을 다시 선택합니다. 진행할까요?",
+                            )
+                          )
+                            setDraft({
+                              ...draft,
+                              catalogVersion: latestCatalog(s)?.version || "",
+                              catalogVersions: Object.fromEntries(
+                                latestCatalogs(s).map((x) => [
+                                  catalogBook(x),
+                                  x.version,
+                                ]),
+                              ),
+                              quote: emptyQuote(),
+                            });
+                        }}
+                      >
+                        최신 단가표 가져오기
+                      </button>
+                    )}
+                </div>
+              ) : (
+                <form
+                  className="card consultation-opinion-request"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    setOpinionFailed(false);
+                    void work(() =>
+                      send("opinion.request", {
+                        consultationId: c.id,
+                        toId: opinionTo,
+                        request: opinionRequest,
+                      }),
+                    ).then((ok: unknown) => {
+                      if (ok) {
+                        setOpinionRequest("");
+                        setNotePopup(null);
+                      } else setOpinionFailed(true);
+                    });
+                  }}
                 >
-                  초기화
-                </button>
-              </div>
+                  <div className="section-title">
+                    <h2>의사 의견 요청</h2>
+                    <button type="button" onClick={() => setNotePopup(null)}>
+                      닫기
+                    </button>
+                  </div>
+                  <select
+                    name="toId"
+                    aria-label="의견 요청 의사"
+                    required
+                    value={opinionTo}
+                    onChange={(e) => setOpinionTo(e.target.value)}
+                  >
+                    {s.users
+                      .filter((u) => u.role === "doctor" || isAdministrator(u))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name}
+                        </option>
+                      ))}
+                  </select>
+                  <textarea
+                    name="request"
+                    value={opinionRequest}
+                    onChange={(e) => setOpinionRequest(e.target.value)}
+                    aria-label="의사 의견 요청 내용"
+                    required
+                    placeholder="확인받고 싶은 내용을 적어주세요."
+                  />
+                  {opinionFailed && (
+                    <p className="error" role="alert">
+                      요청을 보내지 못했습니다. 입력 내용은 유지됩니다. 연결
+                      상태와 수신자를 확인해주세요.
+                    </p>
+                  )}
+                  <small>
+                    닫아도 작성 중인 요청은 유지됩니다. 보내기를 누르면 해당
+                    상담에 연결됩니다.
+                  </small>
+                  <button className="primary">요청 보내기</button>
+                </form>
+              )}
+            </PhotoModal>
+          )}
+        </>
+      )}
+      {tab === "consult" && c.kind !== "interim" && (
+        <>
+          {cartOpen && (
+            <PhotoModal
+              label="상담 장바구니"
+              className="overlay cart-dialog-overlay"
+              close={() => setCartOpen(false)}
+            >
               <div
                 className="card consultation-cart"
                 role="region"
                 aria-label="상담 장바구니"
                 tabIndex={0}
               >
-                <h3>
-                  장바구니 <small>{draft.quote.lines.length}개</small>
-                </h3>
+                <div className="section-title">
+                  <h2>
+                    장바구니 <small>{draft.quote.lines.length}개 항목</small>
+                  </h2>
+                  <button type="button" onClick={() => setCartOpen(false)}>
+                    닫기
+                  </button>
+                </div>
                 {!draft.quote.lines.length && (
                   <Empty>
-                    위에서 시술 옵션을 선택하면 장바구니에 추가됩니다.
+                    시술 선택에서 상품을 누르면 장바구니에 추가됩니다.
                   </Empty>
                 )}
                 {draft.quote.lines.map((l, i) => (
                   <div className="cart-line" key={l.id}>
                     <b>{l.name}</b>
                     <small>
-                      {l.book || "미용"} · {l.label} · {money(l.price)} ·{" "}
+                      {l.book || "미용"} · {l.label} ·{" "}
                       {l.tax === "inclusive"
                         ? "VAT 포함"
                         : l.tax === "exempt"
@@ -3452,6 +3604,7 @@ function ConsultationView({
                             ? "부가세 확인 필요"
                             : "VAT 별도"}
                     </small>
+                    <QuoteLinePrice line={l} />
                     <div className="inline-fields">
                       <Field label="수량">
                         <input
@@ -3472,7 +3625,7 @@ function ConsultationView({
                           }}
                         />
                       </Field>
-                      <Field label="할인">
+                      <Field label="추가 할인">
                         <input
                           type="number"
                           min={0}
@@ -3571,7 +3724,8 @@ function ConsultationView({
                   </select>
                 </div>
                 <p className="small">
-                  항목별 할인 후 남은 금액에 전체 할인을 적용합니다.
+                  상품 할인가에 항목별 추가 할인을 적용한 뒤, 남은 금액에 전체
+                  할인을 적용합니다.
                 </p>
                 <Field label="부가세 안내">
                   <select
@@ -3595,10 +3749,40 @@ function ConsultationView({
                   />
                 </Field>
                 <QuoteTotals quote={quote} error={quoteError} />
+                {validationError && (
+                  <p className="error" role="alert">
+                    {validationError}
+                  </p>
+                )}
+                <p className="small">
+                  닫아도 작성 중인 변경은 유지됩니다. 상담 저장 시 사진·메모와
+                  함께 저장됩니다.
+                </p>
+                <div className="button-row cart-dialog-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCartOpen(false);
+                      setTab("quote");
+                    }}
+                  >
+                    견적서 보기
+                  </button>
+                  {!readonly && (
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={!dirty || !!validationError}
+                      onClick={() => work(save)}
+                    >
+                      상담 저장
+                    </button>
+                  )}
+                </div>
               </div>
-            </section>
+            </PhotoModal>
           )}
-        </div>
+        </>
       )}
       {tab === "quote" && (
         <div className="detail-grid">
@@ -3618,55 +3802,66 @@ function ConsultationView({
                     {l.label} × {l.quantity}
                   </small>
                 </span>
-                <span>{money(Math.round(l.price * l.quantity))}</span>
+                <QuoteLinePrice line={l} />
               </div>
             ))}
             <QuoteTotals quote={quote} error={quoteError} />
             <div className="button-row">
               <button
-                disabled={!!quoteError}
+                disabled={
+                  !!quoteError ||
+                  !allowed(user, "export") ||
+                  !allowed(user, "money.read")
+                }
                 onClick={() =>
                   work(async () => {
                     await send("audit.export", { format: "consultation-pdf" });
-                    return download(await pdf(), documentName(draft, author));
+                    await prepareExport([
+                      { blob: await pdf(), name: documentName(draft, author) },
+                    ]);
                   })
                 }
               >
                 병원용 PDF
               </button>
-              <button
-                disabled={!!quoteError}
-                onClick={() =>
-                  work(async () => {
-                    await send("audit.export", { format: "quote-jpg" });
-                    const pages = await quoteJPG({ ...draft, quote });
-                    pages.forEach((b, i) =>
-                      download(b, `견적서_${c.patient.name}_${i + 1}.jpg`),
-                    );
-                  })
-                }
-              >
-                환자용 JPG
-              </button>
-              <button
-                disabled={!!quoteError}
-                onClick={() =>
-                  work(async () => {
-                    if (native) {
-                      await printPage();
-                      return;
-                    }
-                    const b = await pdf(),
-                      u = URL.createObjectURL(b);
-                    const w = window.open(u);
-                    w?.addEventListener("load", () => w.print());
-                    setTimeout(() => URL.revokeObjectURL(u), 60000);
-                  })
-                }
-              >
-                인쇄
-              </button>
+              {!quoteError && (
+                <PatientQuote
+                  consultation={{ ...draft, quote }}
+                  consents={s.quoteConsents || []}
+                  user={user}
+                  dirty={dirty}
+                  save={save}
+                  send={send}
+                />
+              )}
             </div>
+            {exportFiles.length > 0 && (
+              <section
+                className="quote-export-files"
+                aria-label="생성한 견적서 파일"
+              >
+                <p role="status">{exportMessage}</p>
+                {native && exportFiles.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => work(() => saveExportFiles(exportFiles))}
+                  >
+                    폴더를 선택해 모두 저장
+                  </button>
+                )}
+                {exportFiles.map((file, i) => (
+                  <button
+                    type="button"
+                    key={file.name}
+                    onClick={() => work(() => saveExportFiles([file]))}
+                  >
+                    {file.blob.type === "application/pdf"
+                      ? "PDF 다시 저장"
+                      : `${i + 1}페이지 JPG 저장`}
+                  </button>
+                ))}
+              </section>
+            )}
             {c.status === "H" && dirty && !readonly && (
               <p className="small" role="status">
                 변경 내용을 보류·변경 저장한 뒤 최종 견적을 확인하고 확정하세요.

@@ -1,4 +1,15 @@
+import {
+  QUOTE_CONSENT_TEXT,
+  QUOTE_CONSENT_VERSION,
+  quoteContentHash,
+  validQuoteConsent,
+} from "./quoteConsent";
 import { hasOpinionAnswer } from "./opinions";
+import {
+  catalogRegularPrice,
+  catalogDiscount,
+  linePrices,
+} from "./quotePrices";
 import {
   mergeWebsiteCatalogs,
   websitePagesSchema,
@@ -102,13 +113,14 @@ export function calculate(
       "수량을 확인하세요",
     );
     amount.parse(l.price);
+    if (l.regularPrice !== undefined) {
+      amount.parse(l.regularPrice);
+      ensure(l.regularPrice >= l.price, "정가는 판매가 이상이어야 합니다");
+    }
     const b = Math.round(l.price * l.quantity);
     return b - discountOf(b, l.discount);
   });
-  const subtotal = lines.reduce(
-      (s, l) => s + Math.round(l.price * l.quantity),
-      0,
-    ),
+  const subtotal = lines.reduce((s, l) => s + linePrices(l).regular, 0),
     net = bases.reduce((a, b) => a + b, 0),
     global = discountOf(net, discount);
   const allocations = bases.map((b, i) => ({
@@ -193,6 +205,7 @@ export function renewalQuote(
       name: product.name,
       label: option.label,
       price: option.price!,
+      regularPrice: catalogRegularPrice(product, option),
       tax: option.tax,
       unit: option.unit,
       description: product.description,
@@ -554,6 +567,7 @@ export async function applyCommand(
         : catalog,
     ),
     catalogRevisions: [...(input.catalogRevisions || [])],
+    quoteConsents: structuredClone(input.quoteConsents || []),
   };
   let patientId: string | undefined;
   let text = cmd.type;
@@ -945,6 +959,7 @@ export async function applyCommand(
           label: o.label,
           unit: o.unit,
           price: o.price,
+          regularPrice: catalogRegularPrice(product, o),
           tax: o.tax,
         };
       });
@@ -955,7 +970,8 @@ export async function applyCommand(
         String(p.reason || ""),
       );
       ensure(
-        !quote.discountTotal || quote.reason.trim(),
+        quote.discountTotal === catalogDiscount(quote.lines) ||
+          quote.reason.trim(),
         "할인 사유를 입력하세요",
       );
       c.quote = quote;
@@ -1538,6 +1554,18 @@ export async function applyCommand(
           "catalog-csv",
         ])
         .parse(p.format);
+      if (format === "quote-jpg") {
+        need("money.read");
+        const c = s.consultations.find((c) => c.id === p.consultationId);
+        const consent = s.quoteConsents.find((x) => x.id === p.consentId);
+        ensure(
+          c && (await validQuoteConsent(c, consent)),
+          "현재 견적의 유출방지 동의와 서명이 필요합니다",
+          409,
+        );
+        patientId = c.patientId;
+      }
+      if (format === "consultation-pdf") need("money.read");
       if (format === "catalog-xlsx" || format === "catalog-csv")
         need("catalog.edit");
       if (format === "statistics-xlsx") need("stats.read");
@@ -1725,6 +1753,51 @@ export async function applyCommand(
         touch(old);
       } else s.consents.push({ ...base, ...d, version: 1 });
       text = "동의서 양식 저장";
+      break;
+    }
+    case "quote.consent": {
+      need("export");
+      need("money.read");
+      const c = s.consultations.find((c) => c.id === p.consultationId);
+      ensure(
+        c && !c.cancelled && c.quote.lines.length,
+        "저장된 견적을 선택하세요",
+      );
+      ensure(
+        !s.quoteConsents.some((x) => x.id === id),
+        "동의 기록이 이미 있습니다",
+        409,
+      );
+      ensure(p.agreed === true, "유출방지 안내에 동의해주세요");
+      const contentHash = await quoteContentHash(c);
+      ensure(
+        contentHash === p.contentHash,
+        "견적이 변경되었습니다. 확인 후 다시 서명하세요",
+        409,
+      );
+      const image = z
+        .string()
+        .max(300000)
+        .regex(/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/=]+$/)
+        .parse(p.image);
+      ensure(image.length > 300, "직접 서명해주세요");
+      const signer = z.string().trim().min(1).max(100).parse(p.signer);
+      ensure(
+        signer === c.patient.name.trim(),
+        "환자 본인의 이름을 확인해주세요",
+      );
+      s.quoteConsents.push({
+        ...base,
+        consultationId: c.id,
+        actorId: user.id,
+        signer,
+        image,
+        contentHash,
+        version: QUOTE_CONSENT_VERSION,
+        text: QUOTE_CONSENT_TEXT,
+      });
+      patientId = c.patientId;
+      text = "환자용 견적서 유출방지 동의·서명 저장";
       break;
     }
     case "signature.create": {

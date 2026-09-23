@@ -319,7 +319,7 @@ it("requires both export and the relevant catalog/statistics permission, includi
           expect(
             response.status,
             `${account.permissionLevel}/${format}/export=${exportAllowed}/feature=${featureAllowed}`,
-          ).toBe(permitted ? 200 : 403);
+          ).toBe(permitted ? (format === "quote-jpg" ? 409 : 200) : 403);
         }
       }
     }

@@ -7,6 +7,9 @@ export const NativeClinic = registerPlugin<{
   seal(o: { value: string }): Promise<{ value: string }>;
   open(o: { value: string }): Promise<{ value: string }>;
   print(): Promise<void>;
+  saveDocuments(o: {
+    files: { name: string; mimeType: string; data: string }[];
+  }): Promise<{ cancelled: boolean; count?: number }>;
   install(o: { url: string; sha256: string }): Promise<void>;
 }>("ClinicDevice");
 export async function takePhoto() {

@@ -1,3 +1,10 @@
+import {
+  QuoteShares,
+  quoteShareInput,
+  quoteShareHTML,
+  quoteShareHeaders,
+} from "./quoteShares";
+import { validQuoteConsent } from "../src/core/quoteConsent";
 import { fetchEventSource } from "./eventCatalog";
 import {
   jobRoles,
@@ -102,7 +109,7 @@ export class Clinic extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec(
-      "CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);",
+      "CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
     );
   }
   private async secret<T>(id: string) {
@@ -191,6 +198,7 @@ export class Clinic extends DurableObject<Env> {
         await this.settleStorageRename();
         const store = await this.inquiryStore();
         await store.purge();
+        new QuoteShares(this.sql, this.env.ENCRYPTION_KEY).purge();
         await store.flush();
       } finally {
         await this.ctx.storage.setAlarm(Date.now() + 3600_000);
@@ -428,7 +436,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.10.9",
+        version: "0.10.10",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -607,6 +615,87 @@ export class Clinic extends DurableObject<Env> {
       }
       return Response.redirect(this.env.APP_ORIGIN + "/?connected=1", 302);
     }
+    if (path.startsWith("/api/public/quotes/") && req.method === "GET") {
+      const parts = path.split("/");
+      const token = parts[4],
+        store = new QuoteShares(this.sql, this.env.ENCRYPTION_KEY);
+      const share = await store.get(token);
+      const unavailable = () =>
+        new Response(
+          "이 견적서 링크는 만료되었거나 사용할 수 없습니다. 병원에 새 링크를 요청해주세요.",
+          {
+            status: 410,
+            headers: {
+              ...quoteShareHeaders,
+              "Content-Type": "text/plain; charset=utf-8",
+            },
+          },
+        );
+      if (
+        !share ||
+        share.expires <= Date.now() ||
+        (await this.secret("restore-required"))
+      )
+        return unavailable();
+      const entity = async <T>(section: string, id: string) => {
+        const row = this.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM entities WHERE section=? AND id=?",
+            section,
+            id,
+          )
+          .toArray()[0];
+        return row ? open<T>(row.value, this.env.ENCRYPTION_KEY) : undefined;
+      };
+      const c = await entity<State["consultations"][number]>(
+        "consultations",
+        share.consultationId,
+      );
+      const consent = await entity<State["quoteConsents"][number]>(
+        "quoteConsents",
+        share.consentId,
+      );
+      const actor = await this.account(share.actorId);
+      const patient =
+        c && (await entity<State["patients"][number]>("patients", c.patientId));
+      if (
+        !c ||
+        !patient ||
+        patient.archived ||
+        patient.mergedInto ||
+        !actor ||
+        !allowed(actor, "export") ||
+        !allowed(actor, "money.read") ||
+        !(await validQuoteConsent(c, consent))
+      )
+        return unavailable();
+      if (parts.length === 5)
+        return new Response(quoteShareHTML(token, share), {
+          headers: {
+            ...quoteShareHeaders,
+            "Content-Type": "text/html; charset=utf-8",
+          },
+        });
+      const n = Number(parts[5]);
+      if (
+        parts.length !== 6 ||
+        !/^\d+$/.test(parts[5]) ||
+        n < 0 ||
+        n >= share.count
+      )
+        return unavailable();
+      return new Response(await store.page(share.id, n), {
+        headers: {
+          ...quoteShareHeaders,
+          "Content-Type": "image/jpeg",
+          ...(url.searchParams.has("download")
+            ? {
+                "Content-Disposition": `attachment; filename="quote-${n + 1}.jpg"`,
+              }
+            : {}),
+        },
+      });
+    }
     if (path === "/api/public/catalog" && req.method === "GET") {
       const token = await seal(
         { id: crypto.randomUUID(), expires: Date.now() + 3600_000 },
@@ -754,6 +843,7 @@ export class Clinic extends DurableObject<Env> {
     if (
       [
         "/api/commands",
+        "/api/quote-shares",
         "/api/users",
         "/api/media",
         "/api/sync",
@@ -767,6 +857,74 @@ export class Clinic extends DurableObject<Env> {
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
         409,
       );
+    if (path === "/api/quote-shares") {
+      ensure(
+        allowed(user, "export") && allowed(user, "money.read"),
+        "견적서 내보내기 권한이 없습니다",
+        403,
+      );
+      const store = new QuoteShares(this.sql, this.env.ENCRYPTION_KEY);
+      store.purge();
+      if (req.method === "GET")
+        return json({
+          shares: await store.list(
+            url.searchParams.get("consultationId") || "",
+          ),
+        });
+      if (req.method === "POST") {
+        await this.flush();
+        const text = await req.text();
+        ensure(
+          text.length <= 24_000_000,
+          "견적서 파일이 너무 큽니다. 다운로드를 이용해주세요",
+          413,
+        );
+        const b = JSON.parse(text);
+        if (b.revokeId) {
+          ensure(typeof b.consultationId === "string", "상담을 선택하세요");
+          const list = await store.list(b.consultationId);
+          ensure(
+            list.some((x) => x.id === b.revokeId),
+            "링크를 찾을 수 없습니다",
+            404,
+          );
+          store.remove(b.revokeId);
+          return json({ ok: true });
+        }
+        const input = quoteShareInput.parse(b),
+          state = await this.state();
+        const c = state.consultations.find(
+          (x) => x.id === input.consultationId,
+        );
+        const consent = state.quoteConsents.find(
+          (x) => x.id === input.consentId,
+        );
+        ensure(
+          c && (await validQuoteConsent(c, consent)),
+          "현재 견적의 동의·서명이 필요합니다",
+          409,
+        );
+        const patient = state.patients.find((x) => x.id === c.patientId);
+        ensure(
+          patient && !patient.archived && !patient.mergedInto,
+          "사용할 수 없는 환자 자료입니다",
+          409,
+        );
+        ensure(
+          (await store.list(c.id)).length < 10,
+          "사용 중인 링크를 만료시킨 뒤 다시 발급해주세요",
+        );
+        const result = await store.create(input, user.id);
+        if (!(await this.ctx.storage.getAlarm()))
+          await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+        return json({
+          id: result.id,
+          url: this.env.APP_ORIGIN + "/api/public/quotes/" + result.token,
+          expires: result.expires,
+          count: result.count,
+        });
+      }
+    }
     if (path === "/api/catalog/event-source" && req.method === "GET") {
       ensure(
         allowed(user, "catalog.edit"),
@@ -1093,6 +1251,7 @@ export class Clinic extends DurableObject<Env> {
       if (!allowed(user, "note.read")) s.notes = [];
       if (!allowed(user, "money.read")) {
         s.ledger = [];
+        s.quoteConsents = [];
         s.consultations = s.consultations.map((c) => ({
           ...c,
           quote: emptyQuote(),
@@ -1413,6 +1572,7 @@ export class Clinic extends DurableObject<Env> {
       );
       this.ctx.storage.transactionSync(() => {
         this.sql.exec("DELETE FROM entities");
+        this.sql.exec("DELETE FROM quote_shares");
         this.sql.exec("DELETE FROM operations");
         this.sql.exec("DELETE FROM media");
         this.sql.exec("DELETE FROM inquiries");

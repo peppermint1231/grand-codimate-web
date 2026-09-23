@@ -1641,7 +1641,8 @@ export function SignaturePad({
   onChange: (data: string) => void;
 }) {
   const ref = useRef<HTMLCanvasElement>(null),
-    down = useRef(false);
+    down = useRef(false),
+    ink = useRef(false);
   return (
     <div>
       <canvas
@@ -1671,15 +1672,17 @@ export function SignaturePad({
             ((e.clientY - r.top) * 200) / r.height,
           );
           ctx.stroke();
+          ink.current = true;
         }}
         onPointerUp={() => {
           down.current = false;
-          onChange(ref.current!.toDataURL("image/png"));
+          if (ink.current) onChange(ref.current!.toDataURL("image/png"));
         }}
       />
       <button
         onClick={() => {
           ref.current!.getContext("2d")!.clearRect(0, 0, 700, 200);
+          ink.current = false;
           onChange("");
         }}
       >

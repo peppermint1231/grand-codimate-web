@@ -1,4 +1,5 @@
 import { money, type Quote } from "../core/model";
+import { catalogDiscount } from "../core/quotePrices";
 
 export function QuoteTotals({
   quote,
@@ -7,6 +8,7 @@ export function QuoteTotals({
   quote: Quote;
   error?: string;
 }) {
+  const fixedDiscount = catalogDiscount(quote.lines);
   return (
     <div className="quote-totals" aria-label="견적 합계">
       {error ? (
@@ -21,6 +23,18 @@ export function QuoteTotals({
             <dt>할인 합계</dt>
             <dd>− {money(quote.discountTotal)}</dd>
           </div>
+          {fixedDiscount > 0 && (
+            <>
+              <div className="quote-discount-detail">
+                <dt>상품 할인</dt>
+                <dd>− {money(fixedDiscount)}</dd>
+              </div>
+              <div className="quote-discount-detail">
+                <dt>추가·전체 할인</dt>
+                <dd>− {money(quote.discountTotal - fixedDiscount)}</dd>
+              </div>
+            </>
+          )}
           <div>
             <dt>공급가액·면세금액</dt>
             <dd>{money(quote.supply)}</dd>
@@ -37,8 +51,9 @@ export function QuoteTotals({
       </div>
       {!error && (
         <p className="small">
-          최종 금액은 공급가액·면세금액과 부가세의 합계입니다. 포함 상품의
-          부가세를 다시 더하지 않습니다.
+          시술 금액은 정가 기준이며, 할인 후 금액에 상품별 부가세 기준을
+          적용합니다. 최종 금액은 공급가액·면세금액과 부가세의 합계입니다. 포함
+          상품의 부가세를 다시 더하지 않습니다.
         </p>
       )}
     </div>

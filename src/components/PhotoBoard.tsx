@@ -146,6 +146,10 @@ function PhotoViewer({
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(500);
+  const [singleId, setSingleId] = useState<string | null>(null);
+  const single = photos.find((p) => p.id === singleId);
+  const shown = single ? [single] : photos;
+  useAppBack(!!single, () => setSingleId(null), 55);
   useEffect(() => {
     const el = viewport.current;
     if (!el) return;
@@ -156,13 +160,21 @@ function PhotoViewer({
   return (
     <div className="photo-viewer">
       <div className="viewer-controls">
+        {single && (
+          <button type="button" onClick={() => setSingleId(null)}>
+            전체 비교로 돌아가기
+          </button>
+        )}
         <div className="button-row" role="group" aria-label="사진 열 수">
           {[1, 2, 3, 4].map((n) => (
             <button
               key={n}
               className={columns === n ? "selected" : ""}
               aria-pressed={columns === n}
-              onClick={() => onColumns(n)}
+              onClick={() => {
+                setSingleId(null);
+                onColumns(n);
+              }}
             >
               {n}열
             </button>
@@ -190,35 +202,44 @@ function PhotoViewer({
       <div className={"viewer-viewport fit-" + fit} ref={viewport}>
         {photos.length ? (
           <PhotoOrder
-            photos={photos}
-            disabled={readonly}
+            photos={shown}
+            disabled={readonly || !!single}
             onOrder={onOrder}
             className="comparison-grid"
             label="비교 사진 순서"
             style={
               {
-                "--columns": columns,
-                "--rows": Math.ceil(photos.length / columns),
+                "--columns": single ? 1 : columns,
+                "--rows": single ? 1 : Math.ceil(photos.length / columns),
                 "--viewer-height": Math.max(120, height - 2) + "px",
               } as CSSProperties
             }
             ghost={(p) => <Thumbnail photo={p} />}
           >
-            {(p, i) => (
+            {(p) => (
               <figure data-photo-id={p.id}>
-                <div className="comparison-image">
+                <button
+                  type="button"
+                  className="comparison-image"
+                  aria-label={`${photos.findIndex((x) => x.id === p.id) + 1}번 사진 한 장 보기`}
+                  onClick={() => setSingleId(p.id)}
+                >
                   <PhotoPreview photo={p} />
-                </div>
+                </button>
                 <figcaption className="photo-overlay-actions">
-                  <span className="photo-index">{i + 1}</span>
-                  <button
-                    data-photo-drag
-                    disabled={readonly}
-                    aria-label={`${p.name} 비교 순서 이동`}
-                    title="드래그 또는 방향키로 순서 이동"
-                  >
-                    ⠿
-                  </button>
+                  <span className="photo-index">
+                    {photos.findIndex((x) => x.id === p.id) + 1}
+                  </span>
+                  {!single && (
+                    <button
+                      data-photo-drag
+                      disabled={readonly}
+                      aria-label={`${p.name} 비교 순서 이동`}
+                      title="드래그 또는 방향키로 순서 이동"
+                    >
+                      ⠿
+                    </button>
+                  )}
                   <button
                     aria-label={`${p.name} 상세정보`}
                     onClick={() => onInfo(p.id)}
@@ -239,6 +260,22 @@ function PhotoViewer({
           <div className="empty">사진 탭에서 비교할 사진을 선택하세요.</div>
         )}
       </div>
+      {single && photos.length > 1 && (
+        <div className="viewer-single-strip" aria-label="한 장 보기 사진 선택">
+          {photos.map((photo, i) => (
+            <button
+              type="button"
+              key={photo.id}
+              aria-label={`${i + 1}번 사진 보기`}
+              aria-pressed={photo.id === single.id}
+              onClick={() => setSingleId(photo.id)}
+            >
+              <Thumbnail photo={photo} />
+              <span>{i + 1}번 사진</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -253,6 +290,7 @@ export function PhotoBoard({
   canAnnotate,
   admin,
   viewer = false,
+  onChoosePhotos,
 }: {
   photos: Photo[];
   columns: number;
@@ -263,6 +301,7 @@ export function PhotoBoard({
   canAnnotate: boolean;
   admin: boolean;
   viewer?: boolean;
+  onChoosePhotos?: () => void;
 }) {
   const [editing, setEditing] = useState<string | null>(null),
     [, update] = useState(0),
@@ -428,10 +467,29 @@ export function PhotoBoard({
             </PhotoOrder>
           </>
         )}
-        <div className="comparison-toolbar">
-          <strong>선택한 사진 {selected.length}장</strong>
-          <button disabled={!selected.length} onClick={() => setLarge(true)}>
-            비교 크게 보기
+        <div
+          className={"comparison-toolbar" + (viewer ? " viewer-toolbar" : "")}
+        >
+          <strong>
+            {viewer ? "상담 사진" : "선택한 사진"}{" "}
+            <small>{selected.length}장</small>
+          </strong>
+          {viewer && onChoosePhotos && (
+            <button
+              type="button"
+              aria-label="사진 선택·추가"
+              onClick={onChoosePhotos}
+            >
+              선택·추가
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="비교 크게 보기"
+            disabled={!selected.length}
+            onClick={() => setLarge(true)}
+          >
+            {viewer ? "크게 보기" : "비교 크게 보기"}
           </button>
         </div>
         {viewer && viewerContent()}

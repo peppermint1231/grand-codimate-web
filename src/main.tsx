@@ -1,3 +1,4 @@
+import { OperationProgressDialog } from "./components/OperationProgressDialog";
 import { Discovery } from "./components/Discovery";
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -10,5 +11,6 @@ createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {location.pathname === "/discover" ? <Discovery /> : <App />}
     {native ? <AndroidUpdateNotice /> : <WebUpdateNotice />}
+    <OperationProgressDialog />
   </React.StrictMode>,
 );

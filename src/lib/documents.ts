@@ -1,3 +1,4 @@
+import { currentProgress } from "./operationProgress";
 import { validQuoteConsent } from "../core/quoteConsent";
 import type { QuoteConsent } from "../core/model";
 import { opinionAnswerText } from "../core/opinions";
@@ -174,6 +175,10 @@ export async function consultationPDF(
 export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
   if (!(await validQuoteConsent(c, consent)))
     throw new Error("현재 견적의 유출방지 동의·서명이 필요합니다");
+  currentProgress()?.update({
+    title: "견적서 이미지를 만들고 있습니다",
+    detail: "견적 내용과 환자 서명을 포함하고 있습니다.",
+  });
   await document.fonts.ready;
   const pages: Blob[] = [];
   const chunks = Array.from(
@@ -181,6 +186,12 @@ export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
     (_, i) => c.quote.lines.slice(i * 6, i * 6 + 6),
   );
   for (let i = 0; i < chunks.length; i++) {
+    currentProgress()?.update({
+      title: "견적서 이미지를 만들고 있습니다",
+      detail: `${i + 1} / ${chunks.length}페이지 생성 중`,
+      percent: Math.floor((i / chunks.length) * 100),
+      metric: "이미지 생성 진행률",
+    });
     const canvas = document.createElement("canvas");
     canvas.width = 1240;
     canvas.height = 1754;

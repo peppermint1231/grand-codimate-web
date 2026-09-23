@@ -4790,3 +4790,209 @@ html.custom-pull-refresh {
     break-after: auto;
   }
 }
+.operation-progress-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #12352fcc;
+  backdrop-filter: blur(3px);
+  touch-action: none;
+}
+.operation-progress-card {
+  width: min(440px, 100%);
+  padding: 28px;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 16px 64px #0003;
+  color: #24463f;
+}
+.operation-progress-card h2 {
+  font-size: calc(20px * var(--ui-font-scale, 1));
+  margin: 18px 0 10px;
+}
+.operation-progress-card p {
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.operation-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #dfebe4;
+  border-top-color: #146259;
+  border-radius: 50%;
+  animation: operation-spin 1s linear infinite;
+}
+.operation-progress-label {
+  display: flex;
+  justify-content: space-between;
+  margin: 24px 0 10px;
+  font-size: calc(14px * var(--ui-font-scale, 1));
+}
+.operation-progress-label strong {
+  font-size: calc(22px * var(--ui-font-scale, 1));
+  font-variant-numeric: tabular-nums;
+}
+.operation-progress-card progress {
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 10px;
+  accent-color: #146259;
+  border: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.operation-progress-card progress::-webkit-progress-bar {
+  background: #e8efe9;
+}
+.operation-progress-card progress::-webkit-progress-value {
+  background: #146259;
+  transition: width 0.15s linear;
+}
+.operation-progress-card progress:indeterminate {
+  background: linear-gradient(90deg, #e8efe9, #76ada0, #e8efe9);
+  background-size: 200% 100%;
+  animation: operation-wait 1.5s linear infinite;
+}
+.operation-progress-hint {
+  margin: 18px 0 0;
+  font-size: calc(12px * var(--ui-font-scale, 1));
+  color: #667b74;
+}
+.operation-progress-hint span {
+  display: block;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+@keyframes operation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes operation-wait {
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .operation-spinner,
+  .operation-progress-card progress:indeterminate {
+    animation: none;
+  }
+}
+@media print {
+  .operation-progress-overlay {
+    display: none !important;
+  }
+}
+.catalog-panel > .procedure-picker {
+  padding: 0;
+  container-type: inline-size;
+}
+.procedure-picker-controls {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 12px 14px 8px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 3px 8px #183f3008;
+}
+.procedure-picker-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(90px, 1fr) minmax(90px, 27%);
+  align-items: center;
+  gap: 8px;
+}
+.procedure-picker-toolbar > .tabs {
+  margin: 0;
+  border: 0;
+  gap: 0;
+  overflow: visible;
+}
+.procedure-picker-toolbar > .tabs button {
+  padding: 8px 9px;
+  min-height: 40px;
+  white-space: nowrap;
+  font-size: calc(13px * var(--ui-font-scale, 1));
+  border-radius: 6px;
+  border-bottom: 0;
+}
+.procedure-picker-toolbar > .tabs button.active {
+  background: #e6f1eb;
+  box-shadow: inset 0 0 0 1px #b9d6c9;
+}
+.procedure-picker-toolbar > .search {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 8px;
+  height: 40px;
+  gap: 6px;
+}
+.procedure-picker-toolbar .search svg {
+  width: 15px;
+  min-width: 15px;
+}
+.procedure-picker-toolbar .search input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 0;
+  font-size: calc(13px * var(--ui-font-scale, 1));
+}
+.procedure-picker-toolbar > select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  margin: 0;
+  padding: 6px 24px 6px 8px;
+  text-overflow: ellipsis;
+  font-size: calc(13px * var(--ui-font-scale, 1));
+}
+.procedure-picker-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: calc(10px * var(--ui-font-scale, 1));
+}
+.procedure-picker > .product-list {
+  padding: 0 14px 14px;
+  margin: 0;
+}
+.procedure-picker > .catalog-product-save {
+  margin: 10px 14px;
+}
+@container (max-width: 360px) {
+  .procedure-picker-toolbar {
+    grid-template-columns: minmax(0, 1fr) minmax(90px, 38%);
+    gap: 6px;
+  }
+  .procedure-picker-toolbar > .tabs {
+    grid-column: 1/-1;
+  }
+  .procedure-picker-controls {
+    padding: 8px 10px;
+  }
+}
+@media (pointer: coarse) {
+  .procedure-picker-toolbar > .tabs button,
+  .procedure-picker-toolbar > select,
+  .procedure-picker-toolbar > .search {
+    min-height: 44px;
+    height: 44px;
+  }
+  .procedure-picker-toolbar .search input,
+  .procedure-picker-toolbar > select {
+    font-size: max(16px, calc(13px * var(--ui-font-scale, 1)));
+  }
+}
+
+.operation-progress-card progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}

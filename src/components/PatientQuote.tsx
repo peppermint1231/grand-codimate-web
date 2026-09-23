@@ -1,3 +1,4 @@
+import { withProgress } from "../lib/operationProgress";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
@@ -92,7 +93,7 @@ export function PatientQuote({
     setBusy(true);
     setError("");
     try {
-      await fn();
+      await withProgress("견적서 처리 중입니다", fn);
     } catch (e) {
       setError((e as Error).message);
     } finally {

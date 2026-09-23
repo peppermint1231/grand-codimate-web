@@ -1,3 +1,4 @@
+import { currentProgress, withProgress } from "./lib/operationProgress";
 import { PatientQuote } from "./components/PatientQuote";
 import { PatientTimeline } from "./components/PatientTimeline";
 import { DisplaySettings } from "./components/DisplaySettings";
@@ -321,7 +322,7 @@ export function App() {
     setError("");
     setNotice("");
     try {
-      return await fn();
+      return await withProgress("처리 중입니다", fn);
     } catch (e) {
       setError(e instanceof Error ? e.message : "처리하지 못했습니다");
     } finally {
@@ -330,6 +331,10 @@ export function App() {
     }
   };
   const refresh = async (preserveConsult = false) => {
+    currentProgress()?.update({
+      title: "저장된 자료 확인 중입니다",
+      detail: "최신 내용을 화면에 반영하고 있습니다.",
+    });
     const d = await api("/state");
     setUser(d.user);
     setState((previous) => {
@@ -493,7 +498,10 @@ export function App() {
     payload: Record<string, unknown>,
     entityId?: string,
     baseRev?: number,
-  ) => execute(makeCommand(type, payload, entityId, baseRev));
+  ) =>
+    withProgress("저장 중입니다", () =>
+      execute(makeCommand(type, payload, entityId, baseRev)),
+    );
   const sync = () =>
     work(async () => {
       for (const c of pending) {
@@ -2545,6 +2553,7 @@ function ConsultationView({
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
   const [book, setBook] = useState<CatalogBook>(c.category);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [viewerHeight, setViewerHeight] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem("codimate-viewer-height"));
     return saved >= 480 && saved <= 1600 ? saved : null;
@@ -2628,7 +2637,10 @@ function ConsultationView({
         ...p.options.map((o) => o.label),
       ].some((text) => text.toLocaleLowerCase().includes(query)),
   );
-  useEffect(() => setProductLimit(70), [search, category]);
+  useEffect(() => {
+    setProductLimit(70);
+    pickerRef.current?.scrollTo({ top: 0 });
+  }, [search, category, book]);
   let quote = draft.quote;
   let quoteError = "";
   try {
@@ -2768,6 +2780,10 @@ function ConsultationView({
     );
   const author = s.users.find((u) => u.id === c.ownerId) || user;
   const pdf = async (statusOverride?: "P" | "F") => {
+    currentProgress()?.update({
+      title: "PDF 문서를 만들고 있습니다",
+      detail: "사진과 한글 글꼴을 문서에 포함하고 있습니다.",
+    });
     if (quoteError) throw new Error(quoteError);
     const images = [];
     for (const p of draft.photos.filter((p) => p.selected)) {
@@ -3170,30 +3186,67 @@ function ConsultationView({
             <section className="catalog-panel">
               <div
                 className="card procedure-picker"
+                ref={pickerRef}
                 role="region"
                 aria-label="시술 선택 목록"
                 tabIndex={0}
               >
-                <div className="section-title">
-                  <h3>시술 선택</h3>
-                  <small>
-                    단가표 {catalog?.publishedAt?.slice(0, 10) || "미게시"}
-                  </small>
-                </div>
-                <div className="tabs" aria-label="상담 단가표 구분">
-                  {catalogBooks.map((kind) => (
-                    <button
-                      type="button"
-                      key={kind}
-                      className={book === kind ? "active" : ""}
-                      onClick={() => {
-                        setBook(kind);
-                        setCategory("");
-                      }}
+                <div className="procedure-picker-controls">
+                  <div className="procedure-picker-toolbar">
+                    <div className="tabs" aria-label="상담 단가표 구분">
+                      {catalogBooks.map((kind) => (
+                        <button
+                          type="button"
+                          key={kind}
+                          className={book === kind ? "active" : ""}
+                          aria-pressed={book === kind}
+                          onClick={() => {
+                            setBook(kind);
+                            setCategory("");
+                          }}
+                        >
+                          {kind}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="search">
+                      <Search size={18} />
+                      <input
+                        aria-label="시술 검색"
+                        placeholder="시술 검색"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </div>
+                    <select
+                      aria-label="시술 카테고리"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
                     >
-                      {kind}
-                    </button>
-                  ))}
+                      <option value="">전체 분류</option>
+                      {(catalog
+                        ? displayFolderNodes(catalog)
+                        : rootFolders
+                      ).map((folder) => (
+                        <option key={folder.id} value={folder.id}>
+                          {catalog
+                            ? folderPath(catalog, folder.id)
+                                .map((x) => x.name)
+                                .join(" / ")
+                            : folder.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="procedure-picker-meta">
+                    <span role="status">
+                      검색 {products.length}개 ·{" "}
+                      {Math.min(productLimit, products.length)}개 표시
+                    </span>
+                    <span>
+                      단가표 {catalog?.publishedAt?.slice(0, 10) || "미게시"}
+                    </span>
+                  </div>
                 </div>
                 {newestBook && newestBook.version !== catalog?.version && (
                   <div className="catalog-product-save">
@@ -3226,37 +3279,6 @@ function ConsultationView({
                     )}
                   </div>
                 )}
-                <div className="search">
-                  <Search size={18} />
-                  <input
-                    aria-label="시술 검색"
-                    placeholder="시술명·옵션·구성·설명 검색"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </div>
-                <select
-                  aria-label="시술 카테고리"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                >
-                  <option value="">모든 카테고리</option>
-                  {(catalog ? displayFolderNodes(catalog) : rootFolders).map(
-                    (folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {catalog
-                          ? folderPath(catalog, folder.id)
-                              .map((x) => x.name)
-                              .join(" / ")
-                          : folder.name}
-                      </option>
-                    ),
-                  )}
-                </select>
-                <p className="small" role="status">
-                  검색 결과 {products.length}개 ·{" "}
-                  {Math.min(productLimit, products.length)}개 표시
-                </p>
                 <div className="product-list">
                   {products.slice(0, productLimit).map((p) => (
                     <div className="product" key={p.id}>

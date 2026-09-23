@@ -1,3 +1,4 @@
+import { currentProgress } from "./operationProgress";
 import { native, NativeClinic } from "./native";
 export interface ExportDocument {
   name: string;
@@ -9,6 +10,7 @@ export function exportFileName(name: string) {
 export async function saveDocuments(files: ExportDocument[]) {
   if (!files.length || files.some((f) => !f.blob.size))
     throw new Error("저장할 문서가 비어 있습니다. 다시 생성해주세요.");
+  currentProgress()?.update({ title: "파일 저장 준비 중입니다" });
   if (native) {
     const encoded = [];
     for (const file of files) {
@@ -22,6 +24,11 @@ export async function saveDocuments(files: ExportDocument[]) {
         data: btoa(binary),
       });
     }
+    currentProgress()?.update({
+      title: "파일 저장 중입니다",
+      detail:
+        "기기에서 저장 위치를 선택해주세요. 파일 기록이 끝날 때까지 기다려주세요.",
+    });
     const result = await NativeClinic.saveDocuments({ files: encoded });
     return result.cancelled ? "cancelled" : "saved";
   }

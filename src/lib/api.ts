@@ -1,3 +1,11 @@
+import {
+  currentProgress,
+  reportTransfer,
+  transferPercent,
+  type ProgressHandle,
+  type TransferProgress,
+} from "./operationProgress";
+import { uploadRequest } from "./uploadRequest";
 import { jpegCaptureDate } from "../core/photoDate";
 import { openDB } from "idb";
 import { native, NativeClinic } from "./native";
@@ -49,8 +57,14 @@ export function forgetLogin() {
 export async function api<T = any>(
   path: string,
   init: RequestInit = {},
+  tracking: {
+    operation?: ProgressHandle | null;
+    upload?: (p: TransferProgress) => void;
+  } = {},
 ): Promise<T> {
-  const r = await fetch(base + "/api" + path, {
+  const operation =
+    tracking.operation === undefined ? currentProgress() : tracking.operation;
+  const request: RequestInit = {
     ...init,
     credentials: "include",
     headers: {
@@ -60,7 +74,21 @@ export async function api<T = any>(
       ...(token ? { Authorization: "Bearer " + token } : {}),
       ...Object.fromEntries(new Headers(init.headers)),
     },
-  });
+  };
+  if (
+    (tracking.upload || operation) &&
+    init.method === "POST" &&
+    (typeof init.body === "string" || init.body instanceof Blob)
+  )
+    return uploadRequest<T>(
+      base + "/api" + path,
+      { ...request, body: init.body },
+      (progress) => {
+        if (tracking.upload) tracking.upload(progress);
+        else reportTransfer(operation || undefined, progress);
+      },
+    );
+  const r = await fetch(base + "/api" + path, request);
   const d = (await r.json()) as any;
   if (!r.ok)
     throw Object.assign(new Error(d.error || "요청 실패"), {
@@ -69,10 +97,41 @@ export async function api<T = any>(
   return d;
 }
 export const command = async (c: Command) => {
-  for (const photo of (c.payload.photos || []) as { mediaId: string }[]) {
-    const active = stagedMedia.get(photo.mediaId);
+  const operation = currentProgress();
+  operation?.update({
+    title: "저장 준비 중입니다",
+    detail: "사진 업로드와 변경 내용을 확인하고 있습니다.",
+  });
+  const uploads: {
+    id: string;
+    size: number;
+    name: string;
+    consultationId: string;
+    capturedAt?: string;
+    active?: StagedMedia;
+    progress: TransferProgress;
+    done: boolean;
+  }[] = [];
+  const ids = new Set(
+    ((c.payload.photos || []) as { mediaId: string }[]).map((p) => p.mediaId),
+  );
+  for (const id of ids) {
+    const active = stagedMedia.get(id);
     if (active) {
-      await flushStaged(photo.mediaId);
+      uploads.push({
+        id,
+        size: active.file.size,
+        name: active.name,
+        consultationId: active.consultationId,
+        capturedAt: active.capturedAt,
+        active,
+        progress: active.progress || {
+          loaded: 0,
+          total: active.file.size,
+          waiting: false,
+        },
+        done: false,
+      });
       continue;
     }
     const pending = await vaultRead<{
@@ -81,22 +140,91 @@ export const command = async (c: Command) => {
       data: string;
       pending: boolean;
       capturedAt?: string;
-    }>("media:" + photo.mediaId);
+    }>("media:" + id);
     if (pending?.pending) {
-      const blob = await (await fetch(pending.data)).blob();
-      await postMedia(
-        blob,
-        pending.name,
-        pending.consultationId,
-        photo.mediaId,
-        pending.capturedAt,
-      );
-      await vaultWrite("media:" + photo.mediaId, {
-        ...pending,
-        pending: false,
+      const encodedLength = pending.data.length - pending.data.indexOf(",") - 1;
+      const size =
+        Math.floor((encodedLength * 3) / 4) -
+        (pending.data.endsWith("==") ? 2 : pending.data.endsWith("=") ? 1 : 0);
+      uploads.push({
+        id,
+        size,
+        name: pending.name,
+        consultationId: pending.consultationId,
+        capturedAt: pending.capturedAt,
+        progress: { loaded: 0, total: size, waiting: false },
+        done: false,
       });
     }
   }
+  const report = () => {
+    const total = uploads.reduce((sum, u) => sum + u.size, 0);
+    const loaded = uploads.reduce(
+      (sum, u) => sum + (u.done ? u.size : Math.min(u.size, u.progress.loaded)),
+      0,
+    );
+    const complete = uploads.filter((u) => u.done).length;
+    operation?.update({
+      title:
+        loaded >= total
+          ? "서버에 사진 저장 중입니다"
+          : "사진 업로드 진행 중입니다",
+      detail: `사진 ${complete} / ${uploads.length}개 저장 확인 · ${(loaded / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB 전송${loaded >= total ? " · 서버 저장 확인을 기다리고 있습니다." : ""}`,
+      percent: uploads.some((u) => !u.done && u.progress.total === undefined)
+        ? undefined
+        : transferPercent({ loaded, total, waiting: false }),
+      metric: "전체 사진 전송률",
+    });
+  };
+  const unsubscribe = uploads.flatMap((u) =>
+    u.active
+      ? [
+          watchMedia(u.active, (p) => {
+            u.progress = p;
+            report();
+          }),
+        ]
+      : [],
+  );
+  try {
+    if (uploads.length) report();
+    for (const item of uploads) {
+      if (item.active) await flushStaged(item.id);
+      else {
+        // Decode one offline file at a time; do not retain every full-size image.
+        const pending = await vaultRead<any>("media:" + item.id);
+        if (!pending?.pending) {
+          item.done = true;
+          report();
+          continue;
+        }
+        const file = await (await fetch(pending.data)).blob();
+        await postMedia(
+          file,
+          item.name,
+          item.consultationId,
+          item.id,
+          item.capturedAt,
+          (p) => {
+            item.progress = p;
+            report();
+          },
+        );
+        await vaultWrite("media:" + item.id, {
+          ...pending,
+          pending: false,
+        });
+      }
+      item.done = true;
+      report();
+    }
+  } finally {
+    unsubscribe.forEach((fn) => fn());
+  }
+  operation?.update({
+    title: "변경 내용을 저장 중입니다",
+    detail: "서버에 변경 내용을 기록하고 있습니다.",
+  });
   return api("/commands", { method: "POST", body: JSON.stringify(c) });
 };
 export const makeCommand = (
@@ -140,18 +268,23 @@ async function postMedia(
   consultationId: string,
   id: string,
   capturedAt?: string,
+  onProgress?: (p: TransferProgress) => void,
 ) {
-  return api<{ id: string }>("/media", {
-    method: "POST",
-    body: file,
-    headers: {
-      "Content-Type": file.type,
-      "X-File-Name": encodeURIComponent(name),
-      "X-Consultation-Id": consultationId,
-      "X-Upload-Id": id,
-      ...(capturedAt ? { "X-Captured-At": capturedAt } : {}),
+  return api<{ id: string }>(
+    "/media",
+    {
+      method: "POST",
+      body: file,
+      headers: {
+        "Content-Type": file.type,
+        "X-File-Name": encodeURIComponent(name),
+        "X-Consultation-Id": consultationId,
+        "X-Upload-Id": id,
+        ...(capturedAt ? { "X-Captured-At": capturedAt } : {}),
+      },
     },
-  });
+    onProgress ? { operation: null, upload: onProgress } : {},
+  );
 }
 // Blob cache is scoped to the signed-in session; callers own their object URLs.
 const blobs = new Map<string, Blob>();
@@ -209,6 +342,8 @@ type StagedMedia = {
   stored: Promise<void>;
   request?: Promise<void>;
   error?: string;
+  progress?: TransferProgress;
+  observers?: Set<(p: TransferProgress) => void>;
 };
 const stagedMedia = new Map<string, StagedMedia>();
 export const hasPendingUploads = () => stagedMedia.size > 0;
@@ -223,6 +358,12 @@ const notifyUploads = () => listeners.forEach((fn) => fn());
 export const uploadState = (id: string) =>
   stagedMedia.get(id)?.error ||
   (stagedMedia.has(id) ? "업로드 중 · 저장 시 완료 확인" : "");
+function watchMedia(item: StagedMedia, fn: (p: TransferProgress) => void) {
+  (item.observers ||= new Set()).add(fn);
+  return () => {
+    item.observers?.delete(fn);
+  };
+}
 async function flushStaged(id: string) {
   const item = stagedMedia.get(id);
   if (!item) return;
@@ -241,6 +382,10 @@ async function flushStaged(id: string) {
         item.consultationId,
         id,
         item.capturedAt,
+        (progress) => {
+          item.progress = progress;
+          item.observers?.forEach((fn) => fn(progress));
+        },
       );
       if (epoch !== sessionEpoch) return;
       if (vaultEnabled()) {

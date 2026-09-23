@@ -1,7 +1,7 @@
 {
-  "version": "0.10.10",
-  "versionCode": 36,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.10.apk",
-  "sha256": "46ee5da56eff88782dbbf0cbf114eca9779f28704a9b63b6a534dc86c3234ead",
-  "notes": "상담 화면 간소화·플로팅 장바구니/메모/의견 요청, 사진 높이·글자 크기 조절, 정가·할인 표시, PDF 한글 수정, 환자 견적서 동의·서명·인쇄·7일 QR 다운로드"
+  "version": "0.10.11",
+  "versionCode": 37,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.11.apk",
+  "sha256": "c12d43796cbd99861a01f3e81e1fec63d368221ec4efe942bd09a5aa4088a1e5",
+  "notes": "저장·업로드 진행 안내창과 실제 전송률, 서버 저장/화면 갱신 단계 표시, 시술 선택의 단가표 탭·검색·분류 한 줄 배치 및 스크롤 고정"
 }

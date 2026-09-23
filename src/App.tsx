@@ -1,3 +1,9 @@
+import {
+  catalogHasChanges,
+  catalogTime,
+  catalogVersionLabel,
+  refreshConsultationBook,
+} from "./core/catalogStatus";
 import { eventOptionPrices } from "./core/eventPrices";
 import { unreadOpinionReply, hasOpinionAnswer } from "./core/opinions";
 import { ConsultationOpinions } from "./components/ConsultationOpinions";
@@ -2519,6 +2525,7 @@ function ConsultationView({
       )
     : latestCatalog(s, book);
   const source = s.consultations.find((x) => x.id === c.sourceConsultationId);
+  const newestBook = latestCatalog(s, book);
   const sourceInvalid =
     c.kind === "renewal" &&
     (!source ||
@@ -3039,6 +3046,37 @@ function ConsultationView({
                 <p className="small">
                   세 단가표의 상품을 한 장바구니에 함께 담을 수 있습니다.
                 </p>
+                {newestBook && newestBook.version !== catalog?.version && (
+                  <div className="catalog-product-save">
+                    <small>
+                      이 상담은 이전 {book} 단가표를 사용하고 있습니다.
+                    </small>
+                    <button
+                      type="button"
+                      disabled={
+                        readonly ||
+                        draft.quote.lines.some(
+                          (line) => (line.book || "미용") === book,
+                        )
+                      }
+                      onClick={() => {
+                        setDraft(refreshConsultationBook(draft, newestBook));
+                        setCategory("");
+                        setSearch("");
+                      }}
+                    >
+                      최신 {book} 단가표 불러오기
+                    </button>
+                    {draft.quote.lines.some(
+                      (line) => (line.book || "미용") === book,
+                    ) && (
+                      <small>
+                        장바구니의 {book} 상품을 먼저 제거하면 불러올 수
+                        있습니다. 다른 단가표의 장바구니 상품은 유지됩니다.
+                      </small>
+                    )}
+                  </div>
+                )}
                 <div className="search">
                   <Search size={18} />
                   <input
@@ -3169,7 +3207,12 @@ function ConsultationView({
                   <Empty>
                     {availableProducts.length
                       ? "검색 조건에 맞는 시술이 없습니다."
-                      : "게시된 판매상품이 없습니다. 관리자 단가표에서 검토 후 게시하세요."}
+                      : !catalog
+                        ? `${book} 단가표가 아직 게시되지 않았습니다. 단가표 관리에서 초안을 저장한 뒤 게시하세요.`
+                        : catalog.products.length &&
+                            !catalog.products.some((p) => p.active)
+                          ? `${book} 게시본의 상품 ${catalog.products.length}개가 모두 판매 비활성입니다. 단가표 관리에서 상담 판매를 활성화하고 초안 저장·게시하세요.`
+                          : "게시된 판매상품이 없습니다. 관리자 단가표에서 검토 후 게시하세요."}
                   </Empty>
                 )}
               </div>
@@ -3869,6 +3912,22 @@ function CatalogView({
       )
       .at(-1) ||
     latest;
+  const savedCurrent = current && s.catalogs.find((c) => c.id === current.id);
+  const currentDirty = !!current && catalogHasChanges(current, savedCurrent);
+  const publishCurrent = async () => {
+    if (!current || current.status !== "draft") return;
+    if (currentDirty) throw new Error("변경 내용을 초안 저장한 뒤 게시하세요.");
+    if (
+      window.confirm(
+        `상담 판매 활성 상품 ${current.products.filter((p) => p.active).length}개를 상담에 반영합니다. 게시할까요?`,
+      )
+    )
+      if (await send("catalog.publish", {}, current.id, current.rev)) {
+        setDraft(undefined);
+        setBulkIds([]);
+        setEditPaused(false);
+      }
+  };
   const products =
     current?.products.filter(
       (p) =>
@@ -3945,6 +4004,7 @@ function CatalogView({
   };
   const save = () => {
     if (!current) throw new Error("단가표를 선택하세요");
+    if (!currentDirty) return Promise.resolve(true);
     return send("catalog.save", { catalog: current }, current.id, current.rev);
   };
   const saveFolderChanges = async () => {
@@ -4101,55 +4161,6 @@ function CatalogView({
           </div>
         }
       />
-      {editable && (
-        <div className="catalog-save-bar">
-          <span>{book} SSOT 편집 중 · 변경 후 초안을 저장하세요</span>
-          <div className="button-row">
-            <button
-              type="button"
-              {...catalogCommand("productCancel")}
-              onClick={cancelProductEdit}
-            >
-              편집 취소
-            </button>
-            <button
-              className="primary"
-              onClick={() =>
-                work(async () => {
-                  if (await save()) setDraft(undefined);
-                })
-              }
-            >
-              초안 저장
-            </button>
-          </div>
-        </div>
-      )}
-      {editPaused && can && current && !folderDraft && (
-        <div className="catalog-save-bar">
-          <span>저장된 단가표를 보고 있습니다.</span>
-          <button
-            onClick={() => {
-              if (current.status === "draft") setEditPaused(false);
-              else {
-                const now = new Date().toISOString();
-                setDraft({
-                  ...structuredClone(current),
-                  id: crypto.randomUUID(),
-                  rev: 0,
-                  status: "draft",
-                  publishedAt: undefined,
-                  createdAt: now,
-                  updatedAt: now,
-                });
-              }
-            }}
-          >
-            단가표 수정
-          </button>
-        </div>
-      )}
-      {editable && <CatalogEditActions actions={edits} />}
       <div className="tabs" aria-label="단가표 구분">
         {catalogBooks.map((kind) => (
           <button
@@ -4222,7 +4233,7 @@ function CatalogView({
               .filter((c) => catalogBook(c) === book)
               .map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.status === "draft" ? "초안" : "게시본"} · {c.version}
+                  {catalogVersionLabel(c)}
                 </option>
               ))}
             {draft && !s.catalogs.some((c) => c.id === draft.id) && (
@@ -4389,6 +4400,104 @@ function CatalogView({
           <span />
         </div>
         <div className="card" data-catalog-scope="products">
+          {current?.status === "published" && !folderDraft && !editPaused && (
+            <div className="catalog-product-save" role="status">
+              <strong>{book} SSOT · 게시됨</strong>
+              <small>
+                {catalogTime(current.publishedAt || current.updatedAt)} · 상담
+                판매 활성 {current.products.filter((p) => p.active).length}개
+              </small>
+            </div>
+          )}
+
+          {editable && (
+            <div className="catalog-product-save">
+              <div role="status" className="catalog-save-status">
+                <strong>
+                  {book} SSOT ·{" "}
+                  {currentDirty
+                    ? "저장하지 않은 변경사항이 있습니다"
+                    : "초안 저장됨"}
+                </strong>
+                <small>
+                  {!currentDirty && savedCurrent
+                    ? `${catalogTime(savedCurrent.updatedAt)} · `
+                    : ""}
+                  상담에는 아직 반영되지 않았습니다. 초안 저장 후 게시하세요.
+                </small>
+                <small>
+                  상담 판매 활성{" "}
+                  {current!.products.filter((p) => p.active).length}개 / 전체{" "}
+                  {current!.products.length}개 · 게시본 판매 활성{" "}
+                  {latest?.products.filter((p) => p.active).length || 0}개
+                </small>
+                {!current!.products.some((p) => p.active) && (
+                  <small>
+                    상담 판매가 모두 꺼져 있습니다. 아래에서 상품을 선택하고
+                    ‘상담 판매 → 활성화’를 적용한 뒤 저장·게시하세요.
+                  </small>
+                )}
+              </div>
+              <div className="button-row">
+                <button
+                  type="button"
+                  {...catalogCommand("productCancel")}
+                  onClick={cancelProductEdit}
+                >
+                  편집 취소
+                </button>
+                <button
+                  className="primary"
+                  disabled={!currentDirty}
+                  onClick={() =>
+                    work(async () => {
+                      if (await save()) setDraft(undefined);
+                    })
+                  }
+                >
+                  초안 저장
+                </button>
+                <button
+                  type="button"
+                  disabled={currentDirty}
+                  onClick={() => work(publishCurrent)}
+                >
+                  검증 후 게시
+                </button>
+              </div>
+            </div>
+          )}
+          {editPaused && can && current && !folderDraft && (
+            <div className="catalog-product-save">
+              <span>
+                {book} SSOT ·{" "}
+                {current.status === "published"
+                  ? "게시됨"
+                  : "초안 저장됨 · 상담 미반영"}
+              </span>
+              <button
+                onClick={() => {
+                  if (current.status === "draft") setEditPaused(false);
+                  else {
+                    const now = new Date().toISOString();
+                    setDraft({
+                      ...structuredClone(current),
+                      id: crypto.randomUUID(),
+                      rev: 0,
+                      status: "draft",
+                      publishedAt: undefined,
+                      createdAt: now,
+                      updatedAt: now,
+                    });
+                  }
+                }}
+              >
+                단가표 수정
+              </button>
+            </div>
+          )}
+          {editable && <CatalogEditActions actions={edits} />}
+
           <div className="table-toolbar">
             <div className="search">
               <Search size={18} />
@@ -4723,6 +4832,7 @@ function CatalogView({
                 상품 추가
               </button>
               <button
+                disabled={!currentDirty}
                 onClick={() =>
                   work(async () => {
                     if (await save()) setDraft(undefined);
@@ -4734,28 +4844,8 @@ function CatalogView({
               <button
                 {...catalogCommand("publish")}
                 className="primary"
-                onClick={() =>
-                  work(async () => {
-                    if (draft) {
-                      if (!(await save())) return;
-                      setDraft(undefined);
-                      throw new Error(
-                        "초안을 저장했습니다. 저장된 내용을 확인하고 다시 게시하세요.",
-                      );
-                    }
-                    if (
-                      window.confirm(
-                        "검토한 활성 상품만 상담에 적용됩니다. 게시할까요?",
-                      )
-                    )
-                      await send(
-                        "catalog.publish",
-                        {},
-                        current.id,
-                        current.rev,
-                      );
-                  })
-                }
+                disabled={currentDirty}
+                onClick={() => work(publishCurrent)}
               >
                 검증 후 게시
               </button>

@@ -1,7 +1,7 @@
 {
-  "version": "0.10.7",
-  "versionCode": 33,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.7.apk",
-  "sha256": "0a554a18d259d896db1d6ba18a2431f783b2624d1b5c09961658da0248f1fe05",
-  "notes": "선택 상품 부가세·추천기 표시·검토완료 일괄 수정, Enter 삭제 확인, 이벤트 정가·이벤트가 편집"
+  "version": "0.10.8",
+  "versionCode": 34,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.8.apk",
+  "sha256": "1e5d08c4f8edc9c2fbc931ff9488cb5d713b8ab8c859fb84b05485b60ab3100e",
+  "notes": "상품 편집칸 저장 상태 구분, 상담 판매 일괄 활성화, 상담 최신 단가표 불러오기, 한국시간 표시"
 }

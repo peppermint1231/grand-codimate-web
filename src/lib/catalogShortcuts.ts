@@ -154,7 +154,7 @@ export const catalogCommands = {
     alt: true,
   },
   bulkApply: {
-    label: "선택 상품 부가세·추천기 표시·검토완료 일괄 적용",
+    label: "선택 상품 판매·부가세·추천기 표시·검토완료 일괄 적용",
     keys: "Alt+B",
     scope: "상품 목록",
     code: "KeyB",

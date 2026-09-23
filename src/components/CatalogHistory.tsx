@@ -1,3 +1,4 @@
+import { catalogTime } from "../core/catalogStatus";
 import { useEffect, useRef, useState } from "react";
 import { History, RotateCcw } from "lucide-react";
 import { useAppBack } from "../lib/navigation";
@@ -123,9 +124,7 @@ export function CatalogHistory({
                       onClick={() => setSelected(r.id)}
                     >
                       <strong>{r.action}</strong>
-                      <span>
-                        {new Date(r.createdAt).toLocaleString("ko-KR")}
-                      </span>
+                      <span>{catalogTime(r.createdAt)}</span>
                       <small>
                         {state.users.find((u) => u.id === r.actorId)?.name ||
                           "관리자"}{" "}
@@ -146,7 +145,7 @@ export function CatalogHistory({
                     <>
                       <h3>{revision.action}</h3>
                       <p className="small">
-                        {new Date(revision.createdAt).toLocaleString("ko-KR")} ·{" "}
+                        {catalogTime(revision.createdAt)} ·{" "}
                         {revision.snapshot.status === "published"
                           ? "게시본"
                           : "초안"}

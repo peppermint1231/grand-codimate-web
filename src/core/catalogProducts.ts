@@ -1,6 +1,7 @@
 import { productFolderPaths } from "./catalogFolders";
 import type { Catalog, Product, Option } from "./model";
 export interface CatalogBulkChanges {
+  active?: boolean;
   tax?: Option["tax"];
   publicVisible?: boolean;
   completeReview?: boolean;
@@ -17,6 +18,7 @@ export function bulkEditCatalogProducts(
     selected.has(p.id)
       ? {
           ...p,
+          ...(changes.active === undefined ? {} : { active: changes.active }),
           ...(changes.publicVisible === undefined
             ? {}
             : { publicVisible: changes.publicVisible }),
@@ -28,7 +30,7 @@ export function bulkEditCatalogProducts(
         }
       : p,
   );
-  if (changes.completeReview) {
+  if (changes.completeReview || changes.active === true) {
     const invalid = products.filter(
       (p) =>
         selected.has(p.id) &&
@@ -39,17 +41,18 @@ export function bulkEditCatalogProducts(
               !Number.isSafeInteger(o.price) ||
               o.price < 0 ||
               o.tax === "unknown" ||
+              (changes.active === true && o.review) ||
               !o.label.trim(),
           )),
     );
     if (invalid.length)
       throw new Error(
-        `검토완료할 수 없는 상품 ${invalid.length}개: ${invalid
+        `검토완료·판매 활성화할 수 없는 상품 ${invalid.length}개: ${invalid
           .slice(0, 3)
           .map((p) => p.name)
           .join(
             ", ",
-          )}${invalid.length > 3 ? " 외" : ""}. 옵션명·가격·부가세를 먼저 확정하세요. 이번 일괄 변경은 적용되지 않았습니다.`,
+          )}${invalid.length > 3 ? " 외" : ""}. 옵션명·가격·부가세를 확정하고 검토완료하세요. 이번 일괄 변경은 적용되지 않았습니다.`,
       );
   }
   return { ...catalog, products };

@@ -4022,3 +4022,22 @@ details p {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.catalog-product-save {
+  padding: 14px;
+  margin-bottom: 14px;
+  border: 1px solid #c8ded8;
+  border-radius: 12px;
+  background: #f0f8f5;
+  display: grid;
+  gap: 12px;
+}
+.catalog-save-status {
+  display: grid;
+  gap: 6px;
+}
+.catalog-product-save .button-row {
+  flex-wrap: wrap;
+}
+.catalog-product-save button {
+  white-space: nowrap;
+}

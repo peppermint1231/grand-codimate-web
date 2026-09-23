@@ -14,6 +14,7 @@ export function CatalogBulkEdit({
 }) {
   const [tax, setTax] = useState<Option["tax"] | "">("");
   const [visibility, setVisibility] = useState("");
+  const [sale, setSale] = useState("");
   const [review, setReview] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -32,6 +33,21 @@ export function CatalogBulkEdit({
         </small>
       </h3>
       <div className="catalog-bulk-fields">
+        <label>
+          상담 판매
+          <select
+            aria-label="일괄 상담 판매"
+            value={sale}
+            onChange={(e) => {
+              setSale(e.target.value);
+              clearMessage();
+            }}
+          >
+            <option value="">변경 안 함</option>
+            <option value="active">활성화 (상담 목록에 표시)</option>
+            <option value="inactive">비활성화 (상담 목록에서 숨김)</option>
+          </select>
+        </label>
         <label>
           부가세 정책
           <select
@@ -79,13 +95,16 @@ export function CatalogBulkEdit({
           type="button"
           className="primary"
           {...catalogCommand("bulkApply")}
-          disabled={!selected.length || (!tax && !visibility && !review)}
+          disabled={
+            !selected.length || (!tax && !visibility && !review && !sale)
+          }
           onClick={() => {
             clearMessage();
             try {
               onChange(
                 bulkEditCatalogProducts(catalog, ids, {
                   ...(tax ? { tax } : {}),
+                  ...(sale ? { active: sale === "active" } : {}),
                   ...(visibility
                     ? { publicVisible: visibility === "show" }
                     : {}),
@@ -97,6 +116,7 @@ export function CatalogBulkEdit({
               );
               setTax("");
               setVisibility("");
+              setSale("");
               setReview(false);
             } catch (e) {
               setError((e as Error).message);
@@ -108,9 +128,9 @@ export function CatalogBulkEdit({
       </div>
       <p className="small">
         검색·폴더 밖의 선택 상품도 포함됩니다. 부가세와 검토완료는 모든 옵션에
-        적용됩니다. 부가세 정책 변경 시 입력 가격은 유지됩니다. 검토완료는 판매
-        상태를 바꾸지 않습니다. 초안 저장 후 ‘검증 후 게시’를 눌러야 상담·맞춤
-        시술 찾기에 반영됩니다.
+        적용됩니다. 부가세 정책 변경 시 입력 가격은 유지됩니다. 상담에
+        표시하려면 상담 판매를 활성화하세요. 초안 저장 후 ‘검증 후 게시’를
+        눌러야 상담·맞춤 시술 찾기에 반영됩니다.
       </p>
       {message && <p role="status">{message}</p>}
       {error && (

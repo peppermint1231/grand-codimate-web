@@ -398,9 +398,13 @@ export function Discovery() {
                             <small>{o.unit}</small>
                           </span>
                           <span>
-                            {o.price === null
-                              ? "상담 후 비용 확인"
-                              : money(o.price)}
+                            {o.price === null ? (
+                              "상담 후 비용 확인"
+                            ) : o.event && p.options.length > 1 ? (
+                              <EventPrice {...o.event} />
+                            ) : (
+                              money(o.price)
+                            )}
                             <small>
                               {o.tax === "inclusive"
                                 ? "VAT 포함"

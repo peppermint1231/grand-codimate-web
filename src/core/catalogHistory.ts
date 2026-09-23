@@ -97,6 +97,10 @@ export function catalogChanges(
         changes.push(
           `가격: ${p.name} / ${o.label} (${prev.price ?? "미확정"} → ${o.price ?? "미확정"}원)`,
         );
+      if (prev.regularPrice !== o.regularPrice)
+        changes.push(
+          `이벤트 정가: ${p.name} / ${o.label} (${prev.regularPrice === undefined ? "홈페이지 기준" : (prev.regularPrice ?? "미확정")} → ${o.regularPrice === undefined ? "홈페이지 기준" : (o.regularPrice ?? "미확정")}원)`,
+        );
       if (prev.tax !== o.tax) {
         const names = {
           unknown: "미확정",
@@ -108,10 +112,13 @@ export function catalogChanges(
           `부가세: ${p.name} / ${o.label} (${names[prev.tax]} → ${names[o.tax]})`,
         );
       }
+      if (prev.review !== o.review)
+        changes.push(
+          `검토 상태: ${p.name} / ${o.label} → ${o.review ? "검토 필요" : "검토완료"}`,
+        );
       if (
         prev.label !== o.label ||
         prev.unit !== o.unit ||
-        prev.review !== o.review ||
         JSON.stringify(prev.issues) !== JSON.stringify(o.issues)
       )
         changes.push(`옵션 이름·단위·검토 수정: ${p.name} / ${o.label}`);

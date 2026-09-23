@@ -1,3 +1,4 @@
+import { CatalogDeleteConfirm } from "./CatalogDeleteConfirm";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import {
   websiteFolderPresence,
@@ -844,10 +845,21 @@ export function FolderWorkspace({
         </div>
       )}
       {deleting && (
-        <div
-          className="folder-decision"
-          role="dialog"
-          aria-label="폴더 삭제 확인"
+        <CatalogDeleteConfirm
+          title="폴더 삭제 확인"
+          confirmLabel={
+            nodes.find((f) => f.id === deleting)?.linkTo
+              ? "링크만 삭제"
+              : "하위항목 포함 삭제"
+          }
+          onCancel={() => setDeleting("")}
+          onConfirm={() =>
+            work(async () => {
+              apply(deleteFolder(catalog, deleting));
+              setDeleting("");
+              onSelect("");
+            })
+          }
         >
           <h4>
             {nodes.find((f) => f.id === deleting)?.linkTo
@@ -869,21 +881,7 @@ export function FolderWorkspace({
             항목은 먼저 다른 폴더로 옮기세요. 저장 전까지 실제 단가표는 바뀌지
             않습니다.
           </p>
-          <button
-            onClick={() =>
-              work(async () => {
-                apply(deleteFolder(catalog, deleting));
-                setDeleting("");
-                onSelect("");
-              })
-            }
-          >
-            {nodes.find((f) => f.id === deleting)?.linkTo
-              ? "링크만 삭제"
-              : "하위항목 포함 삭제"}
-          </button>
-          <button onClick={() => setDeleting("")}>취소하고 항목 옮기기</button>
-        </div>
+        </CatalogDeleteConfirm>
       )}
     </aside>
   );

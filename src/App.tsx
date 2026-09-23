@@ -1,6 +1,9 @@
+import { eventOptionPrices } from "./core/eventPrices";
 import { unreadOpinionReply, hasOpinionAnswer } from "./core/opinions";
 import { ConsultationOpinions } from "./components/ConsultationOpinions";
 import { OpinionInbox } from "./components/OpinionInbox";
+import { CatalogBulkEdit } from "./components/CatalogBulkEdit";
+import { CatalogDeleteConfirm } from "./components/CatalogDeleteConfirm";
 import {
   matchesCatalogSearch,
   deleteCatalogProducts,
@@ -10,6 +13,7 @@ import { workingCatalog } from "./core/websiteCatalog";
 import {
   EventCatalogRefresh,
   EventSourceInfo,
+  EventPrice,
   WebsiteSourceInfo,
 } from "./components/EventCatalog";
 import { eventAvailability } from "./core/eventCatalog";
@@ -3074,6 +3078,11 @@ function ConsultationView({
                       <EventSourceInfo
                         info={p.webEvent}
                         salePrice={p.options[0]?.price}
+                        regularPrice={
+                          p.options[0]
+                            ? eventOptionPrices(p, p.options[0]).regularPrice
+                            : undefined
+                        }
                         compact
                       />
                       <details>
@@ -3846,6 +3855,7 @@ function CatalogView({
     [reviewFilter, setReviewFilter] = useState("all");
   const [bulkIds, setBulkIds] = useState<string[]>([]),
     [paste, setPaste] = useState("");
+  const [deletingProducts, setDeletingProducts] = useState<string[]>([]);
   const latest = latestCatalog(s, book);
   const current =
     folderDraft ||
@@ -3924,24 +3934,14 @@ function CatalogView({
     if (!editable || !current) return;
     const removing = current.products.filter((p) => ids.includes(p.id));
     if (!removing.length) return;
-    const names = removing
-      .slice(0, 5)
-      .map((p) => `• ${p.name} (옵션 ${p.options.length}개)`)
-      .join("\n");
-    if (
-      !window.confirm(
-        `상품 ${removing.length}개와 해당 옵션을 삭제할까요?\n\n${names}${removing.length > 5 ? `\n외 ${removing.length - 5}개` : ""}\n\n연결된 폴더에서도 함께 사라집니다. 삭제 후 초안을 저장하세요. 저장 전에는 되돌리기로 복구할 수 있고, 기존 상담 기록은 유지됩니다.`,
-      )
-    )
-      return;
-    setDraft(
-      deleteCatalogProducts(
-        current,
-        removing.map((p) => p.id),
-      ),
-    );
+    setDeletingProducts(removing.map((p) => p.id));
+  };
+  const confirmRemoveProducts = () => {
+    if (!editable || !current) return;
+    setDraft(deleteCatalogProducts(current, deletingProducts));
     setBulkIds([]);
-    if (removing.some((p) => p.id === selected)) setSelected("");
+    if (deletingProducts.includes(selected)) setSelected("");
+    setDeletingProducts([]);
   };
   const save = () => {
     if (!current) throw new Error("단가표를 선택하세요");
@@ -3989,7 +3989,7 @@ function CatalogView({
       e.preventDefault();
       if (
         document.querySelector(
-          "[data-catalog-history-dialog], [data-catalog-shortcuts-dialog]",
+          "[data-catalog-history-dialog], [data-catalog-shortcuts-dialog], [data-catalog-delete-dialog]",
         )
       )
         return;
@@ -4444,6 +4444,14 @@ function CatalogView({
             </p>
           )}
           {editable && current && (
+            <CatalogBulkEdit
+              key={`${book}:${current.id}:${current.rev}`}
+              catalog={current}
+              ids={bulkIds}
+              onChange={setDraft}
+            />
+          )}
+          {editable && current && (
             <details className="bulk-edit">
               <summary>표 편집·선택 가격 조정·엑셀 붙여넣기</summary>
               <div className="button-row">
@@ -4787,6 +4795,11 @@ function CatalogView({
             <EventSourceInfo
               info={product.webEvent}
               salePrice={product.options[0]?.price}
+              regularPrice={
+                product.options[0]
+                  ? eventOptionPrices(product, product.options[0]).regularPrice
+                  : undefined
+              }
             />
             <div className="form-grid">
               <Field label="상품명">
@@ -4875,7 +4888,46 @@ function CatalogView({
                     }}
                   />
                 </Field>
-                <Field label="가격 (원)">
+                {(book === "이벤트" ||
+                  product.webEvent ||
+                  o.priceKind === "event") && (
+                  <Field label="정가 (원)">
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      disabled={!editable}
+                      aria-label={`${o.label} 정가 (원)`}
+                      value={eventOptionPrices(product, o).regularPrice ?? ""}
+                      placeholder="정가 미확정"
+                      onChange={(e) =>
+                        change({
+                          ...product,
+                          options: product.options.map((x) =>
+                            x.id === o.id
+                              ? {
+                                  ...x,
+                                  regularPrice:
+                                    e.target.value === ""
+                                      ? null
+                                      : Number(e.target.value),
+                                }
+                              : x,
+                          ),
+                        })
+                      }
+                    />
+                  </Field>
+                )}
+                <Field
+                  label={
+                    book === "이벤트" ||
+                    product.webEvent ||
+                    o.priceKind === "event"
+                      ? "이벤트가 (원)"
+                      : "가격 (원)"
+                  }
+                >
                   <input
                     disabled={!editable}
                     type="number"
@@ -4892,6 +4944,20 @@ function CatalogView({
                     }}
                   />
                 </Field>
+                {(book === "이벤트" ||
+                  product.webEvent ||
+                  o.priceKind === "event") && (
+                  <div className="event-price-preview">
+                    <EventPrice {...eventOptionPrices(product, o)} />
+                    {eventOptionPrices(product, o).regularPrice !== null &&
+                      o.price !== null &&
+                      o.price > eventOptionPrices(product, o).regularPrice! && (
+                        <small>
+                          이벤트가가 정가보다 높아 할인율을 표시하지 않습니다.
+                        </small>
+                      )}
+                  </div>
+                )}
                 <Field label="가격 구분">
                   <select
                     disabled={!editable}
@@ -5061,6 +5127,32 @@ function CatalogView({
             </details>
           </div>
         </Modal>
+      )}
+      {!!deletingProducts.length && current && (
+        <CatalogDeleteConfirm
+          title="상품 삭제 확인"
+          onCancel={() => setDeletingProducts([])}
+          onConfirm={confirmRemoveProducts}
+        >
+          <p>상품 {deletingProducts.length}개와 해당 옵션을 삭제할까요?</p>
+          <ul>
+            {current.products
+              .filter((p) => deletingProducts.includes(p.id))
+              .slice(0, 5)
+              .map((p) => (
+                <li key={p.id}>
+                  {p.name} (옵션 {p.options.length}개)
+                </li>
+              ))}
+          </ul>
+          {deletingProducts.length > 5 && (
+            <p>외 {deletingProducts.length - 5}개</p>
+          )}
+          <p>
+            연결된 폴더에서도 함께 사라집니다. 삭제 후 초안을 저장하세요. 기존
+            상담 기록은 유지됩니다.
+          </p>
+        </CatalogDeleteConfirm>
       )}
     </div>
   );

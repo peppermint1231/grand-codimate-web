@@ -40,14 +40,26 @@ export function EventPrice({
 export function EventSourceInfo({
   info,
   salePrice,
+  regularPrice,
   compact = false,
 }: {
   info?: EventOriginInfo;
   salePrice?: number | null;
+  regularPrice?: number | null;
   compact?: boolean;
 }) {
   if (!info) return null;
   const availability = eventAvailability(info);
+  const regular = regularPrice === undefined ? info.regularPrice : regularPrice;
+  const sale = salePrice === undefined ? info.salePrice : salePrice;
+  const rate =
+    regular !== null &&
+    regular > 0 &&
+    sale !== null &&
+    sale >= 0 &&
+    sale <= regular
+      ? Math.round((1 - sale / regular) * 1000) / 10
+      : null;
   return (
     <div className={`event-source-info ${compact ? "compact" : ""}`}>
       <p className="event-period">
@@ -62,12 +74,9 @@ export function EventSourceInfo({
           </b>
         )}
       </p>
-      <EventPrice {...info} />
-      {salePrice !== undefined && salePrice !== info.salePrice && (
-        <small>
-          SSOT 적용가 {salePrice === null ? "미확정" : money(salePrice)} ·
-          홈페이지 원문과 다름
-        </small>
+      <EventPrice regularPrice={regular} salePrice={sale} discountRate={rate} />
+      {(sale !== info.salePrice || regular !== info.regularPrice) && (
+        <small>수정한 SSOT 가격 · 홈페이지 원문과 다름</small>
       )}
       {!compact && (
         <>
@@ -85,8 +94,12 @@ export function EventSourceInfo({
               <PosterLinks urls={info.posterUrls} name={info.eventName} />
             </details>
           )}
+          <details>
+            <summary>홈페이지 원문 가격</summary>
+            <EventPrice {...info} />
+          </details>
           <small>
-            정가·할인율·기간은 홈페이지 표기입니다. 마지막 확인{" "}
+            기간·포스터는 홈페이지 표기입니다. 마지막 확인{" "}
             {new Date(info.checkedAt).toLocaleString("ko-KR")}
           </small>
         </>

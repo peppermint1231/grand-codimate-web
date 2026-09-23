@@ -3954,3 +3954,71 @@ details p {
     font-size: 14px;
   }
 }
+
+.catalog-bulk-settings {
+  margin: 14px 0;
+  padding: 16px;
+  border: 1px solid #c8ded8;
+  border-radius: 12px;
+  background: #f0f8f5;
+}
+.catalog-bulk-settings h3 {
+  margin: 0 0 12px;
+}
+.catalog-bulk-settings h3 small {
+  display: inline-block;
+  font-weight: 400;
+}
+.catalog-bulk-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+.catalog-bulk-fields > label:not(.check) {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 160px;
+}
+.catalog-bulk-fields .check {
+  align-self: center;
+}
+.catalog-bulk-fields select {
+  width: 100%;
+}
+.catalog-bulk-settings p:last-child {
+  margin-bottom: 0;
+}
+
+.catalog-delete-overlay {
+  z-index: 2200;
+}
+.catalog-delete-overlay .modal {
+  width: min(560px, 100%);
+}
+.event-regular-input {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.event-price-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 6px;
+}
+.catalog-price-input {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.catalog-option-visible.event-option {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.catalog-option-visible.event-option > span:first-child {
+  grid-column: 1 / -1;
+}
+@media (max-width: 700px) {
+  .catalog-option-visible.event-option {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

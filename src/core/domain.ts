@@ -510,6 +510,8 @@ export function validateCatalog(c: Catalog, posting = false) {
       );
       ids.add(o.id);
       if (o.price !== null) amount.parse(o.price);
+      if (o.regularPrice !== undefined && o.regularPrice !== null)
+        amount.parse(o.regularPrice);
       ensure(
         ["exclusive", "inclusive", "exempt", "unknown"].includes(o.tax),
         "부가세 기준을 확인하세요",

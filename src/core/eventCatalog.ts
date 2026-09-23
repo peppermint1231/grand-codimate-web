@@ -260,6 +260,9 @@ export function mergeWebsiteEvents(
                     old?.options[0]?.id ||
                     `grand4-option-${event.id}-${offer.id}`,
                   label: "이벤트가",
+                  ...(old?.options[0]?.regularPrice !== undefined
+                    ? { regularPrice: old.options[0].regularPrice }
+                    : {}),
                   price: offer.price,
                   tax: offer.tax,
                   priceKind: "event",

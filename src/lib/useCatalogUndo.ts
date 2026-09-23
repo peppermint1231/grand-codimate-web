@@ -78,7 +78,7 @@ export function useCatalogUndo(
       const target = e.target instanceof HTMLElement ? e.target : null;
       if (
         document.querySelector(
-          "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], .folder-inline-edit, .folder-decision",
+          "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], [data-catalog-delete-dialog], .folder-inline-edit, .folder-decision",
         ) ||
         target?.closest(".folder-inline-edit")
       )

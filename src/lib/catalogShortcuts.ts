@@ -153,6 +153,13 @@ export const catalogCommands = {
     code: "KeyR",
     alt: true,
   },
+  bulkApply: {
+    label: "선택 상품 부가세·추천기 표시·검토완료 일괄 적용",
+    keys: "Alt+B",
+    scope: "상품 목록",
+    code: "KeyB",
+    alt: true,
+  },
   deactivate: {
     label: "선택 상품 비활성화",
     keys: "Alt+D",
@@ -220,7 +227,7 @@ export function commandMatches(
 }
 export const catalogShortcutBlocked = () =>
   !!document.querySelector(
-    "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], .folder-inline-edit, .folder-decision",
+    "[data-catalog-shortcuts-dialog], [data-catalog-history-dialog], [data-catalog-delete-dialog], .folder-inline-edit, .folder-decision",
   );
 export function dispatchCatalogCommand(e: KeyboardEvent) {
   if (

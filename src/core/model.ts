@@ -81,6 +81,7 @@ export interface Option {
   id: string;
   label: string;
   price: number | null;
+  regularPrice?: number | null;
   tax: "exclusive" | "inclusive" | "exempt" | "unknown";
   review: boolean;
   issues: string[];

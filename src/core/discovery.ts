@@ -1,4 +1,5 @@
 import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
+import { eventOptionPrices } from "./eventPrices";
 import { withBeautyRootLabels } from "./catalogClassification";
 import { z } from "zod";
 import {
@@ -17,6 +18,7 @@ import {
   productFolderPaths,
 } from "./catalogFolders";
 export interface PublicOption {
+  event?: ReturnType<typeof eventOptionPrices>;
   id: string;
   label: string;
   unit: string;
@@ -75,18 +77,16 @@ export function publicProducts(state: State): PublicProduct[] {
         .map((p) => ({
           id: p.id,
           name: p.name,
-          ...(p.webEvent &&
+          ...((p.webEvent || catalogBook(c) === "이벤트") &&
           p.active &&
           p.options.length === 1 &&
           !p.options[0].review &&
           p.options[0].tax !== "unknown" &&
-          p.options[0].price === p.webEvent.salePrice
+          p.options[0].price !== null
             ? {
                 event: {
-                  period: p.webEvent.period,
-                  regularPrice: p.webEvent.regularPrice,
-                  discountRate: p.webEvent.discountRate,
-                  salePrice: p.webEvent.salePrice,
+                  period: p.webEvent?.period || "",
+                  ...eventOptionPrices(p, p.options[0]),
                 },
               }
             : {}),
@@ -101,6 +101,13 @@ export function publicProducts(state: State): PublicProduct[] {
             path.map((f) => ({ id: f.id, name: f.name, color: f.color })),
           ),
           options: p.options.map((o) => ({
+            ...((p.webEvent || catalogBook(c) === "이벤트") &&
+            p.active &&
+            !o.review &&
+            o.tax !== "unknown" &&
+            o.price !== null
+              ? { event: eventOptionPrices(p, o) }
+              : {}),
             id: o.id,
             label: o.label,
             unit: o.unit,

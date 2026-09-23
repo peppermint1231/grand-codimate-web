@@ -1,9 +1,10 @@
-import { EventSourceInfo, WebsiteSourceInfo } from "./EventCatalog";
+import { eventOptionPrices } from "../core/eventPrices";
+import { EventSourceInfo, WebsiteSourceInfo, EventPrice } from "./EventCatalog";
 import { websiteFolderPresence } from "../core/websitePresence";
 import { catalogCommand } from "../lib/catalogShortcuts";
 import { useRef, useState } from "react";
 import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
-import { money, type Catalog, type Product } from "../core/model";
+import { money, catalogBook, type Catalog, type Product } from "../core/model";
 import {
   folderPath,
   moveProducts,
@@ -307,13 +308,28 @@ export function CatalogProductRows({
                 <EventSourceInfo
                   info={p.webEvent}
                   salePrice={p.options[0]?.price}
+                  regularPrice={
+                    p.options[0]
+                      ? eventOptionPrices(p, p.options[0]).regularPrice
+                      : undefined
+                  }
                   compact
                 />
               )}
               {isOpen(p.id) && (
                 <div className="catalog-options-visible">
                   {p.options.map((o) => (
-                    <div className="catalog-option-visible" key={o.id}>
+                    <div
+                      className={
+                        "catalog-option-visible" +
+                        (catalogBook(catalog) === "이벤트" ||
+                        p.webEvent ||
+                        o.priceKind === "event"
+                          ? " event-option"
+                          : "")
+                      }
+                      key={o.id}
+                    >
                       <span>
                         <b>{o.label}</b>
                         <small>
@@ -323,29 +339,69 @@ export function CatalogProductRows({
                       </span>
                       {editable ? (
                         <>
-                          <input
-                            type="number"
-                            min={0}
-                            aria-label={`${p.name} ${o.label} 가격`}
-                            value={o.price ?? ""}
-                            placeholder="가격 미확정"
-                            onChange={(e) =>
-                              change({
-                                ...p,
-                                options: p.options.map((x) =>
-                                  x.id === o.id
-                                    ? {
-                                        ...x,
-                                        price:
-                                          e.target.value === ""
-                                            ? null
-                                            : Number(e.target.value),
-                                      }
-                                    : x,
-                                ),
-                              })
-                            }
-                          />
+                          {(catalogBook(catalog) === "이벤트" ||
+                            p.webEvent ||
+                            o.priceKind === "event") && (
+                            <label className="event-regular-input">
+                              정가 (원)
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                aria-label={`${p.name} ${o.label} 정가`}
+                                value={
+                                  eventOptionPrices(p, o).regularPrice ?? ""
+                                }
+                                placeholder="정가 미확정"
+                                onChange={(e) =>
+                                  change({
+                                    ...p,
+                                    options: p.options.map((x) =>
+                                      x.id === o.id
+                                        ? {
+                                            ...x,
+                                            regularPrice:
+                                              e.target.value === ""
+                                                ? null
+                                                : Number(e.target.value),
+                                          }
+                                        : x,
+                                    ),
+                                  })
+                                }
+                              />
+                            </label>
+                          )}
+                          <label className="catalog-price-input">
+                            {catalogBook(catalog) === "이벤트" ||
+                            p.webEvent ||
+                            o.priceKind === "event"
+                              ? "이벤트가 (원)"
+                              : "가격 (원)"}
+                            <input
+                              type="number"
+                              min={0}
+                              aria-label={`${p.name} ${o.label} 가격`}
+                              value={o.price ?? ""}
+                              placeholder="가격 미확정"
+                              onChange={(e) =>
+                                change({
+                                  ...p,
+                                  options: p.options.map((x) =>
+                                    x.id === o.id
+                                      ? {
+                                          ...x,
+                                          price:
+                                            e.target.value === ""
+                                              ? null
+                                              : Number(e.target.value),
+                                        }
+                                      : x,
+                                  ),
+                                })
+                              }
+                            />
+                          </label>
                           <select
                             aria-label={`${p.name} ${o.label} 부가세`}
                             value={o.tax}
@@ -385,6 +441,13 @@ export function CatalogProductRows({
                             }
                           </span>
                         </>
+                      )}
+                      {(catalogBook(catalog) === "이벤트" ||
+                        p.webEvent ||
+                        o.priceKind === "event") && (
+                        <div className="event-price-preview">
+                          <EventPrice {...eventOptionPrices(p, o)} />
+                        </div>
                       )}
                     </div>
                   ))}

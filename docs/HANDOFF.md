@@ -1,6 +1,16 @@
 # 코디메이트 개발 인계
 
+## 2026-09-23 선택 상품 일괄 수정 — 0.10.7
+
+추가 반영: 상품 개별/선택/폴더 삭제는 `CatalogDeleteConfirm`의 삭제 확인 기본 초점·Enter/Esc·포커스 순환·배경 단축키 차단을 공유합니다. `Option.regularPrice`는 수동 정가 override(미지정 시 단일 옵션 홈페이지 정가, null은 명시적 미확정)이며 기존 `price`가 이벤트가입니다. 목록/상세 두 가격 입력, `eventOptionPrices` 할인율 계산, 서버 금액 검증·변경 이력·publicProducts 공개 검토 조건 유지. 웹 원문 `webEvent`는 수정하지 않고 수동 정가는 갱신 시 보존합니다. 합성 화면에서 Enter/Esc 삭제·undo·목록 및 상세 정가/이벤트가 수정·할인율·저장 이력까지 확인.
+
+[사용 안내](RELEASE-0.10.7.md). `CatalogBulkEdit`에서 선택 상품의 부가세·맞춤 시술 찾기 표시·검토완료를 한 번에 적용합니다. 각 항목 변경 안 함을 지원하며 `bulkEditCatalogProducts`는 선택 ID의 모든 옵션만 수정하고 가격·판매 상태·원본 근거를 보존합니다. 검토완료는 변경 후 부가세/가격/옵션명을 검증해 미확정 상품이 있으면 전부 미적용합니다. 기존 setDraft를 사용해 단일 undo/redo 단계·취소·catalog.save/publish 권한과 버전 충돌 검사·저장 이력을 유지합니다. Alt+B와 ? 안내 연동. 검토 상태 변경은 이력에 명시됩니다.
+
+197개 자동 테스트와 합성 브라우저에서 여러 옵션 일괄 적용·비선택 상품 보존·검토 불가 시 원자적 거절·추천기 표시/숨김·Alt+B·undo/redo·초안 저장/이력·모바일 입력칸 배치 확인. 운영 점검은 단가표를 저장하지 않는 읽기 전용 검증으로 수행합니다. 최종 기록 `artifacts/deployment-0.10.7.json`.
+
 ## 2026-09-23 PC 상담 사진 고정 겹침 수정 — 0.10.6
+
+운영 완료: 웹 `c4daaa80f7ba37e0643b9076f70870de77df6c0c` GitHub 검사(기존 188개 테스트)·Cloudflare 배포 성공. 운영의 실제 답변을 펼친 상태에서 PC 두 크기·모바일 모두 사진과 답변 사이 20px 간격을 유지하며 겹침이 없는 것을 확인했습니다. 운영 쓰기 0건, 전체 State 보존, 미전송 0건. APK 0.10.6/versionCode 32 기존 서명 유지, 내장/운영 파일 46개 및 공개 다운로드 SHA-256 `96baa9b3119560c8bb4b887e582b8620c60fbb8408e13fbc82f41bda28629a10` 일치. 검증용 Vite/Wrangler/Gradle 종료. 최종 기록 `artifacts/deployment-0.10.6.json`.
 
 [사용 안내](RELEASE-0.10.6.md). `.photo-panel`의 sticky가 02 상담 뷰어에도 적용돼, 사진 아래 의사 의견을 스크롤할 때 사진이 위에 겹쳤습니다. `.consultation-viewer-panel`에 `position: static; top: auto`를 적용해 상담탭 사진과 답변이 같은 흐름으로 스크롤되게 했습니다. 01 사진 탭과 사진 뷰어 내부 스크롤은 그대로입니다.
 

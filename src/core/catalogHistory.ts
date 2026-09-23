@@ -55,6 +55,8 @@ export function catalogChanges(
       changes.push(`상품 추가: ${p.name}`);
       continue;
     }
+    if (JSON.stringify(old.offering) !== JSON.stringify(p.offering))
+      changes.push(`패키지·멤버십 구성 변경: ${p.name}`);
     if (old.name !== p.name) changes.push(`상품 이름: ${old.name} → ${p.name}`);
     if (productFolder(before, old) !== productFolder(after, p))
       changes.push(

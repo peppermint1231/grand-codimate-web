@@ -54,6 +54,7 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  acquisitionSource?: string;
   number?: string;
   storageName?: string;
   name: string;
@@ -67,6 +68,14 @@ export interface Patient extends Base {
   archived?: boolean;
 }
 export interface PatientNote extends Base {
+  editedBy?: string;
+  versions?: {
+    rev: number;
+    text: string;
+    important: boolean;
+    updatedAt: string;
+    actorId: string;
+  }[];
   patientId: string;
   authorId: string;
   text: string;
@@ -90,6 +99,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  offering?: import("./offerings").Offering;
   websiteListings?: WebsiteListing[];
   webEvent?: EventOriginInfo;
   folderId?: string;
@@ -120,6 +130,8 @@ export interface WebsiteListing {
   priceDiffers: boolean;
 }
 export interface Catalog extends Base {
+  /** Client read projection; must fetch the complete record before editing. */
+  workspaceOnly?: boolean;
   websiteImport?: {
     sourceUrl: string;
     checkedAt: string;
@@ -156,6 +168,7 @@ export interface Discount {
   value: number;
 }
 export interface Line {
+  categorySnapshot?: string;
   /** Unit list price at selection; price remains the actual sale price. */
   regularPrice?: number;
   catalogVersion?: string;
@@ -384,7 +397,9 @@ export const consultationKind = (c: Consultation) =>
     : c.kind === "renewal"
       ? "연장상담"
       : "첫 상담";
-export const packageActive = (c: Consultation) =>
+export const packageActive = (
+  c: Pick<Consultation, "cancelled" | "status" | "kind" | "packageProgress">,
+) =>
   !c.cancelled &&
   c.status === "P" &&
   c.kind !== "interim" &&

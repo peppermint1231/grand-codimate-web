@@ -96,8 +96,10 @@ export async function api<T = any>(
     });
   return d;
 }
-export const command = async (c: Command) => {
-  const operation = currentProgress();
+export const command = async (
+  c: Command,
+  operation: ProgressHandle | null | undefined = currentProgress(),
+) => {
   operation?.update({
     title: "저장 준비 중입니다",
     detail: "사진 업로드와 변경 내용을 확인하고 있습니다.",
@@ -225,7 +227,11 @@ export const command = async (c: Command) => {
     title: "변경 내용을 저장 중입니다",
     detail: "서버에 변경 내용을 기록하고 있습니다.",
   });
-  return api("/commands", { method: "POST", body: JSON.stringify(c) });
+  return api(
+    "/commands",
+    { method: "POST", body: JSON.stringify(c) },
+    { operation },
+  );
 };
 export const makeCommand = (
   type: string,
@@ -270,6 +276,64 @@ async function postMedia(
   capturedAt?: string,
   onProgress?: (p: TransferProgress) => void,
 ) {
+  if (file.size > 7_800_000) {
+    const bytes = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", await file.arrayBuffer()),
+    );
+    const sha256 = Array.from(bytes, (b) =>
+      b.toString(16).padStart(2, "0"),
+    ).join("");
+    const operation = onProgress ? null : currentProgress();
+    let session = await api<{
+      id: string;
+      offset: number;
+      done?: boolean;
+      chunkSize?: number;
+    }>(
+      "/media-sessions",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id,
+          consultationId,
+          name,
+          mime: file.type,
+          size: file.size,
+          sha256,
+          capturedAt,
+        }),
+      },
+      { operation },
+    );
+    while (!session.done && session.offset < file.size) {
+      const offset = session.offset,
+        part = file.slice(
+          offset,
+          Math.min(file.size, offset + (session.chunkSize || 3276800)),
+        );
+      session = await api(
+        "/media-sessions/" + encodeURIComponent(id) + "?offset=" + offset,
+        {
+          method: "POST",
+          body: part,
+          headers: { "Content-Type": "application/octet-stream" },
+        },
+        {
+          operation: null,
+          upload: (p) => {
+            const progress = {
+              loaded: offset + p.loaded,
+              total: file.size,
+              waiting: p.waiting,
+            };
+            if (onProgress) onProgress(progress);
+            else reportTransfer(operation || undefined, progress);
+          },
+        },
+      );
+    }
+    return { id };
+  }
   return api<{ id: string }>(
     "/media",
     {
@@ -416,7 +480,7 @@ export async function stagePhoto(
   try {
     let blob: Blob = file;
     const canvas = document.createElement("canvas");
-    if (file.size > 7_800_000 || file.type === "image/webp") {
+    if (file.type === "image/webp") {
       const scale = Math.min(1, 3200 / Math.max(bitmap.width, bitmap.height));
       canvas.width = Math.round(bitmap.width * scale);
       canvas.height = Math.round(bitmap.height * scale);
@@ -431,8 +495,8 @@ export async function stagePhoto(
         ),
       );
     }
-    if (blob.size > 8_000_000)
-      throw new Error("사진 용량을 8MB 이하로 줄여주세요.");
+    if (blob.size > 25_000_000)
+      throw new Error("사진 용량을 25MB 이하로 선택해주세요.");
     const scale = Math.min(1, 240 / Math.max(bitmap.width, bitmap.height));
     canvas.width = Math.max(1, Math.round(bitmap.width * scale));
     canvas.height = Math.max(1, Math.round(bitmap.height * scale));
@@ -601,4 +665,41 @@ export async function recoveryCommands() {
       if (c) commands.push(c);
     }
   return commands;
+}
+
+export const vaultOwner = () => (key ? userId : "");
+export async function preserveCommandPhotos(c: Command) {
+  if (!vaultEnabled()) throw new Error("암호화 기기 보관을 먼저 설정하세요.");
+  for (const p of (c.payload.photos || []) as { mediaId: string }[]) {
+    const item = stagedMedia.get(p.mediaId);
+    if (item) {
+      await item.stored;
+      if (!(await vaultRead("media:" + p.mediaId)))
+        throw new Error(
+          "사진 기기 보관을 완료하지 못했습니다. 다시 저장하세요.",
+        );
+    }
+  }
+}
+let pendingWrite: Promise<unknown> = Promise.resolve();
+export function updatePending(
+  change: (q: Command[]) => Command[],
+): Promise<Command[]> {
+  const owner = vaultOwner();
+  const write = async () => {
+    if (!owner || vaultOwner() !== owner)
+      throw new Error("기기 보관 잠금이 변경되었습니다.");
+    const q = change((await vaultRead<Command[]>("pending")) || []);
+    await vaultWrite("pending", q);
+    if (vaultOwner() !== owner)
+      throw new Error("기기 보관 잠금이 변경되었습니다.");
+    return q;
+  };
+  const run = async (): Promise<Command[]> =>
+    typeof navigator !== "undefined" && navigator.locks
+      ? await navigator.locks.request("codimate-pending-" + owner, write)
+      : await write();
+  const result = pendingWrite.then(run, run);
+  pendingWrite = result.catch(() => {});
+  return result;
 }

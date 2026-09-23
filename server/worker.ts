@@ -1,3 +1,11 @@
+import { RestoreJobs, restoreSchema } from "./restoreJobs";
+import {
+  patientIndex,
+  searchPatients,
+  type PatientSearchRow,
+} from "../src/core/patientSearch";
+import { buildAnalytics } from "../src/core/analytics";
+import { lightCatalog, visibleChanges } from "../src/core/stateChanges";
 import {
   QuoteShares,
   quoteShareInput,
@@ -58,6 +66,25 @@ interface Env extends DriveEnv {
   SETUP_KEY: string;
   REQUIRE_ONEDRIVE: string;
 }
+type MediaSession = {
+  id: string;
+  actorId: string;
+  consultationId: string;
+  patientId: string;
+  category: string;
+  name: string;
+  mime: string;
+  size: number;
+  fingerprint: string;
+  capturedAt: string;
+  path?: string;
+  uploadUrl?: string;
+  expires?: string;
+  remoteId?: string;
+  offset: number;
+  hashes: Record<string, string>;
+  chunkSize: number;
+};
 type Account = User & { passwordHash: string };
 type Change = { section: keyof State; id: string; value: unknown };
 const json = (data: unknown, status = 200) =>
@@ -109,8 +136,9 @@ export class Clinic extends DurableObject<Env> {
     super(ctx, env);
     this.sql = ctx.storage.sql;
     this.sql.exec(
-      "CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
+      "CREATE TABLE IF NOT EXISTS access_log(id TEXT PRIMARY KEY,at TEXT NOT NULL,value TEXT NOT NULL,backedUp INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
     );
+    this.sql.exec(restoreSchema);
   }
   private async secret<T>(id: string) {
     const row = this.sql
@@ -129,14 +157,23 @@ export class Clinic extends DurableObject<Env> {
     const account = await this.secret<Account>("user:" + id);
     return account ? normalizeUser(account) : undefined;
   }
-  private async state() {
+  private async state(includeHistory = true, sections?: (keyof State)[]) {
     const s = emptyState();
+    const query = sections
+      ? sections.length
+        ? "SELECT section,value FROM entities WHERE section IN (" +
+          sections.map(() => "?").join(",") +
+          ")"
+        : "SELECT section,value FROM entities WHERE 0"
+      : includeHistory
+        ? "SELECT section,value FROM entities"
+        : "SELECT section,value FROM entities WHERE section != 'catalogRevisions'";
     for (const row of this.sql
-      .exec<{ section: keyof State; value: string }>(
-        "SELECT section,value FROM entities",
-      )
+      .exec<{ section: keyof State; value: string }>(query, ...(sections || []))
       .toArray()) {
-      const item = await open(row.value, this.env.ENCRYPTION_KEY);
+      let item = await open<any>(row.value, this.env.ENCRYPTION_KEY);
+      if (!includeHistory && row.section === "catalogs")
+        item = lightCatalog(item);
       (s[row.section] as unknown[]).push(item);
     }
     const rows = this.sql
@@ -150,6 +187,47 @@ export class Clinic extends DurableObject<Env> {
       }
     }
     return s;
+  }
+  private patientRows?: PatientSearchRow[];
+  private async auditAccess(
+    actorId: string,
+    action: string,
+    targetId = "",
+    detail = "",
+  ) {
+    const id = crypto.randomUUID(),
+      at = new Date().toISOString();
+    this.sql.exec(
+      "INSERT INTO access_log(id,at,value) VALUES(?,?,?)",
+      id,
+      at,
+      await seal(
+        { id, at, actorId, action, targetId, detail },
+        this.env.ENCRYPTION_KEY,
+      ),
+    );
+    if (this.ctx.storage.setAlarm) {
+      const alarm = this.ctx.storage.getAlarm
+        ? await this.ctx.storage.getAlarm()
+        : null;
+      if (!alarm || alarm > Date.now() + 60000)
+        await this.ctx.storage.setAlarm(Date.now() + 60000);
+    }
+  }
+  private async flushAccess() {
+    const rows = this.sql
+      .exec<{ id: string; value: string }>(
+        "SELECT id,value FROM access_log WHERE backedUp=0 ORDER BY at LIMIT 200",
+      )
+      .toArray();
+    if (!rows.length) return;
+    if (this.env.REQUIRE_ONEDRIVE === "true")
+      await this.drive().put(
+        `${await this.storageRoot()}/_codimate/access/${rows[0].id}.enc`,
+        await seal(rows, this.env.ENCRYPTION_KEY),
+      );
+    for (const row of rows)
+      this.sql.exec("UPDATE access_log SET backedUp=1 WHERE id=?", row.id);
   }
   private driveClient?: Drive;
   private drive() {
@@ -194,14 +272,29 @@ export class Clinic extends DurableObject<Env> {
   async alarm() {
     const run = this.queue.then(async () => {
       try {
-        if (await this.secret("restore-required")) return;
+        if (
+          (await this.secret("restore-required")) ||
+          this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+        )
+          return;
         await this.settleStorageRename();
+        await this.flush();
+        await this.flushAccess();
         const store = await this.inquiryStore();
         await store.purge();
         new QuoteShares(this.sql, this.env.ENCRYPTION_KEY).purge();
         await store.flush();
       } finally {
-        await this.ctx.storage.setAlarm(Date.now() + 3600_000);
+        const queued =
+          this.sql
+            .exec("SELECT id FROM access_log WHERE backedUp=0 LIMIT 1")
+            .toArray().length ||
+          this.sql
+            .exec("SELECT id FROM operations WHERE done=0 LIMIT 1")
+            .toArray().length;
+        await this.ctx.storage.setAlarm(
+          Date.now() + (queued ? 60000 : 3600_000),
+        );
       }
     });
     this.queue = run.catch(() => undefined);
@@ -391,6 +484,7 @@ export class Clinic extends DurableObject<Env> {
           value: await seal(c.value, this.env.ENCRYPTION_KEY),
         })),
       );
+      this.patientRows = undefined;
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
           this.sql.exec(
@@ -433,10 +527,24 @@ export class Clinic extends DurableObject<Env> {
       );
       return (await req.json()) as Record<string, any>;
     };
+    if (
+      (req.method !== "GET" || path === "/api/onedrive/callback") &&
+      ![
+        "/api/login",
+        "/api/logout",
+        "/api/restore-jobs",
+        "/api/access",
+      ].includes(path) &&
+      this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+    )
+      throw new DomainError(
+        "원본 확인 중입니다. 복구를 완료하거나 취소한 뒤 변경하세요",
+        409,
+      );
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.10.12",
+        version: "0.11.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -487,7 +595,7 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true });
     }
     if (path === "/api/login-ids" && req.method === "GET") {
-      const s = await this.state();
+      const s = await this.state(false, []);
       return json({
         usernames: s.users
           .filter((u) => u.active)
@@ -506,7 +614,7 @@ export class Clinic extends DurableObject<Env> {
         "로그인 시도가 많습니다. 5분 후 다시 시도하세요",
         429,
       );
-      const s = await this.state(),
+      const s = await this.state(false, []),
         user = s.users.find((u) => u.username === b.username),
         a = user ? await this.account(user.id) : null;
       const ok =
@@ -846,6 +954,7 @@ export class Clinic extends DurableObject<Env> {
         "/api/quote-shares",
         "/api/users",
         "/api/media",
+        "/api/admin-handover",
         "/api/sync",
         "/api/update",
         "/api/storage",
@@ -855,6 +964,45 @@ export class Clinic extends DurableObject<Env> {
       ensure(
         !(await this.secret("restore-required")),
         "기존 OneDrive 자료가 있습니다. 원본에서 재구축한 뒤 변경하세요.",
+        409,
+      );
+    if (path === "/api/restore-jobs") {
+      executive();
+      const store = new RestoreJobs(
+        this.ctx.storage,
+        this.drive(),
+        this.env.ENCRYPTION_KEY,
+        await this.storageRoot(),
+      );
+      if (req.method === "GET") return json({ job: await store.status() });
+      const b = await body();
+      if (b.action === "start")
+        return json({ job: await store.start(user.id) });
+      ensure(typeof b.id === "string", "복구 작업 ID가 필요합니다");
+      if (b.action === "step") return json({ job: await store.step(b.id) });
+      if (b.action === "cancel") {
+        await store.cancel(b.id);
+        return json({ ok: true, job: null });
+      }
+      if (b.action === "commit") {
+        const result = await store.commit(b.id);
+        this.patientRows = undefined;
+        const response = json(result);
+        response.headers.set(
+          "Set-Cookie",
+          "codimate=; HttpOnly; SameSite=Strict; Path=/api; Max-Age=0",
+        );
+        return response;
+      }
+      throw new DomainError("복구 작업을 확인하세요");
+    }
+    if (
+      req.method !== "GET" &&
+      !["/api/logout", "/api/access"].includes(path) &&
+      this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+    )
+      throw new DomainError(
+        "원본 복구 확인 중입니다. 복구를 완료하거나 취소한 뒤 변경하세요",
         409,
       );
     if (path === "/api/quote-shares") {
@@ -892,7 +1040,11 @@ export class Clinic extends DurableObject<Env> {
           return json({ ok: true });
         }
         const input = quoteShareInput.parse(b),
-          state = await this.state();
+          state = await this.state(false, [
+            "patients",
+            "consultations",
+            "quoteConsents",
+          ]);
         const c = state.consultations.find(
           (x) => x.id === input.consultationId,
         );
@@ -1246,8 +1398,268 @@ export class Clinic extends DurableObject<Env> {
         opinions.push(await open(row.value, this.env.ENCRYPTION_KEY));
       return json({ opinions });
     }
+    if (path === "/api/access" && req.method === "POST") {
+      const b = await body();
+      ensure(
+        ["patient.view", "consultation.view"].includes(b.action) &&
+          typeof b.targetId === "string" &&
+          b.targetId.length <= 100,
+        "조회 기록 형식이 다릅니다",
+      );
+      const section =
+        b.action === "patient.view" ? "patients" : "consultations";
+      ensure(
+        this.sql
+          .exec(
+            "SELECT id FROM entities WHERE section=? AND id=?",
+            section,
+            b.targetId,
+          )
+          .toArray().length,
+        "자료가 없습니다",
+        404,
+      );
+      await this.auditAccess(user.id, b.action, b.targetId);
+      return json({ ok: true });
+    }
+    if (path === "/api/access-log") {
+      admin();
+      let beforeAt = "9999",
+        beforeId = "~";
+      const cursor = url.searchParams.get("before");
+      if (cursor) {
+        try {
+          const pair = JSON.parse(cursor);
+          ensure(
+            Array.isArray(pair) &&
+              pair.length === 2 &&
+              pair.every((x) => typeof x === "string"),
+            "목록 위치를 확인하세요",
+          );
+          [beforeAt, beforeId] = pair;
+        } catch {
+          throw new DomainError("목록 위치를 확인하세요");
+        }
+      }
+      const rows = this.sql
+        .exec<{ id: string; at: string; value: string; backedUp: number }>(
+          "SELECT id,at,value,backedUp FROM access_log WHERE at<? OR (at=? AND id<?) ORDER BY at DESC,id DESC LIMIT 51",
+          beforeAt,
+          beforeAt,
+          beforeId,
+        )
+        .toArray();
+      const entries = [];
+      for (const row of rows.slice(0, 50))
+        entries.push({
+          ...(await open<object>(row.value, this.env.ENCRYPTION_KEY)),
+          backedUp: !!row.backedUp,
+        });
+      return json({
+        entries,
+        next:
+          rows.length > 50 ? JSON.stringify([rows[49].at, rows[49].id]) : null,
+      });
+    }
+    if (path === "/api/admin-handover" && req.method === "POST") {
+      admin();
+      const b = await body();
+      ensure(
+        typeof b.targetId === "string" &&
+          b.targetId !== user.id &&
+          typeof b.reason === "string" &&
+          b.reason.trim().length >= 2 &&
+          b.reason.length <= 1000,
+        "인계받을 직원과 사유를 확인하세요",
+      );
+      const attempts = await this.secret<{ count: number; until: number }>(
+        "handover-attempt:" + user.id,
+      );
+      ensure(
+        !attempts || attempts.until < Date.now() || attempts.count < 5,
+        "비밀번호 확인 시도가 많습니다. 5분 후 다시 시도하세요",
+        429,
+      );
+      const account = await this.account(user.id);
+      const verified =
+        typeof b.password === "string" &&
+        (await verifyPassword(b.password, account!.passwordHash));
+      await this.setSecret("handover-attempt:" + user.id, {
+        count: verified ? 0 : (attempts?.count || 0) + 1,
+        until: Date.now() + 300000,
+      });
+      ensure(verified, "현재 관리자 비밀번호가 다릅니다", 403);
+      const target = await this.account(b.targetId);
+      ensure(target?.active, "활성 직원 계정을 선택하세요");
+      const next = {
+        ...target,
+        permissionLevel: "admin" as const,
+        legacyPermissionDefaults: false,
+        permissions: {},
+      };
+      const outgoing =
+        b.keepAdministrator === false
+          ? {
+              ...account!,
+              permissionLevel: "executive" as const,
+              legacyPermissionDefaults: false,
+              permissions: {},
+            }
+          : account!;
+      await this.auditAccess(
+        user.id,
+        "admin.handover.request",
+        target.id,
+        b.reason,
+      );
+      const targetCipher = await seal(next, this.env.ENCRYPTION_KEY),
+        outgoingCipher = await seal(outgoing, this.env.ENCRYPTION_KEY);
+      if (this.env.REQUIRE_ONEDRIVE === "true") {
+        await this.drive().put(
+          `${await this.storageRoot()}/_codimate/accounts/${target.id}.enc`,
+          targetCipher,
+        );
+        if (b.keepAdministrator === false)
+          await this.drive().put(
+            `${await this.storageRoot()}/_codimate/accounts/${user.id}.enc`,
+            outgoingCipher,
+          );
+      }
+      this.ctx.storage.transactionSync(() => {
+        this.sql.exec(
+          "INSERT OR REPLACE INTO secrets VALUES(?,?)",
+          "user:" + target.id,
+          targetCipher,
+        );
+        this.sql.exec(
+          "INSERT OR REPLACE INTO secrets VALUES(?,?)",
+          "user:" + user.id,
+          outgoingCipher,
+        );
+      });
+      await this.auditAccess(
+        user.id,
+        "admin.handover.complete",
+        target.id,
+        b.reason,
+      );
+      return json({ ok: true });
+    }
+    if (path === "/api/patients/search") {
+      if (!this.patientRows)
+        this.patientRows = patientIndex(
+          await this.state(false, [
+            "patients",
+            "consultations",
+            "ledger",
+            "policies",
+          ]),
+        );
+      const p = url.searchParams;
+      return json(
+        searchPatients(
+          this.patientRows,
+          {
+            search: (p.get("search") || "").slice(0, 200),
+            grade: p.get("grade") || "",
+            sort: p.get("sort") || "recent",
+            unpaid: p.get("unpaid") === "true",
+            owner: p.get("owner") || "",
+            consultStatus: p.get("consultStatus") || "",
+            since: p.get("since") || "",
+            archived: p.get("archived") === "true",
+            duplicateOnly: p.get("duplicateOnly") === "true",
+            page: Number(p.get("page") || 0),
+          },
+          allowed(user, "money.read"),
+        ),
+      );
+    }
+    if (path === "/api/analytics") {
+      ensure(allowed(user, "stats.read"), "통계 열람 권한이 필요합니다", 403);
+      await this.auditAccess(user.id, "statistics.view");
+      const filter = {
+        from: url.searchParams.get("from") || "",
+        to: url.searchParams.get("to") || "",
+        ownerId: url.searchParams.get("ownerId") || "",
+        book: url.searchParams.get("book") || "",
+      };
+      ensure(
+        !filter.book || ["미용", "보험", "이벤트"].includes(filter.book),
+        "단가표 구분을 확인하세요",
+      );
+      try {
+        return json(
+          buildAnalytics(
+            await this.state(false),
+            filter,
+            allowed(user, "money.read"),
+          ),
+        );
+      } catch (e) {
+        throw new DomainError((e as Error).message, 400);
+      }
+    }
+    if (path.startsWith("/api/catalogs/")) {
+      const id = decodeURIComponent(path.slice("/api/catalogs/".length));
+      const row = this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='catalogs' AND id=?",
+          id,
+        )
+        .toArray()[0];
+      ensure(row, "단가표가 없습니다", 404);
+      const catalog = await open<State["catalogs"][number]>(
+        row.value,
+        this.env.ENCRYPTION_KEY,
+      );
+      ensure(
+        allowed(user, "catalog.edit") || catalog.status === "published",
+        "단가표 권한이 없습니다",
+        403,
+      );
+      return json({ catalog });
+    }
+    if (path === "/api/catalog-history") {
+      ensure(
+        allowed(user, "catalog.edit"),
+        "단가표 관리 권한이 필요합니다",
+        403,
+      );
+      const book = new URL(req.url).searchParams.get("book");
+      const revisions = [];
+      for (const row of this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='catalogRevisions' ORDER BY rowid DESC",
+        )
+        .toArray()) {
+        const revision = await open<State["catalogRevisions"][number]>(
+          row.value,
+          this.env.ENCRYPTION_KEY,
+        );
+        if (!book || revision.book === book) {
+          const { snapshot, ...summary } = revision;
+          revisions.push({ ...summary, snapshot: { status: snapshot.status } });
+        }
+      }
+      return json({ revisions });
+    }
     if (path === "/api/state") {
-      const s = await this.state();
+      const s = await this.state(
+        new URL(req.url).searchParams.get("view") !== "workspace",
+      );
+      if (url.searchParams.get("view") === "workspace") {
+        const keep = new Set(latestCatalogs(s).map((c) => c.id));
+        const versions = new Set(
+          s.consultations.flatMap((c) => [
+            c.catalogVersion,
+            ...Object.values(c.catalogVersions || {}),
+          ]),
+        );
+        s.catalogs = s.catalogs.map((c) =>
+          lightCatalog(c, keep.has(c.id) || versions.has(c.version)),
+        );
+      }
       if (!allowed(user, "note.read")) s.notes = [];
       if (!allowed(user, "money.read")) {
         s.ledger = [];
@@ -1302,7 +1714,7 @@ export class Clinic extends DurableObject<Env> {
       );
       const id = b.id || crypto.randomUUID(),
         old = await this.account(id),
-        state = await this.state();
+        state = await this.state(false, []);
       ensure(/^[\w-]{1,100}$/.test(id), "계정 ID를 확인하세요");
       ensure(
         !state.users.some((u) => u.username === b.username && u.id !== id),
@@ -1366,10 +1778,42 @@ export class Clinic extends DurableObject<Env> {
           409,
         );
         await this.flush();
-        return json({ ok: true, replayed: true });
+        // A retry may arrive after later edits. Return the current records, never
+        // the original operation snapshot, so an acknowledged retry cannot roll back UI data.
+        const operationRow = this.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM operations WHERE id=?",
+            cmd.id,
+          )
+          .toArray()[0];
+        const original = await open<{ changes: Change[] }>(
+          operationRow.value,
+          this.env.ENCRYPTION_KEY,
+        );
+        const changes: Change[] = [];
+        for (const changed of original.changes) {
+          if (changed.section === "catalogRevisions") continue;
+          const current = this.sql
+            .exec<{ value: string }>(
+              "SELECT value FROM entities WHERE section=? AND id=?",
+              changed.section,
+              changed.id,
+            )
+            .toArray()[0];
+          if (current)
+            changes.push({
+              ...changed,
+              value: await open(current.value, this.env.ENCRYPTION_KEY),
+            });
+        }
+        return json({
+          ok: true,
+          replayed: true,
+          changes: visibleChanges(changes, user),
+        });
       }
       await this.flush();
-      const before = await this.state();
+      const before = await this.state(cmd.type.startsWith("catalog."));
       const after = await applyCommand(before, user, cmd);
       if (
         cmd.type === "consultation.finalize" ||
@@ -1469,6 +1913,7 @@ export class Clinic extends DurableObject<Env> {
       await this.persistChanges(cmd.id, user.id, digest, changes);
       return json({
         ok: true,
+        changes: visibleChanges(changes, user),
         savedTo:
           this.env.REQUIRE_ONEDRIVE === "true" ? "OneDrive" : "개발 서버",
       });
@@ -1571,6 +2016,7 @@ export class Clinic extends DurableObject<Env> {
         409,
       );
       this.ctx.storage.transactionSync(() => {
+        this.patientRows = undefined;
         this.sql.exec("DELETE FROM entities");
         this.sql.exec("DELETE FROM quote_shares");
         this.sql.exec("DELETE FROM operations");
@@ -1623,9 +2069,208 @@ export class Clinic extends DurableObject<Env> {
       );
       return response;
     }
+    if (path.startsWith("/api/media-sessions") && req.method === "POST") {
+      ensure(
+        !(await this.secret("restore-required")),
+        "복구를 완료한 뒤 업로드하세요",
+        409,
+      );
+      const starting = path === "/api/media-sessions";
+      const input = starting ? await body() : null;
+      const id = starting
+        ? String(input!.id)
+        : decodeURIComponent(path.slice("/api/media-sessions/".length));
+      ensure(/^[\w-]{8,100}$/.test(id), "업로드 ID를 확인하세요");
+      let session = await this.secret<MediaSession>("media-session:" + id);
+      const consultationId = starting
+        ? String(input!.consultationId)
+        : session?.consultationId;
+      const state = await this.state(false, ["patients", "consultations"]),
+        c = state.consultations.find((c) => c.id === consultationId);
+      ensure(
+        c &&
+          !c.cancelled &&
+          (isAdministrator(user) ||
+            (c.ownerId === user.id && c.status === "H")),
+        "사진·문서 업로드 권한이 없습니다",
+        403,
+      );
+      if (starting) {
+        const b = input!;
+        ensure(
+          Number.isInteger(b.size) &&
+            b.size > 0 &&
+            b.size <= 25_000_000 &&
+            ["image/jpeg", "image/png", "application/pdf"].includes(b.mime) &&
+            /^[a-f0-9]{64}$/.test(b.sha256) &&
+            typeof b.name === "string" &&
+            b.name.length <= 300,
+          "파일 크기·형식을 확인하세요",
+        );
+        const fingerprint = "sha256:" + b.sha256;
+        const previous = await this.media(id);
+        if (previous) {
+          ensure(
+            previous.consultationId === c.id &&
+              previous.fingerprint === fingerprint,
+            "업로드 ID 충돌",
+            409,
+          );
+          return json({ id, offset: previous.size, done: true });
+        }
+        if (session)
+          ensure(
+            session.actorId === user.id &&
+              session.fingerprint === fingerprint &&
+              session.consultationId === c.id,
+            "업로드 ID 충돌",
+            409,
+          );
+        if (session?.offset === session?.size && session) {
+          await this.finishMediaSession(session);
+          return json({ id, offset: session.size, done: true });
+        }
+        if (
+          !session ||
+          (session.uploadUrl && Date.parse(session.expires || "") < Date.now())
+        ) {
+          const patient = state.patients.find((p) => p.id === c.patientId)!;
+          const capturedAt = b.capturedAt || new Date().toISOString();
+          ensure(
+            Number.isFinite(Date.parse(capturedAt)),
+            "촬영 날짜를 확인하세요",
+          );
+          const originalName = b.name.replace(/[\\/:*?"<>|]/g, "_");
+          const name =
+            b.mime === "application/pdf"
+              ? originalName
+              : photoFileName(patient, capturedAt, b.mime);
+          let uploadPath = `${patientFolder(patient, c.category, await this.storageRoot())}/${name}`;
+          session = {
+            id,
+            actorId: user.id,
+            consultationId: c.id,
+            patientId: c.patientId,
+            category: c.category,
+            name,
+            mime: b.mime,
+            size: b.size,
+            fingerprint,
+            capturedAt,
+            offset: 0,
+            hashes: {},
+            chunkSize: 327680,
+          };
+          if (this.env.REQUIRE_ONEDRIVE === "true") {
+            if (await this.drive().exists(uploadPath))
+              uploadPath = uploadPath.replace(
+                /(\.[^.]+)$/,
+                "_" + id + "_" + crypto.randomUUID().slice(0, 8) + "$1",
+              );
+            const remote = await this.drive().startUpload(uploadPath, b.size);
+            Object.assign(session, {
+              path: uploadPath,
+              name: uploadPath.split("/").at(-1),
+              uploadUrl: remote.uploadUrl,
+              expires: remote.expirationDateTime,
+            });
+          }
+          await this.setSecret("media-session:" + id, session);
+        }
+        return json({ id, offset: session.offset, chunkSize: 3276800 });
+      }
+      ensure(
+        session && session.actorId === user.id,
+        "업로드를 다시 시작하세요",
+        409,
+      );
+      const offset = Number(url.searchParams.get("offset")),
+        data = await req.arrayBuffer();
+      ensure(
+        Number.isInteger(offset) &&
+          offset >= 0 &&
+          offset % 327680 === 0 &&
+          data.byteLength > 0 &&
+          data.byteLength <= 3276800 &&
+          offset + data.byteLength <= session.size &&
+          (offset + data.byteLength === session.size ||
+            data.byteLength % 327680 === 0),
+        "파일 조각 범위를 확인하세요",
+      );
+      const digest = await sha(Buffer.from(data).toString("base64"));
+      if (session.hashes[String(offset)])
+        ensure(
+          session.hashes[String(offset)] === digest,
+          "파일 조각이 변경되었습니다",
+          409,
+        );
+      if (offset < session.offset)
+        return json({
+          id,
+          offset: session.offset,
+          done: !!(await this.media(id)),
+        });
+      ensure(
+        offset === session.offset,
+        "앞 조각의 전송을 먼저 완료하세요",
+        409,
+      );
+      if (session.uploadUrl) {
+        try {
+          const result = await this.drive().uploadPart(
+            session.uploadUrl,
+            data,
+            offset,
+            session.size,
+          );
+          if (result.id) {
+            ensure(result.size === session.size, "파일 크기를 확인하세요", 503);
+            session.remoteId = result.id;
+            session.offset = session.size;
+          } else {
+            const next = Number(result.nextExpectedRanges?.[0]?.split("-")[0]);
+            ensure(
+              Number.isInteger(next) &&
+                next >= offset + data.byteLength &&
+                next <= session.size,
+              "업로드 응답을 확인하세요",
+              503,
+            );
+            session.offset = next;
+            if (result.expirationDateTime)
+              session.expires = result.expirationDateTime;
+          }
+        } catch (e: any) {
+          if (e.expired) {
+            session.expires = "1970-01-01";
+            await this.setSecret("media-session:" + id, session);
+          }
+          throw new DomainError(e.message, 503);
+        }
+      } else {
+        const bytes = new Uint8Array(data);
+        for (let i = 0; i < bytes.length; i += session.chunkSize)
+          await this.setSecret(
+            `file:${id}:${offset + i}`,
+            Buffer.from(bytes.slice(i, i + session.chunkSize)).toString(
+              "base64",
+            ),
+          );
+        session.offset += data.byteLength;
+      }
+      session.hashes[String(offset)] = digest;
+      await this.setSecret("media-session:" + id, session);
+      if (session.offset === session.size)
+        await this.finishMediaSession(session);
+      return json({
+        id,
+        offset: session.offset,
+        done: session.offset === session.size,
+      });
+    }
     if (path === "/api/media" && req.method === "POST") {
       const consultationId = req.headers.get("X-Consultation-Id") || "";
-      const s = await this.state(),
+      const s = await this.state(false, ["patients", "consultations"]),
         c = s.consultations.find((c) => c.id === consultationId);
       ensure(
         c &&
@@ -1750,7 +2395,7 @@ export class Clinic extends DurableObject<Env> {
         data = await (await this.drive().get(m.remoteId)).arrayBuffer();
       else {
         const a = new Uint8Array(m.size);
-        for (let i = 0; i < m.size; i += 300000) {
+        for (let i = 0; i < m.size; i += m.chunkSize || 300000) {
           const s = await this.secret<string>("file:" + id + ":" + i);
           ensure(s, "파일 조각이 없습니다", 503);
           a.set(Buffer.from(s, "base64"), i);
@@ -1767,6 +2412,25 @@ export class Clinic extends DurableObject<Env> {
     }
     throw new DomainError("API를 찾을 수 없습니다", 404);
   }
+  private async finishMediaSession(session: MediaSession) {
+    const { uploadUrl, expires, offset, hashes, actorId, ...metadata } =
+      session;
+    const value = await seal(metadata, this.env.ENCRYPTION_KEY);
+    if (this.env.REQUIRE_ONEDRIVE === "true")
+      await this.drive().put(
+        `${await this.storageRoot()}/_codimate/media/${session.id}.enc`,
+        value,
+      );
+    this.sql.exec(
+      "INSERT OR REPLACE INTO media VALUES(?,?)",
+      session.id,
+      value,
+    );
+    await this.setSecret("media-session:" + session.id, {
+      ...session,
+      uploadUrl: undefined,
+    });
+  }
   private async media(id: string) {
     const row = this.sql
       .exec<{ value: string }>("SELECT value FROM media WHERE id=?", id)
@@ -1776,6 +2440,7 @@ export class Clinic extends DurableObject<Env> {
           consultationId: string;
           remoteId?: string;
           size: number;
+          chunkSize?: number;
           mime: string;
           fingerprint?: string;
           name?: string;

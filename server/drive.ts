@@ -162,6 +162,73 @@ export class Drive {
     );
     return (await r.json()) as { id: string; size: number; eTag: string };
   }
+  async startUpload(path: string, size: number) {
+    const folder = path.slice(0, path.lastIndexOf("/")),
+      name = path.slice(path.lastIndexOf("/") + 1);
+    await this.folders(folder);
+    const parent = await this.exists(folder);
+    if (!parent?.folder) throw new Error("업로드 폴더를 확인하지 못했습니다");
+    const response = await this.request(
+      `/me/drive/items/${encodeURIComponent(parent.id)}:/${encodeURIComponent(name)}:/createUploadSession`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          item: {
+            "@microsoft.graph.conflictBehavior": "fail",
+            name,
+            fileSize: size,
+          },
+        }),
+      },
+    );
+    const session = (await response.json()) as {
+      uploadUrl: string;
+      expirationDateTime: string;
+    };
+    this.checkUploadURL(session.uploadUrl);
+    return session;
+  }
+  private checkUploadURL(value: string) {
+    const url = new URL(value);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      ![".1drv.com", ".sharepoint.com", ".storage.live.com"].some((suffix) =>
+        url.hostname.endsWith(suffix),
+      )
+    )
+      throw new Error("OneDrive 업로드 주소를 확인하세요");
+  }
+  async uploadPart(
+    uploadUrl: string,
+    data: ArrayBuffer,
+    offset: number,
+    total: number,
+  ) {
+    this.checkUploadURL(uploadUrl);
+    let response = await fetch(uploadUrl, {
+      method: "PUT",
+      body: data,
+      headers: {
+        "Content-Length": String(data.byteLength),
+        "Content-Range": `bytes ${offset}-${offset + data.byteLength - 1}/${total}`,
+      },
+    });
+    if (response.status === 416) response = await fetch(uploadUrl);
+    if (!response.ok)
+      throw Object.assign(
+        new Error(`OneDrive 분할 전송 실패 (${response.status})`),
+        { expired: [404, 410].includes(response.status) },
+      );
+    return (await response.json()) as {
+      id?: string;
+      size?: number;
+      nextExpectedRanges?: string[];
+      expirationDateTime?: string;
+    };
+  }
   async remove(id: string) {
     const r = await fetch(
       "https://graph.microsoft.com/v1.0/me/drive/items/" +

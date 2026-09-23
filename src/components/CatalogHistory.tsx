@@ -1,3 +1,4 @@
+import { api } from "../lib/api";
 import { catalogTime } from "../core/catalogStatus";
 import { useEffect, useRef, useState } from "react";
 import { History, RotateCcw } from "lucide-react";
@@ -27,10 +28,33 @@ export function CatalogHistory({
     [selected, setSelected] = useState("");
   const trigger = useRef<HTMLButtonElement>(null),
     dialog = useRef<HTMLElement>(null);
-  const revisions = (state.catalogRevisions || [])
+  const [remote, setRemote] = useState<State["catalogRevisions"] | null>(null);
+  const [loading, setLoading] = useState(false),
+    [error, setError] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setLoading(true);
+    setError("");
+    setRemote(null);
+    api("/catalog-history?book=" + encodeURIComponent(catalogBook(catalog)))
+      .then((d) => {
+        if (active) setRemote(d.revisions);
+      })
+      .catch((e) => {
+        if (active) setError(e.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, catalog.id, catalog.rev]);
+  const revisions = (remote || state.catalogRevisions || [])
     .filter((r) => r.book === catalogBook(catalog))
     .slice()
-    .reverse();
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const revision = revisions.find((r) => r.id === selected);
   const base = latestCatalog(state, catalogBook(catalog)) || catalog;
   useAppBack(open, () => setOpen(false), 90);
@@ -80,7 +104,7 @@ export function CatalogHistory({
         aria-haspopup="dialog"
       >
         <History size={17} />
-        수정 이력 · 되돌리기 ({revisions.length})
+        수정 이력 · 되돌리기
       </button>
       {open && (
         <div className="overlay" onClick={() => setOpen(false)}>
@@ -107,7 +131,11 @@ export function CatalogHistory({
                 편집 중인 내용을 먼저 저장하거나 취소한 뒤 복원하세요.
               </p>
             )}
-            {!revisions.length ? (
+            {loading ? (
+              <p role="status">이력을 불러오는 중입니다…</p>
+            ) : error ? (
+              <p role="alert">{error}</p>
+            ) : !revisions.length ? (
               <p>다음 수정부터 변경 전 내용과 수정 내역을 기록합니다.</p>
             ) : (
               <div className="catalog-history-browser">

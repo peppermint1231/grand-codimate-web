@@ -1,3 +1,27 @@
+import { RestoreJobPanel } from "./components/RestoreJobPanel";
+import { AdministrationReview } from "./components/AdministrationReview";
+import { OfferingEditor } from "./components/OfferingEditor";
+import { CatalogPublishReview } from "./components/CatalogPublishReview";
+import { productComposition } from "./core/offerings";
+import {
+  patientIndex,
+  searchPatients,
+  type PatientSearchRow,
+} from "./core/patientSearch";
+import {
+  saveGuestPhoto,
+  loadGuestPhotos,
+  markGuestLinked,
+  clearSavedGuest,
+  removeGuestPhotos,
+  type GuestPhoto,
+} from "./lib/guestPhotos";
+import { QuoteTemplatePicker } from "./components/QuoteTemplatePicker";
+import { documentTheme, quoteTemplates } from "./core/quoteTemplate";
+import { Statistics } from "./components/Statistics";
+import { LedgerForm } from "./components/LedgerForm";
+import { preserveCommandPhotos, updatePending, vaultOwner } from "./lib/api";
+import { mergeStateChanges } from "./core/stateChanges";
 import { currentProgress, withProgress } from "./lib/operationProgress";
 import { PatientQuote } from "./components/PatientQuote";
 import { PatientTimeline } from "./components/PatientTimeline";
@@ -74,6 +98,7 @@ import { requestAndroidUpdate } from "./components/AndroidUpdateNotice";
 import { needsServer, configureServer } from "./lib/api";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -229,7 +254,7 @@ export function App() {
     [pending, setPending] = useState<Command[]>([]),
     [modal, setModal] = useState(""),
     [guest, setGuest] = useState(false),
-    [guestPhotos, setGuestPhotos] = useState<{ url: string; file: File }[]>([]);
+    [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
   const [opinionFocus, setOpinionFocus] = useState("");
   const opinionPollGeneration = useRef(0);
   const unreadReplies = user
@@ -305,6 +330,36 @@ export function App() {
     },
     0,
   );
+  useEffect(() => {
+    let active = true;
+    loadGuestPhotos()
+      .then((photos) => {
+        if (active) setGuestPhotos(photos);
+        else photos.forEach((p) => URL.revokeObjectURL(p.url));
+      })
+      .catch(() =>
+        setError("임시 사진을 복구하지 못했습니다. 기기 저장소를 확인하세요."),
+      );
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    const targetId = page === "consult" ? consultId : patientId;
+    if (!targetId) return;
+    void api(
+      "/access",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          action: page === "consult" ? "consultation.view" : "patient.view",
+          targetId,
+        }),
+      },
+      { operation: null },
+    ).catch(() => {});
+  }, [user?.id, page, patientId, consultId]);
   const restoreNeeded = useRef(true);
   const workInFlight = useRef(false);
   useEffect(() => {
@@ -335,7 +390,22 @@ export function App() {
       title: "저장된 자료 확인 중입니다",
       detail: "최신 내용을 화면에 반영하고 있습니다.",
     });
-    const d = await api("/state");
+    const d = await api("/state?view=workspace");
+    if (vaultEnabled()) {
+      const queued = (await vaultRead<Command[]>("pending")) || [];
+      const cached = await vaultRead<CachedSession>("session");
+      for (const id of new Set(
+        queued
+          .filter((c) => c.type === "consultation.save")
+          .map((c) => c.entityId),
+      )) {
+        const local = cached?.state.consultations.find((c) => c.id === id);
+        if (local)
+          d.state.consultations = d.state.consultations.map(
+            (c: Consultation) => (c.id === id ? local : c),
+          );
+      }
+    }
     setUser(d.user);
     setState((previous) => {
       const open =
@@ -426,7 +496,12 @@ export function App() {
       setPending(q);
     }
     try {
-      await command(c);
+      const result = await command(c);
+      if (c.type === "consultation.save")
+        await clearSavedGuest(
+          c.entityId!,
+          ((c.payload.photos || []) as Photo[]).map((p) => p.mediaId),
+        ).catch(() => {});
       if (c.type === "consultation.save" && vaultEnabled())
         await vaultWrite("draft:" + c.entityId, null);
       if (vaultEnabled()) {
@@ -442,7 +517,18 @@ export function App() {
         setState((current) => ({ ...current, opinions: d.opinions }));
         return true;
       }
-      await refresh(c.type.startsWith("opinion."));
+      if (Array.isArray(result.changes)) {
+        setState((current) => mergeStateChanges(current, result.changes));
+        if (vaultEnabled()) {
+          const cached = await vaultRead<CachedSession>("session");
+          if (cached)
+            await vaultWrite("session", {
+              ...cached,
+              state: mergeStateChanges(cached.state, result.changes),
+              savedAt: Date.now(),
+            });
+        }
+      } else await refresh(c.type.startsWith("opinion."));
       setNotice(
         health.mode === "local-development"
           ? "개발 서버에 저장했습니다."
@@ -493,27 +579,153 @@ export function App() {
       throw e;
     }
   };
+  const syncing = useRef(false);
+  const [syncingNow, setSyncingNow] = useState(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const drainPending = async () => {
+    if (syncing.current || !vaultEnabled() || !user || !navigator.onLine)
+      return false;
+    const owner = user.id;
+    const run = async () => {
+      syncing.current = true;
+      setSyncingNow(true);
+      try {
+        while (vaultOwner() === owner) {
+          const q = (await vaultRead<Command[]>("pending")) || [];
+          const c = q[0];
+          if (!c) return true;
+          try {
+            const result = await command(c, null);
+            if (c.type === "consultation.save")
+              await clearSavedGuest(
+                c.entityId!,
+                ((c.payload.photos || []) as Photo[]).map((p) => p.mediaId),
+              ).catch(() => {});
+            if (vaultOwner() !== owner) return false;
+            const remaining = await updatePending((items) =>
+              items.filter((x) => x.id !== c.id),
+            );
+            setPending(remaining);
+            if (Array.isArray(result.changes)) {
+              const changes = result.changes.filter(
+                (change: any) =>
+                  change.section !== "consultations" ||
+                  !remaining.some((item) => item.entityId === change.id),
+              );
+              setState((current) => mergeStateChanges(current, changes));
+              const cached = await vaultRead<CachedSession>("session");
+              if (cached)
+                await vaultWrite("session", {
+                  ...cached,
+                  state: mergeStateChanges(cached.state, changes),
+                  savedAt: Date.now(),
+                });
+            }
+          } catch (e: any) {
+            if (vaultOwner() !== owner) return false;
+            if (e.status && e.status < 500 && e.status !== 429) {
+              const all = (await vaultRead<Command[]>("pending")) || [];
+              const failed = all.filter(
+                (x) =>
+                  x.id === c.id || (c.entityId && x.entityId === c.entityId),
+              );
+              for (const item of failed)
+                await vaultWrite("conflict:" + item.id, item);
+              const ids = new Set(failed.map((x) => x.id));
+              setPending(
+                await updatePending((items) =>
+                  items.filter((x) => !ids.has(x.id)),
+                ),
+              );
+              setError(
+                "자동 전송을 멈췄습니다: " +
+                  e.message +
+                  " · 내 변경은 ‘복구 자료’에 보존했습니다. 서버 자료와 비교하세요.",
+              );
+            } else setNotice("기기에 저장됨 · 연결 복구 후 자동 전송합니다.");
+            return false;
+          }
+        }
+        return false;
+      } finally {
+        syncing.current = false;
+        setSyncingNow(false);
+      }
+    };
+    return navigator.locks
+      ? navigator.locks.request("codimate-sync-" + owner, run)
+      : run();
+  };
+  useEffect(() => {
+    if (!user || !pending.length) return;
+    const run = () => {
+      if (!workInFlight.current && document.visibilityState === "visible")
+        void drainPending();
+    };
+    const delay = setTimeout(run, 600),
+      timer = setInterval(run, 15000);
+    window.addEventListener("online", run);
+    document.addEventListener("visibilitychange", run);
+    return () => {
+      clearTimeout(delay);
+      clearInterval(timer);
+      window.removeEventListener("online", run);
+      document.removeEventListener("visibilitychange", run);
+    };
+  }, [user?.id, pending.length]);
   const send = (
     type: string,
     payload: Record<string, unknown>,
     entityId?: string,
     baseRev?: number,
   ) =>
-    withProgress("저장 중입니다", () =>
-      execute(makeCommand(type, payload, entityId, baseRev)),
-    );
+    withProgress("저장 중입니다", async () => {
+      const c = makeCommand(type, payload, entityId, baseRev);
+      const current = stateRef.current;
+      const target = current.consultations.find((x) => x.id === entityId);
+      if (
+        type === "consultation.save" &&
+        target?.status === "H" &&
+        vaultEnabled()
+      ) {
+        currentProgress()?.update({
+          title: "기기에 저장 중입니다",
+          detail: "사진과 상담 내용을 암호화하여 보관합니다.",
+        });
+        await preserveCommandPhotos(c);
+        const next = await applyCommand(current, user!, c);
+        const q = await updatePending((items) => [...items, c]);
+        setPending(q);
+        await vaultWrite("session", { state: next, user, savedAt: Date.now() });
+        await vaultWrite("draft:" + entityId, null);
+        stateRef.current = next;
+        setState(next);
+        setPending(q);
+        setNotice(
+          "기기에 저장했습니다 · 서버에 자동 전송합니다. 전송 전에는 다른 기기에 표시되지 않습니다.",
+        );
+        return true;
+      }
+      if (
+        vaultEnabled() &&
+        ((await vaultRead<Command[]>("pending")) || []).length
+      ) {
+        if (!(await drainPending()))
+          throw new Error(
+            "기기 저장 자료를 먼저 전송해야 합니다. 연결 상태와 복구 자료를 확인하세요.",
+          );
+      }
+      return execute(c);
+    });
   const sync = () =>
     work(async () => {
-      for (const c of pending) {
-        await command(c);
-        const q = ((await vaultRead<Command[]>("pending")) || []).filter(
-          (x) => x.id !== c.id,
+      if (vaultEnabled() && !(await drainPending()))
+        throw new Error(
+          "아직 전송하지 못한 자료가 있습니다. 연결 상태와 복구 자료를 확인하세요.",
         );
-        await vaultWrite("pending", q);
-        setPending(q);
-      }
       await api("/sync", { method: "POST" });
-      await refresh();
+      await refresh(true);
       setNotice("동기화를 완료했습니다.");
     });
   const patient = state.patients.find((p) => p.id === patientId),
@@ -584,7 +796,9 @@ export function App() {
       const timeout = setTimeout(() => controller?.abort(), 15000);
       try {
         await restoreLogin();
-        const d = await api("/state", { signal: controller.signal });
+        const d = await api("/state?view=workspace", {
+          signal: controller.signal,
+        });
         if (live) {
           restoreNeeded.current = false;
           setUser(d.user);
@@ -704,11 +918,14 @@ export function App() {
                 capture="environment"
                 multiple
                 onChange={(e) => {
-                  for (const file of Array.from(e.target.files || []))
-                    setGuestPhotos((p) => [
-                      ...p,
-                      { file, url: URL.createObjectURL(file) },
-                    ]);
+                  const files = Array.from(e.target.files || []);
+                  e.target.value = "";
+                  work(async () => {
+                    for (const file of files) {
+                      const photo = await saveGuestPhoto(file);
+                      setGuestPhotos((p) => [...p, photo]);
+                    }
+                  });
                 }}
               />
               <div className="thumbnails">
@@ -717,10 +934,25 @@ export function App() {
                 ))}
               </div>
               <p className="small">
-                로그인 후 환자 상담에 연결하세요. 이 화면의 미연결 사진은 현재
-                창에만 보관됩니다.
+                로그인 후 환자 상담에 연결하세요. 사진은 이 기기에 암호화
+                보관되어 앱을 다시 열어도 복구됩니다. 다른 공용 기기로 전달되지
+                않습니다.
               </p>
               <button onClick={() => setGuest(false)}>로그인하고 연결</button>
+              {!!guestPhotos.length && (
+                <button
+                  onClick={() => {
+                    if (window.confirm("이 기기의 미연결 사진을 삭제할까요?"))
+                      work(async () => {
+                        await removeGuestPhotos(guestPhotos.map((p) => p.id));
+                        guestPhotos.forEach((p) => URL.revokeObjectURL(p.url));
+                        setGuestPhotos([]);
+                      });
+                  }}
+                >
+                  미연결 사진 삭제
+                </button>
+              )}
             </>
           ) : (
             <form
@@ -1064,7 +1296,7 @@ export function App() {
             <span className={"sync " + (pending.length ? "warning" : "")}>
               <Cloud size={16} />
               {pending.length
-                ? `기기 저장 · ${pending.length}건 대기`
+                ? `기기 저장 · ${pending.length}건 ${syncingNow ? "전송 중" : "대기"}`
                 : health.mode === "local-development"
                   ? "개발 서버"
                   : health.driveConnected
@@ -1138,7 +1370,12 @@ export function App() {
               <Patients
                 state={state}
                 user={user}
-                select={setPatientId}
+                select={(id) =>
+                  work(async () => {
+                    if (navigator.onLine) await refresh();
+                    setPatientId(id);
+                  })
+                }
                 create={() => setModal("patient")}
                 send={(...args: Parameters<typeof send>) =>
                   work(() => send(...args))
@@ -1200,9 +1437,13 @@ export function App() {
                 setConsultId("");
               }}
               guestPhotos={guestPhotos}
-              clearGuest={() => {
-                guestPhotos.forEach((p) => URL.revokeObjectURL(p.url));
-                setGuestPhotos([]);
+              clearGuest={(ids) => {
+                guestPhotos
+                  .filter((p) => ids.includes(p.id))
+                  .forEach((p) => URL.revokeObjectURL(p.url));
+                setGuestPhotos((current) =>
+                  current.filter((p) => !ids.includes(p.id)),
+                );
               }}
             />
           )}
@@ -1225,7 +1466,7 @@ export function App() {
           )}
           {page === "stats" &&
             (allowed(user, "stats.read") ? (
-              <Stats state={state} work={work} user={user} send={send} />
+              <Statistics state={state} work={work} user={user} send={send} />
             ) : (
               <Empty>통계 열람 권한이 필요합니다.</Empty>
             ))}
@@ -1404,42 +1645,103 @@ function Patients({
       return;
     await send("patient.archive", { archived: !p.archived }, p.id, p.rev);
   };
-  const ps = state.patients
-    .filter(
-      (p) =>
-        !p.mergedInto &&
-        !!p.archived === archived &&
-        (!duplicateOnly || candidates(p).length > 0),
-    )
-    .map((p) => ({
-      p,
-      m: metrics(state, p.id),
-      g: gradeFor(state, p),
-      cs: state.consultations.filter((c) => c.patientId === p.id),
-    }))
-    .filter(
-      ({ p, g, m, cs }) =>
-        [p.name, p.phone, p.dob, p.id].some((x) =>
-          x.toLowerCase().includes(search.toLowerCase()),
-        ) &&
-        (!owner ||
-          p.ownerId === owner ||
-          cs.some((c) => c.ownerId === owner)) &&
-        (!consultStatus ||
-          cs.some((c) => c.status === consultStatus && !c.cancelled)) &&
-        (!since || cs.some((c) => c.createdAt.slice(0, 10) >= since)) &&
-        (!grade || g.id === grade) &&
-        (!unpaid || m.outstanding > 0),
-    )
-    .sort((a, b) =>
-      sort === "revenue"
-        ? b.m.revenue - a.m.revenue
-        : sort === "name"
-          ? a.p.name.localeCompare(b.p.name)
-          : (b.cs.at(-1)?.createdAt || b.p.createdAt).localeCompare(
-              a.cs.at(-1)?.createdAt || a.p.createdAt,
-            ),
+  const [listPage, setListPage] = useState(0),
+    [remoteList, setRemoteList] = useState<ReturnType<
+      typeof searchPatients
+    > | null>(null),
+    [listLoading, setListLoading] = useState(false),
+    [listError, setListError] = useState("");
+  useEffect(
+    () => setListPage(0),
+    [
+      search,
+      grade,
+      sort,
+      unpaid,
+      owner,
+      consultStatus,
+      since,
+      archived,
+      duplicateOnly,
+    ],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    setListLoading(true);
+    setListError("");
+    setRemoteList(null);
+    const timer = setTimeout(
+      () =>
+        api(
+          "/patients/search?" +
+            new URLSearchParams({
+              search,
+              grade,
+              sort,
+              unpaid: String(unpaid),
+              owner,
+              consultStatus,
+              since,
+              archived: String(archived),
+              duplicateOnly: String(duplicateOnly),
+              page: String(listPage),
+            }),
+          { signal: controller.signal },
+        )
+          .then(setRemoteList)
+          .catch((e) => {
+            if (e.name !== "AbortError")
+              setListError(
+                "서버 목록을 불러오지 못해 기기에 있는 자료를 표시합니다.",
+              );
+          })
+          .finally(() => {
+            if (!controller.signal.aborted) setListLoading(false);
+          }),
+      200,
     );
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    search,
+    grade,
+    sort,
+    unpaid,
+    owner,
+    consultStatus,
+    since,
+    archived,
+    duplicateOnly,
+    listPage,
+    state.patients,
+    state.consultations,
+    state.ledger,
+  ]);
+  const localIndex = useMemo(
+    () => patientIndex(state),
+    [state.patients, state.consultations, state.ledger, state.policies],
+  );
+  const listResult =
+    remoteList ||
+    searchPatients(
+      localIndex,
+      {
+        search,
+        grade,
+        sort,
+        unpaid,
+        owner,
+        consultStatus,
+        since,
+        archived,
+        duplicateOnly,
+        page: listPage,
+      },
+      allowed(user, "money.read"),
+    );
+  const ps = listResult.rows;
   return (
     <>
       <Title
@@ -1466,11 +1768,7 @@ function Patients({
           label="기여매출"
           value={
             allowed(user, "money.read")
-              ? money(
-                  state.patients
-                    .filter((p) => !p.mergedInto)
-                    .reduce((a, p) => a + metrics(state, p.id).revenue, 0),
-                )
+              ? money(localIndex.reduce((a, row) => a + row.m.revenue, 0))
               : "권한 필요"
           }
           detail="실수납 − 실제 환불"
@@ -1564,6 +1862,32 @@ function Patients({
             미납
           </label>
         </div>
+        <div className="patient-pagination" aria-label="환자 목록 페이지">
+          <span role="status">
+            {listLoading
+              ? "목록 확인 중…"
+              : `검색 ${listResult.total}명 · ${listResult.page + 1}/${Math.max(1, Math.ceil(listResult.total / 30))}페이지`}
+          </span>
+          <button
+            disabled={listResult.page === 0 || listLoading}
+            onClick={() => setListPage(listResult.page - 1)}
+          >
+            이전
+          </button>
+          <button
+            disabled={
+              (listResult.page + 1) * 30 >= listResult.total || listLoading
+            }
+            onClick={() => setListPage(listResult.page + 1)}
+          >
+            다음
+          </button>
+        </div>
+        {listError && (
+          <p className="small" role="status">
+            {listError}
+          </p>
+        )}
         <div className="table-scroll">
           <table>
             <thead>
@@ -1850,6 +2174,7 @@ function PatientForm({
     dob: patient?.dob || "",
     phone: patient?.phone || "",
     address: patient?.address || "",
+    acquisitionSource: patient?.acquisitionSource || "",
   });
   const found = duplicates(state, data).filter((p) => p.id !== patient?.id);
   return (
@@ -1889,6 +2214,28 @@ function PatientForm({
             )}
           </Field>
         ))}
+        <Field label="유입경로 (선택)">
+          <select
+            value={data.acquisitionSource}
+            onChange={(e) =>
+              setData({ ...data, acquisitionSource: e.target.value })
+            }
+          >
+            <option value="">미입력</option>
+            {[
+              "검색",
+              "홈페이지",
+              "SNS",
+              "지인 소개",
+              "병원 인근",
+              "기존 환자",
+              "광고",
+              "기타",
+            ].map((v) => (
+              <option key={v}>{v}</option>
+            ))}
+          </select>
+        </Field>
         <Field label="성별">
           <select
             value={data.sex}
@@ -2236,6 +2583,30 @@ function PatientDetail({
                 <article className="note" key={n.id}>
                   <b>{n.important ? "★ 중요 메모" : "메모"}</b>
                   <p>{n.text}</p>
+                  {!!n.versions?.length && (
+                    <details>
+                      <summary>이전 메모 {n.versions.length}개</summary>
+                      <div className="note-version-list">
+                        {n.versions
+                          .slice()
+                          .reverse()
+                          .map((v) => (
+                            <article key={v.rev}>
+                              <b>
+                                버전 {v.rev} {v.important ? "· 중요" : ""}
+                              </b>
+                              <small>
+                                {new Date(v.updatedAt).toLocaleString("ko-KR")}{" "}
+                                ·{" "}
+                                {s.users.find((u) => u.id === v.actorId)
+                                  ?.name || "이전 직원"}
+                              </small>
+                              <p>{v.text}</p>
+                            </article>
+                          ))}
+                      </div>
+                    </details>
+                  )}
                   <small>
                     {s.users.find((u) => u.id === n.authorId)?.name} ·{" "}
                     {n.updatedAt.slice(0, 10)}
@@ -2437,86 +2808,6 @@ function PatientDetail({
     </>
   );
 }
-function LedgerForm({
-  state: s,
-  patient: p,
-  send,
-}: {
-  state: State;
-  patient: Patient;
-  send: (...args: any[]) => any;
-}) {
-  const [kind, setKind] = useState("receipt");
-  return (
-    <form
-      className="card"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const d = Object.fromEntries(new FormData(e.currentTarget));
-        send("ledger.create", { ...d, amount: Number(d.amount) });
-      }}
-    >
-      <h3>금액 기록</h3>
-      <Field label="구분">
-        <select
-          name="kind"
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
-        >
-          <option value="receipt">수납</option>
-          <option value="refund">환불</option>
-        </select>
-      </Field>
-      <Field label="연결 상담">
-        <select name="consultationId" required>
-          {s.consultations
-            .filter((c) => c.patientId === p.id && c.status === "P")
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.createdAt.slice(0, 10)} · {c.category} ·{" "}
-                {money(c.quote.total)}
-                {c.cancelled ? " (취소)" : ""}
-              </option>
-            ))}
-        </select>
-      </Field>
-      {kind === "refund" && (
-        <Field label="원수납">
-          <select name="originalId" required>
-            {activeLedger(s)
-              .filter((l) => l.patientId === p.id && l.kind === "receipt")
-              .map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.date} · {money(l.amount)}
-                </option>
-              ))}
-          </select>
-        </Field>
-      )}
-      <div className="form-grid">
-        <Field label="금액">
-          <input name="amount" type="number" min={1} required />
-        </Field>
-        <Field label="처리일">
-          <input name="date" type="date" defaultValue={date()} required />
-        </Field>
-        <Field label="방법">
-          <select name="method">
-            <option>카드</option>
-            <option>현금</option>
-            <option>계좌이체</option>
-            <option>기타</option>
-          </select>
-        </Field>
-        <Field label="메모·사유">
-          <input name="memo" required={kind === "refund"} />
-        </Field>
-      </div>
-      <button className="primary">기록 확정</button>
-      <p className="small">온라인 확인 후 기여매출·미수금·등급에 반영됩니다.</p>
-    </form>
-  );
-}
 function ConsultationView({
   consult: c,
   state: s,
@@ -2537,9 +2828,14 @@ function ConsultationView({
   send: (...args: any[]) => Promise<any>;
   work: (f: () => Promise<any>) => any;
   back: () => void;
-  guestPhotos: { url: string; file: File }[];
-  clearGuest: () => void;
+  guestPhotos: GuestPhoto[];
+  clearGuest: (ids: string[]) => void;
 }) {
+  const [quoteThemeId, setQuoteThemeId] = useState<string>(
+    () => documentTheme().id,
+  );
+  const quoteTheme =
+    quoteTemplates.find((t) => t.id === quoteThemeId) || quoteTemplates[0];
   const [draft, setDraft] = useState(c),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
@@ -2552,6 +2848,9 @@ function ConsultationView({
     [template, setTemplate] = useState(""),
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
+  useEffect(() => {
+    setDraft((d) => (d.rev === c.rev ? { ...d, updatedAt: c.updatedAt } : d));
+  }, [c.updatedAt, c.rev]);
   const [book, setBook] = useState<CatalogBook>(c.category);
   const pickerRef = useRef<HTMLDivElement>(null);
   const [viewerHeight, setViewerHeight] = useState<number | null>(() => {
@@ -2679,7 +2978,9 @@ function ConsultationView({
               : "서버에 새 버전이 있습니다. 기기 초안을 열어 비교할까요? 저장 시 충돌 검사를 진행합니다.",
           )
         )
-          setDraft({ ...saved, photos: c.photos });
+          setDraft(
+            saved.rev === c.rev ? { ...saved, updatedAt: c.updatedAt } : saved,
+          );
         setDraftReady(true);
       })
       .catch(() => setDraftReady(true));
@@ -2691,9 +2992,7 @@ function ConsultationView({
     if (!draftReady || !vaultEnabled()) return;
     setLocalSaved(false);
     const t = setTimeout(() => {
-      vaultWrite("draft:" + c.id, { ...draft, photos: c.photos }).then(() =>
-        setLocalSaved(true),
-      );
+      vaultWrite("draft:" + c.id, draft).then(() => setLocalSaved(true));
     }, 350);
     return () => clearTimeout(t);
   }, [draft, draftReady]);
@@ -2746,12 +3045,16 @@ function ConsultationView({
     try {
       for (const file of files) {
         const photo = await stagePhoto(file, c.id, user.id);
+        const guest = guestPhotos.find((p) => p.file === file);
+        if (guest) {
+          await markGuestLinked(guest.id, c.id, photo.mediaId);
+          clearGuest([guest.id]);
+        }
         setDraft((current) => ({
           ...current,
           photos: [...current.photos, photo],
         }));
       }
-      clearGuest();
     } catch (e) {
       setPhotoError(e instanceof Error ? e.message : "사진 추가 실패");
     } finally {
@@ -3318,7 +3621,7 @@ function ConsultationView({
                               book,
                               name: p.name,
                               description: p.description,
-                              composition: p.composition,
+                              composition: productComposition(p),
                               label: o.label,
                               quantity: 1,
                               unit: o.unit,
@@ -3459,6 +3762,7 @@ function ConsultationView({
                   </div>
                   <Field label="상담 메모">
                     <textarea
+                      aria-label="상담 메모"
                       disabled={readonly}
                       value={draft.memo}
                       onChange={(e) =>
@@ -3808,7 +4112,17 @@ function ConsultationView({
       )}
       {tab === "quote" && (
         <div className="detail-grid">
-          <div className="card quote-paper">
+          <div
+            className="card quote-paper"
+            style={{
+              borderTop: `6px solid ${quoteTheme.ink}`,
+              background: quoteTheme.paper,
+            }}
+          >
+            <QuoteTemplatePicker
+              value={quoteThemeId}
+              onChange={setQuoteThemeId}
+            />
             <p className="eyebrow">GRAND CLINIC</p>
             <h2>
               {c.kind === "interim" ? "중간상담 결과" : "시술 상담 견적서"}
@@ -4148,7 +4462,7 @@ async function compressPhoto(file: File) {
   }
 }
 function CatalogView({
-  state: s,
+  state,
   user,
   send,
   work,
@@ -4158,7 +4472,18 @@ function CatalogView({
   send: (...args: any[]) => Promise<any>;
   work: (f: () => Promise<any>) => any;
 }) {
+  const [loadedCatalogs, setLoadedCatalogs] = useState<Record<string, Catalog>>(
+    {},
+  );
+  const [catalogLoadError, setCatalogLoadError] = useState("");
+  const s = {
+    ...state,
+    catalogs: state.catalogs.map((c) =>
+      loadedCatalogs[c.id]?.rev === c.rev ? loadedCatalogs[c.id] : c,
+    ),
+  };
   const can = allowed(user, "catalog.edit");
+  const [publishReview, setPublishReview] = useState(false);
   const [folderDraft, putFolderDraft] = useState<Catalog>();
   const [editPaused, setEditPaused] = useState(false);
   const folderBasePublished = useRef("");
@@ -4252,21 +4577,30 @@ function CatalogView({
       )
       .at(-1) ||
     latest;
+  useEffect(() => {
+    if (!current?.workspaceOnly) return;
+    let active = true;
+    setCatalogLoadError("");
+    api("/catalogs/" + encodeURIComponent(current.id))
+      .then(({ catalog }) => {
+        if (active) {
+          setLoadedCatalogs((v) => ({ ...v, [catalog.id]: catalog }));
+          if (draft?.id === catalog.id) setDraft(catalog);
+        }
+      })
+      .catch((e) => {
+        if (active) setCatalogLoadError(e.message);
+      });
+    return () => {
+      active = false;
+    };
+  }, [current?.id, current?.rev, current?.workspaceOnly]);
   const savedCurrent = current && s.catalogs.find((c) => c.id === current.id);
   const currentDirty = !!current && catalogHasChanges(current, savedCurrent);
   const publishCurrent = async () => {
     if (!current || current.status !== "draft") return;
     if (currentDirty) throw new Error("변경 내용을 초안 저장한 뒤 게시하세요.");
-    if (
-      window.confirm(
-        `상담 판매 활성 상품 ${current.products.filter((p) => p.active).length}개를 상담에 반영합니다. 게시할까요?`,
-      )
-    )
-      if (await send("catalog.publish", {}, current.id, current.rev)) {
-        setDraft(undefined);
-        setBulkIds([]);
-        setEditPaused(false);
-      }
+    setPublishReview(true);
   };
   const products =
     current?.products.filter(
@@ -4413,6 +4747,27 @@ function CatalogView({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   });
+  if (current?.workspaceOnly)
+    return (
+      <div className="card" role="status">
+        {catalogLoadError || "단가표 편집 원본을 불러오고 있습니다…"}
+        {catalogLoadError && (
+          <button
+            onClick={() =>
+              work(async () => {
+                const { catalog } = await api(
+                  "/catalogs/" + encodeURIComponent(current.id),
+                );
+                setLoadedCatalogs((v) => ({ ...v, [catalog.id]: catalog }));
+                if (draft?.id === catalog.id) setDraft(catalog);
+              })
+            }
+          >
+            다시 불러오기
+          </button>
+        )}
+      </div>
+    );
   return (
     <div data-catalog-editor>
       <Title
@@ -5270,6 +5625,11 @@ function CatalogView({
                 }
               />
             </Field>
+            <OfferingEditor
+              product={product}
+              disabled={!editable}
+              onChange={change}
+            />
             <Field label="패키지·회차별 구성">
               <textarea
                 disabled={!editable}
@@ -5558,6 +5918,22 @@ function CatalogView({
           </div>
         </Modal>
       )}
+      {publishReview && current && (
+        <CatalogPublishReview
+          catalog={current}
+          previous={latest}
+          close={() => setPublishReview(false)}
+          publish={async () => {
+            if (await send("catalog.publish", {}, current.id, current.rev)) {
+              setDraft(undefined);
+              setBulkIds([]);
+              setEditPaused(false);
+              return true;
+            }
+            return false;
+          }}
+        />
+      )}
       {!!deletingProducts.length && current && (
         <CatalogDeleteConfirm
           title="상품 삭제 확인"
@@ -5585,137 +5961,6 @@ function CatalogView({
         </CatalogDeleteConfirm>
       )}
     </div>
-  );
-}
-function Stats({
-  state: s,
-  work,
-  user,
-  send,
-}: {
-  state: State;
-  user: User;
-  send: (...args: any[]) => Promise<any>;
-  work: (fn: () => Promise<any>) => any;
-}) {
-  const valid = s.consultations.filter(
-      (c) => !c.cancelled && c.kind !== "interim",
-    ),
-    passed = valid.filter((c) => c.status === "P"),
-    failed = valid.filter((c) => c.status === "F");
-  const sums = s.patients
-    .filter((p) => !p.mergedInto)
-    .reduce(
-      (a, p) => {
-        const m = metrics(s, p.id);
-        return {
-          revenue: a.revenue + m.revenue,
-          outstanding: a.outstanding + m.outstanding,
-          contract: a.contract + m.contract,
-        };
-      },
-      { revenue: 0, outstanding: 0, contract: 0 },
-    );
-  return (
-    <>
-      <Title
-        title="상담·기여매출 통계"
-        description="계약과 실제 수납을 구분해 성과를 확인하세요."
-        action={
-          <button
-            disabled={!allowed(user, "export") || !allowed(user, "stats.read")}
-            onClick={() =>
-              work(async () => {
-                if (
-                  !(await send("audit.export", { format: "statistics-xlsx" }))
-                )
-                  return;
-                return downloadWorkbook(
-                  await statisticsWorkbook(s),
-                  "코디메이트_통계_" + date() + ".xlsx",
-                );
-              })
-            }
-          >
-            <FileSpreadsheet size={18} />
-            통계 Excel
-          </button>
-        }
-      />
-      <div className="summary-grid four">
-        <Summary
-          label="성공률"
-          value={`${passed.length + failed.length ? Math.round((passed.length / (passed.length + failed.length)) * 100) : 0}%`}
-          detail={`성공 ${passed.length} / 실패 ${failed.length} · 보류 제외`}
-        />
-        <Summary
-          label="유효 계약"
-          value={money(sums.contract)}
-          detail="취소 제외"
-        />
-        <Summary
-          label="기여매출"
-          value={money(sums.revenue)}
-          detail="수납 − 환불"
-        />
-        <Summary
-          label="미수금"
-          value={money(sums.outstanding)}
-          detail="상담별 미수 잔액"
-        />
-      </div>
-      <div className="detail-grid">
-        <div className="card">
-          <h3>직원별 상담 성과</h3>
-          {s.users.map((u) => {
-            const cs = valid.filter((c) => c.ownerId === u.id);
-            return (
-              <div className="list-row" key={u.id}>
-                <b>{u.name}</b>
-                <span>
-                  상담 {cs.length} · 성공{" "}
-                  {cs.filter((c) => c.status === "P").length}
-                </span>
-                <span>
-                  {money(
-                    cs
-                      .filter((c) => c.status === "P")
-                      .reduce((a, c) => a + c.quote.total, 0),
-                  )}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="card">
-          <h3>환자 등급별 현황</h3>
-          {[
-            ...new Set(
-              s.patients
-                .filter((p) => !p.mergedInto)
-                .map((p) => gradeFor(s, p).name),
-            ),
-          ].map((name) => (
-            <div className="list-row" key={name}>
-              <b>{name}</b>
-              <span>
-                {
-                  s.patients.filter(
-                    (p) => !p.mergedInto && gradeFor(s, p).name === name,
-                  ).length
-                }
-                명
-              </span>
-            </div>
-          ))}
-          <h3>방문 상태</h3>
-          <p>
-            노쇼 {valid.filter((c) => c.attendance === "노쇼").length}건 · 예약{" "}
-            {valid.filter((c) => c.attendance === "예약").length}건
-          </p>
-        </div>
-      </div>
-    </>
   );
 }
 function SettingsView({
@@ -5760,6 +6005,7 @@ function SettingsView({
           ["consent", "동의서 양식"],
           ["connection", isAdministrator(user) ? "연결·복구" : "백업·복구"],
           ["updates", "앱 업데이트"],
+          ["audit", "조회 기록·관리자 인계"],
         ]
           .filter(
             ([k]) =>
@@ -5775,6 +6021,14 @@ function SettingsView({
             </button>
           ))}
       </div>
+      {activeTab === "audit" && isAdministrator(user) && (
+        <AdministrationReview
+          state={s}
+          user={user}
+          work={work}
+          refresh={refresh}
+        />
+      )}
       {activeTab === "updates" && (
         <form
           className="card"
@@ -6237,25 +6491,7 @@ function SettingsView({
               OneDrive에 완료된 기록을 다시 읽어 검색·집계 인덱스를
               재구축합니다.
             </p>
-            <button
-              onClick={() =>
-                work(async () => {
-                  if (
-                    window.confirm(
-                      "현재 서버 인덱스와 계정을 OneDrive 원본으로 재구축할까요? 완료 후 원본에 보관된 계정으로 다시 로그인해야 합니다.",
-                    )
-                  ) {
-                    const result = await api("/restore", { method: "POST" });
-                    if (result.requiresLogin) {
-                      lockVault();
-                      window.location.reload();
-                    } else await refresh();
-                  }
-                })
-              }
-            >
-              OneDrive 원본에서 재구축
-            </button>
+            <RestoreJobPanel />
           </div>
           <div className="card">
             <h3>암호화 기기 보관</h3>

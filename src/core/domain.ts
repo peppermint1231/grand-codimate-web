@@ -1,3 +1,4 @@
+import { offeringSchema, productComposition } from "./offerings";
 import {
   QUOTE_CONSENT_TEXT,
   QUOTE_CONSENT_VERSION,
@@ -25,7 +26,7 @@ import {
 } from "./eventCatalog";
 import { isAdministrator, canUseExecutiveFeatures } from "./model";
 import { catalogChanges } from "./catalogHistory";
-import { folderError } from "./catalogFolders";
+import { folderError, productFolderPaths } from "./catalogFolders";
 import { safeName } from "./storagePaths";
 import { z } from "zod";
 import {
@@ -66,6 +67,7 @@ const discountSchema = z.object({
   value: z.number().min(0).max(1_000_000_000),
 });
 const patientSchema = z.object({
+  acquisitionSource: z.string().trim().max(80).optional(),
   name: z.string().trim().min(1).max(80),
   sex: z.enum(["M", "F", "U"]),
   dob: z
@@ -209,7 +211,7 @@ export function renewalQuote(
       tax: option.tax,
       unit: option.unit,
       description: product.description,
-      composition: product.composition,
+      composition: productComposition(product),
       discount: { kind: "amount" as const, value: 0 },
     };
   });
@@ -220,6 +222,42 @@ export function activeLedger(s: State) {
     s.ledger.filter((l) => l.kind === "reversal").map((l) => l.originalId),
   );
   return s.ledger.filter((l) => l.kind !== "reversal" && !reversed.has(l.id));
+}
+export function ledgerAvailable(
+  s: State,
+  consultationId: string,
+  kind: "receipt" | "refund",
+  originalId = "",
+) {
+  const c = s.consultations.find((x) => x.id === consultationId);
+  if (!c || c.status !== "P") return 0;
+  const rows = activeLedger(s).filter(
+    (x) => x.consultationId === consultationId,
+  );
+  if (kind === "refund") {
+    const original = rows.find(
+      (x) => x.id === originalId && x.kind === "receipt",
+    );
+    return original
+      ? Math.max(
+          0,
+          original.amount -
+            rows
+              .filter((x) => x.kind === "refund" && x.originalId === originalId)
+              .reduce((n, x) => n + x.amount, 0),
+        )
+      : 0;
+  }
+  return c.cancelled
+    ? 0
+    : Math.max(
+        0,
+        c.quote.total -
+          rows.reduce(
+            (n, x) => n + (x.kind === "receipt" ? x.amount : -x.amount),
+            0,
+          ),
+      );
 }
 export function metrics(s: State, patientId: string) {
   const entries = activeLedger(s).filter((l) => l.patientId === patientId);
@@ -419,6 +457,7 @@ export function validateCatalog(c: Catalog, posting = false) {
   ensure(!error, error || "폴더를 확인하세요");
   const ids = new Set<string>();
   for (const p of c.products) {
+    if (p.offering) offeringSchema.parse(p.offering);
     ensure(
       !p.careCategory || ["미용", "보험"].includes(p.careCategory),
       "상담 구분을 확인하세요",
@@ -556,6 +595,11 @@ export async function applyCommand(
     "변경 내용을 확인하세요",
   );
   const p = cmd.payload;
+  if (
+    cmd.type.startsWith("catalog.") &&
+    (p.catalog as Catalog | undefined)?.workspaceOnly
+  )
+    throw new DomainError("단가표 편집 원본을 다시 불러온 뒤 저장하세요", 409);
   const id = cmd.entityId || cmd.id;
   // Historical catalogues and revision snapshots are immutable. Copy only the
   // catalogue this command can modify instead of duplicating the entire history.
@@ -741,6 +785,17 @@ export async function applyCommand(
           403,
         );
         ensure(x.patientId === d.patientId, "환자 연결을 변경할 수 없습니다");
+        x.versions = [
+          ...(x.versions || []),
+          {
+            rev: x.rev,
+            text: x.text,
+            important: x.important,
+            updatedAt: x.updatedAt,
+            actorId: x.editedBy || x.authorId,
+          },
+        ];
+        x.editedBy = user.id;
         Object.assign(x, d);
         touch(x);
       } else {
@@ -954,8 +1009,11 @@ export async function applyCommand(
           catalogVersion: lineCatalog!.version,
           book: catalogBook(lineCatalog!),
           name: product.name,
+          categorySnapshot:
+            productFolderPaths(lineCatalog!, product)[0]?.[0]?.name ||
+            product.category,
           description: product.description,
-          composition: product.composition,
+          composition: productComposition(product),
           label: o.label,
           unit: o.unit,
           price: o.price,
@@ -1244,6 +1302,13 @@ export async function applyCommand(
           ensure(d.memo.trim(), "정정 사유를 입력하세요");
         }
       }
+      if (p.fullAmount === true && kind !== "reversal")
+        ensure(
+          d.amount ===
+            ledgerAvailable(s, c.id, kind, String(p.originalId || "")),
+          "잔액이 변경되었습니다. 최신 잔액을 확인한 뒤 다시 기록하세요",
+          409,
+        );
       s.ledger.push({
         ...base,
         ...d,
@@ -1551,6 +1616,7 @@ export async function applyCommand(
           "quote-jpg",
           "catalog-xlsx",
           "statistics-xlsx",
+          "statistics-prompt",
           "catalog-csv",
         ])
         .parse(p.format);
@@ -1568,7 +1634,8 @@ export async function applyCommand(
       if (format === "consultation-pdf") need("money.read");
       if (format === "catalog-xlsx" || format === "catalog-csv")
         need("catalog.edit");
-      if (format === "statistics-xlsx") need("stats.read");
+      if (format === "statistics-xlsx" || format === "statistics-prompt")
+        need("stats.read");
       text = "자료 내보내기: " + format;
       break;
     }

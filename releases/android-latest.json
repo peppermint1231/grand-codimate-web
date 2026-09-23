@@ -1,7 +1,7 @@
 {
-  "version": "0.10.12",
-  "versionCode": 38,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.10.12.apk",
-  "sha256": "e569fa8fdd5b3ef4d7740f3d876e4dc05ef0a90464748f2d95defb0e4d25a649",
-  "notes": "저장·업로드 진행 안내창과 실제 전송률, 서버 저장/화면 갱신 단계 표시, 시술 선택의 단가표 탭·검색·분류 한 줄 배치 및 스크롤 고정 · 팝업 저장 후 스크롤 잠금 수정"
+  "version": "0.11.0",
+  "versionCode": 39,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.11.0.apk",
+  "sha256": "ab80aaabdaf5160a0e091dab123122b0d766a8c22517bb09f7f418d750dcc651",
+  "notes": "견적 디자인 2종, 보류 상담 기기 저장 후 자동 전송, 직원·환자 상세 통계와 Excel, 인센티브 설정·해석 프롬프트, 전액 수납·환불, 원본 조회 최적화와 복구 개선."
 }

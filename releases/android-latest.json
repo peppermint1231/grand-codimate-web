@@ -1,7 +1,7 @@
 {
-  "version": "0.11.0",
-  "versionCode": 39,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.11.0.apk",
-  "sha256": "ab80aaabdaf5160a0e091dab123122b0d766a8c22517bb09f7f418d750dcc651",
-  "notes": "견적 디자인 2종, 보류 상담 기기 저장 후 자동 전송, 직원·환자 상세 통계와 Excel, 인센티브 설정·해석 프롬프트, 전액 수납·환불, 원본 조회 최적화와 복구 개선."
+  "version": "0.11.1",
+  "versionCode": 40,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.11.1.apk",
+  "sha256": "b7ecda5311463b36617398de09010cb8ef6148091c832dbea2f9170615937e07",
+  "notes": "견적서 PDF·JPG 저장 직후 출력 오류, 글꼴 재시도, 페이지별 저장 및 A4 인쇄 정리 개선."
 }

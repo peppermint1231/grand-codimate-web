@@ -579,16 +579,15 @@ export function App() {
       throw e;
     }
   };
-  const syncing = useRef(false);
+  const syncing = useRef<Promise<boolean> | null>(null);
   const [syncingNow, setSyncingNow] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
   const drainPending = async () => {
-    if (syncing.current || !vaultEnabled() || !user || !navigator.onLine)
-      return false;
+    if (syncing.current) return syncing.current;
+    if (!vaultEnabled() || !user || !navigator.onLine) return false;
     const owner = user.id;
     const run = async () => {
-      syncing.current = true;
       setSyncingNow(true);
       try {
         while (vaultOwner() === owner) {
@@ -649,13 +648,20 @@ export function App() {
         }
         return false;
       } finally {
-        syncing.current = false;
         setSyncingNow(false);
       }
     };
-    return navigator.locks
-      ? navigator.locks.request("codimate-sync-" + owner, run)
-      : run();
+    const task = Promise.resolve(
+      navigator.locks
+        ? navigator.locks.request("codimate-sync-" + owner, run)
+        : run(),
+    );
+    syncing.current = task;
+    try {
+      return await task;
+    } finally {
+      if (syncing.current === task) syncing.current = null;
+    }
   };
   useEffect(() => {
     if (!user || !pending.length) return;
@@ -711,6 +717,10 @@ export function App() {
         vaultEnabled() &&
         ((await vaultRead<Command[]>("pending")) || []).length
       ) {
+        currentProgress()?.update({
+          title: "상담 저장을 마친 뒤 계속합니다",
+          detail: "기기에 보관한 변경 내용을 서버에 전송하고 있습니다.",
+        });
         if (!(await drainPending()))
           throw new Error(
             "기기 저장 자료를 먼저 전송해야 합니다. 연결 상태와 복구 자료를 확인하세요.",
@@ -2869,6 +2879,11 @@ function ConsultationView({
   const [cartOpen, setCartOpen] = useState(false);
   const [exportFiles, setExportFiles] = useState<ExportDocument[]>([]);
   const [exportMessage, setExportMessage] = useState("");
+  const exportContent = JSON.stringify({ draft, theme: quoteThemeId });
+  useEffect(() => {
+    setExportFiles([]);
+    setExportMessage("");
+  }, [exportContent]);
   const saveExportFiles = async (files: ExportDocument[]) => {
     const result = await saveDocuments(files);
     setExportMessage(
@@ -4151,7 +4166,14 @@ function ConsultationView({
                 }
                 onClick={() =>
                   work(async () => {
-                    await send("audit.export", { format: "consultation-pdf" });
+                    if (
+                      !(await send("audit.export", {
+                        format: "consultation-pdf",
+                      }))
+                    )
+                      throw new Error(
+                        "서버에 내보내기 기록을 저장하지 못했습니다. 연결 후 다시 시도해주세요.",
+                      );
                     await prepareExport([
                       { blob: await pdf(), name: documentName(draft, author) },
                     ]);

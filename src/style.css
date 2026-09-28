@@ -1279,6 +1279,7 @@ details p {
   }
 }
 @media print {
+  @page { size: A4 portrait; margin: 10mm; }
   .detail-grid > .card:not(.quote-paper) {
     display: none !important;
   }
@@ -4775,6 +4776,8 @@ html.custom-pull-refresh {
   body:has(> .patient-quote-print-root) {
     overflow: visible !important;
     height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
   .patient-quote-print-root {
     display: block !important;
@@ -4782,8 +4785,10 @@ html.custom-pull-refresh {
   .patient-quote-print-root > img {
     display: block;
     width: 100%;
-    max-height: 277mm;
+    height: 268.75mm;
+    max-width: 190mm;
     object-fit: contain;
+    break-inside: avoid;
     break-after: page;
   }
   .patient-quote-print-root > img:last-child {

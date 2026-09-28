@@ -1,6 +1,6 @@
 import { withProgress } from "../lib/operationProgress";
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
+import { createPortal, flushSync } from "react-dom";
 import QRCode from "qrcode";
 import {
   allowed,
@@ -20,6 +20,7 @@ import { native, printPage } from "../lib/native";
 import { SignaturePad } from "./PhotoEditor";
 import { PhotoModal } from "./PhotoBoard";
 import { useAppBack } from "../lib/navigation";
+import { documentTheme } from "../core/quoteTemplate";
 type Share = { id: string; url?: string; expires: number; count: number };
 export function PatientQuote({
   consultation: c,
@@ -48,6 +49,8 @@ export function PatientQuote({
     [qr, setQr] = useState(""),
     [currentShare, setCurrentShare] = useState<Share>();
   const [printUrls, setPrintUrls] = useState<string[]>([]);
+  const inFlight = useRef(false);
+  const theme = documentTheme().id;
   const permitted = allowed(user, "export") && allowed(user, "money.read");
   const content = JSON.stringify({
     id: c.id,
@@ -66,6 +69,16 @@ export function PatientQuote({
     setAgreed(false);
     setSignature("");
   }, [content]);
+  useEffect(() => {
+    setFiles([]);
+    setMessage("");
+  }, [content, theme]);
+  useEffect(() => {
+    const finished = () => setPrintUrls([]);
+    window.addEventListener("afterprint", finished);
+    if (!open) finished();
+    return () => window.removeEventListener("afterprint", finished);
+  }, [open]);
   const consentKey = consents
     .filter((x) => x.consultationId === c.id)
     .map((x) => x.id + ":" + x.contentHash)
@@ -90,6 +103,8 @@ export function PatientQuote({
     [printUrls],
   );
   const run = async (fn: () => Promise<unknown>) => {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -97,6 +112,7 @@ export function PatientQuote({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   };
@@ -137,22 +153,24 @@ export function PatientQuote({
   const print = async () => {
     const output = await generate();
     const urls = output.map((f) => URL.createObjectURL(f.blob));
-    await Promise.all(
-      urls.map(
-        (src) =>
-          new Promise<void>((resolve, reject) => {
-            const image = new Image();
-            image.onload = () => resolve();
-            image.onerror = () => reject(new Error("인쇄 이미지 준비 실패"));
-            image.src = src;
-          }),
-      ),
-    );
-    setPrintUrls(urls);
-    await new Promise<void>((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => r())),
-    );
-    await printPage();
+    try {
+      // Decode the actual print elements, not separate off-screen Image objects.
+      flushSync(() => setPrintUrls(urls));
+      await Promise.all(
+        Array.from(
+          document.querySelectorAll<HTMLImageElement>(
+            ".patient-quote-print-root img",
+          ),
+        ).map((image) => image.decode()),
+      );
+      await printPage();
+      // Android resolves when its print adapter finishes. Browsers use afterprint
+      // because some return from window.print before the print dialog closes.
+      if (native) setPrintUrls([]);
+    } catch (error) {
+      setPrintUrls([]);
+      throw error;
+    }
     setMessage("서명된 견적서 인쇄를 요청했습니다.");
   };
   return (
@@ -319,7 +337,8 @@ export function PatientQuote({
                         disabled={busy}
                         onClick={() =>
                           void run(async () => {
-                            await generate();
+                            // These pages were already generated and audited for
+                            // this content. Keep this click's download activation.
                             await download([file]);
                           })
                         }

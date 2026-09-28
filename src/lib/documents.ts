@@ -16,10 +16,25 @@ import {
 } from "../core/model";
 let fontBytes: Promise<ArrayBuffer> | undefined;
 const font = () =>
-  (fontBytes ??= fetch("/fonts/NanumGothic-Regular.ttf").then((r) => {
-    if (!r.ok) throw new Error("문서 글꼴을 불러오지 못했습니다");
-    return r.arrayBuffer();
-  }));
+  (fontBytes ??= fetch("/fonts/NanumGothic-Regular.ttf")
+    .then(async (r) => {
+      if (!r.ok)
+        throw new Error("문서 글꼴을 불러오지 못했습니다. 다시 시도해주세요.");
+      const bytes = await r.arrayBuffer();
+      // A stale service worker or asset route can return index.html with HTTP 200.
+      if (
+        bytes.byteLength < 4 ||
+        new DataView(bytes).getUint32(0) !== 0x00010000
+      )
+        throw new Error(
+          "문서 글꼴 파일이 올바르지 않습니다. 새로고침 후 다시 시도해주세요.",
+        );
+      return bytes;
+    })
+    .catch((error) => {
+      fontBytes = undefined;
+      throw error;
+    }));
 export function documentName(c: Consultation, u: User, status = c.status) {
   const d = new Date(),
     parts = new Intl.DateTimeFormat("sv-SE", {
@@ -262,7 +277,16 @@ export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
     title: "견적서 이미지를 만들고 있습니다",
     detail: "견적 내용과 환자 서명을 포함하고 있습니다.",
   });
-  await document.fonts.ready;
+  // fonts.ready alone also resolves after a failed load, allowing a broken or
+  // fallback font into the downloadable file. Explicitly require the export font.
+  const loaded = await Promise.all([
+    document.fonts.load("26px Codimate", "시술 견적서 0123456789"),
+    document.fonts.load("bold 40px Codimate", "시술 견적서 0123456789"),
+  ]);
+  if (loaded.some((faces) => !faces.length))
+    throw new Error(
+      "견적서 한글 글꼴을 불러오지 못했습니다. 새로고침 후 다시 시도해주세요.",
+    );
   const pages: Blob[] = [];
   const theme = documentTheme();
   const measure = document.createElement("canvas").getContext("2d")!;

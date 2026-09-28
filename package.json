@@ -13,7 +13,8 @@
     "check": "npm run test && npm run build",
     "catalog:import": "tsx scripts/import-catalog.ts",
     "android:sync": "npm run build && cap sync android",
-    "deploy": "npm run check && wrangler deploy"
+    "deploy": "npm run check && wrangler deploy",
+    "pretest": "node scripts/prepare-font.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

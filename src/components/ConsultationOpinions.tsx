@@ -57,7 +57,7 @@ export function ConsultationOpinions({
             {o.answeredAt && (
               <small>{new Date(o.answeredAt).toLocaleString("ko-KR")}</small>
             )}
-            <p className="small">요청: {o.request}</p>
+            {o.request && <p className="small">요청: {o.request}</p>}
             <OpinionBody opinion={o} photos={consultation.photos} />
           </div>
         ))}

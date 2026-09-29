@@ -1,6 +1,10 @@
+## 2026-09-29 항목별 견적 금액·공통 사유·직접 의견 — 0.12.0
+
+[변경 기록](RELEASE-0.12.0.md). quoteLinePrices로 항목/전체 할인 배분 표시와 총액 계산 통일. customPrice 선택적 단가 override, 원단가 유지·사유 필수·PDF/JPG 내부사유 제외. priceReasonHistory는 상담별 고유 사유 이력이며 /quote-reasons에서 계정 공통 TOP10 집계. 직접 의견은 opinion.direct로 역할/상담rev/사진 검사 후 기존 답변·알림에 연결. 메모 점 애니메이션, 의사 모바일 2줄 플로팅 버튼. 검증 기록 artifacts/pricing012-*.json. 운영 배포 확인 중.
+
 ## 2026-09-28 견적서 출력 수정 — 0.11.1
 
-[변경 기록](RELEASE-0.11.1.md). 저장 중 출력 거절을 진행 중인 전송 Promise 대기로 수정. PDF 글꼴 실패 캐시 해제/내용 검사, JPG 명시적 글꼴 로드, 페이지별 직접 저장, 출력 파일 무효화, A4 인쇄 및 afterprint/Android adapter 종료 정리. 재현 및 수정 검증은 artifacts/quote-fix-*.json, 합성 출력 파일은 private/quote-fix. 배포 검증 진행 중.
+[변경 기록](RELEASE-0.11.1.md). 저장 중 출력 거절을 진행 중인 전송 Promise 대기로 수정. PDF 글꼴 실패 캐시 해제/내용 검사, JPG 명시적 글꼴 로드, 페이지별 직접 저장, 출력 파일 무효화, A4 인쇄 및 afterprint/Android adapter 종료 정리. 재현 및 수정 검증은 artifacts/quote-fix-*.json, 합성 출력 파일은 private/quote-fix. 운영 배포 `0a05c56794a267cdae49321d02c78717da284012`의 GitHub 검사·Workers 배포 성공. 261개 테스트/웹·Android 빌드 통과. APK 0.11.1/code40 기존 서명 유지, 내장·운영 파일48개 및 공개 APK SHA-256 `b7ecda5311463b36617398de09010cb8ef6148091c832dbea2f9170615937e07` 일치. 운영 PC/태블릿/휴대폰 확인, 실제 업무 자료 쓰기0건, 전체 State 해시 동일·미전송0건. 최종 기록 `artifacts/deployment-0.11.1.json`. 물리 Android·프린터 미검증.
 
 # 코디메이트 개발 인계
 

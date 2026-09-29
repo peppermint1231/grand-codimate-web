@@ -5037,3 +5037,22 @@ html.custom-pull-refresh {
 .analytics-table-scroll {max-width:100%}
 .analytics-incentives .check {white-space:normal}
 @media(max-width:720px){.analytics-page>.section-title {align-items:flex-start;gap:12px}.analytics-page>.section-title h1{font-size:25px}.analytics-page>.section-title>button{flex-shrink:0}.analytics-bar{grid-template-columns:minmax(60px,1fr) minmax(30px,1fr) auto;gap:8px}}
+
+.cart-custom-price { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 8px 0; }
+.cart-custom-price > label { flex: 1; min-width: 120px; }
+.cart-custom-price input[type=number] { width: 100%; }
+.quote-reason-input { display: grid; gap: 10px; margin: 14px 0; }
+.quote-reason-input label { display: grid; gap: 6px; }
+.quote-reason-input select, .quote-reason-input input { width: 100%; min-width: 0; }
+.consult-floating-actions .has-memo { position: relative; border-color: #ad945e; }
+.memo-indicator { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ad945e; margin-left: 3px; animation: memo-pulse 2.4s ease-out infinite; }
+@keyframes memo-pulse { 0%,100% { box-shadow: 0 0 0 0 #ad945e00; } 35% { box-shadow: 0 0 0 5px #ad945e55; } }
+@media (prefers-reduced-motion: reduce) { .memo-indicator { animation: none; } }
+@media (max-width: 600px) {
+  .consult-floating-actions:has(> button[aria-label="의사 의견 직접 작성"]) { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .consult-floating-actions:has(> button[aria-label="의사 의견 직접 작성"]) .floating-cart { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+  .consult-floating-actions:has(> button[aria-label="의사 의견 직접 작성"]) > button { min-height: 44px; }
+}
+@media (max-width: 600px) {
+  .content:has(.consult-floating-actions > button[aria-label="의사 의견 직접 작성"]) .consult-layout { padding-bottom: 130px; }
+}

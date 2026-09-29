@@ -168,6 +168,8 @@ export interface Discount {
   value: number;
 }
 export interface Line {
+  /** Explicit negotiated unit price. Catalog snapshots remain unchanged. */
+  customPrice?: number;
   categorySnapshot?: string;
   /** Unit list price at selection; price remains the actual sale price. */
   regularPrice?: number;
@@ -227,6 +229,7 @@ export interface Photo {
   annotations: Annotation[];
 }
 export interface Consultation extends Base {
+  priceReasonHistory?: string[];
   intakeSource?: {
     receiptId: string;
     receivedAt: string;
@@ -276,6 +279,7 @@ export interface Policy extends Base {
   grades: Grade[];
 }
 export interface Opinion extends Base {
+  direct?: boolean;
   consultationId: string;
   fromId: string;
   toId: string;

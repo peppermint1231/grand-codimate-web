@@ -177,12 +177,21 @@ export function OpinionInbox({
                   </b>
                 </p>
               )}
-              <p className="opinion-context">
-                요청자{" "}
-                {state.users.find((u) => u.id === o.fromId)?.name || "미확인"} →{" "}
-                {state.users.find((u) => u.id === o.toId)?.name || "담당 의사"}
-              </p>
-              <p className="opinion-request-text">{o.request}</p>
+              {o.direct ? (
+                <p className="opinion-context">
+                  직접 작성 ·{" "}
+                  {state.users.find((u) => u.id === o.toId)?.name || "의사"}
+                </p>
+              ) : (
+                <p className="opinion-context">
+                  요청자{" "}
+                  {state.users.find((u) => u.id === o.fromId)?.name || "미확인"}{" "}
+                  →{" "}
+                  {state.users.find((u) => u.id === o.toId)?.name ||
+                    "담당 의사"}
+                </p>
+              )}
+              {o.request && <p className="opinion-request-text">{o.request}</p>}
               {c && (
                 <div className="opinion-photos" aria-label="요청 상담 사진">
                   {!c.photos.length && (
@@ -242,7 +251,7 @@ export function OpinionInbox({
                 send={send}
                 editable={
                   !!c &&
-                  c.status === "H" &&
+                  (c.status === "H" || !!o.direct) &&
                   !c.cancelled &&
                   (o.toId === user.id || isAdministrator(user))
                 }
@@ -336,13 +345,17 @@ export function OpinionInbox({
     </div>
   );
 }
-function OpinionAnswer({
+export function OpinionAnswer({
   opinion: o,
+  createFor,
+  onSaved,
   photos,
   editable,
   send,
 }: {
   opinion: Opinion;
+  createFor?: Consultation;
+  onSaved?: () => void;
   photos: Photo[];
   editable: boolean;
   send: Send;
@@ -379,8 +392,14 @@ function OpinionAnswer({
             setMessage("");
             try {
               const saved = await send(
-                "opinion.answer",
+                createFor ? "opinion.direct" : "opinion.answer",
                 {
+                  ...(createFor
+                    ? {
+                        consultationId: createFor.id,
+                        consultationRev: createFor.rev,
+                      }
+                    : {}),
                   answer,
                   answerPhotoComments: comments.map(({ photoId, text }) => ({
                     photoId,
@@ -390,6 +409,7 @@ function OpinionAnswer({
                 o.id,
                 o.rev,
               );
+              if (saved) onSaved?.();
               setMessage(
                 saved ? "답변을 저장했습니다." : "기기에 저장됨 · 동기화 대기",
               );
@@ -478,7 +498,7 @@ function OpinionAnswer({
               comments.some((c) => !c.text.trim())
             }
           >
-            {busy ? "답변 저장 중…" : "답변 저장"}
+            {busy ? "의견 저장 중…" : createFor ? "의견 저장" : "답변 저장"}
           </button>
         </form>
       ) : hasOpinionAnswer(o) ? (

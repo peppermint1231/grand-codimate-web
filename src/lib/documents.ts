@@ -3,7 +3,7 @@ import { currentProgress } from "./operationProgress";
 import { validQuoteConsent } from "../core/quoteConsent";
 import type { QuoteConsent } from "../core/model";
 import { opinionAnswerText } from "../core/opinions";
-import { catalogDiscount, linePrices } from "../core/quotePrices";
+import { catalogDiscount, quoteLinePrices } from "../core/quotePrices";
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import {
@@ -150,7 +150,8 @@ export async function consultationPDF(
     `작성 ${u.name} / ${new Date().toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}`,
   );
   write("");
-  for (const l of c.quote.lines) {
+  const lineAmounts = quoteLinePrices(c.quote.lines, c.quote.discount);
+  for (const [index, l] of c.quote.lines.entries()) {
     if (y < 140) {
       page = addPage();
       y = 699;
@@ -163,14 +164,17 @@ export async function consultationPDF(
       height: 26,
       color: color(theme.soft),
     });
-    const prices = linePrices(l);
+    const prices = lineAmounts[index];
     write(
       `${l.name} / ${l.label} × ${l.quantity} · 시술 금액 ${money(prices.regular)}`,
     );
     if (prices.catalogDiscount > 0)
-      write(
-        `상품 할인 −${money(prices.catalogDiscount)} / 할인가 ${money(prices.sale)}`,
-      );
+      write(`상품 할인 -${money(prices.catalogDiscount)}`);
+    if (prices.itemDiscount > 0)
+      write(`항목 할인 -${money(prices.itemDiscount)}`);
+    if (prices.globalDiscount > 0)
+      write(`전체 할인 배분 -${money(prices.globalDiscount)}`);
+    if (prices.discountTotal > 0) write(`할인가 ${money(prices.discounted)}`);
   }
   const fixedDiscount = catalogDiscount(c.quote.lines);
   write(`시술 금액 ${money(c.quote.subtotal)}`);
@@ -195,11 +199,11 @@ export async function consultationPDF(
     color: color(theme.soft),
   });
   write(`최종 견적 ${money(c.quote.total)}`, 18);
-  write(`할인·조정 사유: ${c.quote.reason || "없음"}`);
+  // Pricing reasons are internal records, not part of the printed quotation.
   write(`상담 메모\n${c.memo || "없음"}`);
   for (const o of opinions)
     write(
-      `의사 의견 요청: ${o.request}\n답변: ${opinionAnswerText(o, c.photos) || "답변 대기"}`,
+      `${o.direct ? "의사 의견" : "의사 의견 요청: " + o.request}\n${opinionAnswerText(o, c.photos) || "답변 대기"}`,
     );
   for (const s of signatures) {
     page = addPage();
@@ -295,9 +299,18 @@ export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
     line: Consultation["quote"]["lines"][number];
     texts: string[];
     continuation: boolean;
+    price: ReturnType<typeof quoteLinePrices>[number];
     height: number;
   };
-  const rows: Item[] = c.quote.lines.flatMap((line) => {
+  const lineAmounts = quoteLinePrices(c.quote.lines, c.quote.discount);
+  const rows: Item[] = c.quote.lines.flatMap((line, index) => {
+    const price = lineAmounts[index];
+    const priceRows =
+      1 +
+      Number(price.catalogDiscount > 0) +
+      Number(price.itemDiscount > 0) +
+      Number(price.globalDiscount > 0) +
+      Number(price.discountTotal > 0);
     const texts = [
       ...wrapDocumentText(
         line.name,
@@ -314,7 +327,12 @@ export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
       line,
       texts: texts.slice(i * 12, i * 12 + 12),
       continuation: i > 0,
-      height: Math.max(110, Math.min(12, texts.length - i * 12) * 30 + 30),
+      price,
+      height: Math.max(
+        110,
+        Math.min(12, texts.length - i * 12) * 30 + 30,
+        i === 0 ? priceRows * 28 + 32 : 0,
+      ),
     }));
   });
   const chunks: Item[][] = [[]];
@@ -394,26 +412,35 @@ export async function quoteJPG(c: Consultation, consent: QuoteConsent) {
         text(t, 92, y + 35 + k * 30, k === 0 && !item.continuation ? 26 : 23),
       );
       if (!item.continuation) {
-        const prices = linePrices(item.line);
+        const prices = item.price;
         text(money(prices.regular), 1148, y + 36, 26, theme.ink, "right");
-        if (prices.catalogDiscount > 0) {
+        let priceY = y + 64;
+        for (const [label, value] of [
+          ["상품 할인", prices.catalogDiscount],
+          ["항목 할인", prices.itemDiscount],
+          ["전체 할인 배분", prices.globalDiscount],
+        ] as const) {
+          if (value > 0) {
+            text(
+              `${label} −${money(value)}`,
+              1148,
+              priceY,
+              20,
+              "#947448",
+              "right",
+            );
+            priceY += 28;
+          }
+        }
+        if (prices.discountTotal > 0)
           text(
-            `할인 −${money(prices.catalogDiscount)}`,
+            `할인가 ${money(prices.discounted)}`,
             1148,
-            y + 66,
-            20,
-            "#947448",
-            "right",
-          );
-          text(
-            `할인가 ${money(prices.sale)}`,
-            1148,
-            y + 94,
+            priceY,
             23,
             theme.ink,
             "right",
           );
-        }
       }
       y += item.height;
     }

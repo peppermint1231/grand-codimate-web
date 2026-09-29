@@ -43,7 +43,11 @@ export function visibleChanges(
       return [
         {
           ...change,
-          value: { ...(change.value as object), quote: emptyQuote() },
+          value: {
+            ...(change.value as object),
+            quote: emptyQuote(),
+            priceReasonHistory: [],
+          },
         },
       ];
     return [change];

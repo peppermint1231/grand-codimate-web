@@ -1,7 +1,7 @@
 {
-  "version": "0.11.1",
-  "versionCode": 40,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.11.1.apk",
-  "sha256": "b7ecda5311463b36617398de09010cb8ef6148091c832dbea2f9170615937e07",
-  "notes": "견적서 PDF·JPG 저장 직후 출력 오류, 글꼴 재시도, 페이지별 저장 및 A4 인쇄 정리 개선."
+  "version": "0.12.0",
+  "versionCode": 41,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.0.apk",
+  "sha256": "3234548d85eabf4eddd3cf8ffb4a1d5b0d94caeaac47704a2e1fc23a35c1805f",
+  "notes": "견적서 항목별 할인·할인가, 체크형 임의 단가와 공통 사유 TOP10, 메모 알림, 의사 직접 의견·사진 코멘트."
 }

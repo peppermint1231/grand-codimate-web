@@ -1,3 +1,4 @@
+import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
 import {
   patientIndex,
@@ -544,7 +545,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.11.1",
+        version: "0.12.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1385,6 +1386,18 @@ export class Clinic extends DurableObject<Env> {
       );
       return r;
     }
+    if (path === "/api/quote-reasons" && req.method === "GET") {
+      ensure(allowed(user, "money.read"), "금액 열람 권한이 필요합니다", 403);
+      const consultations: State["consultations"] = [];
+      for (const row of this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section=?",
+          "consultations",
+        )
+        .toArray())
+        consultations.push(await open(row.value, this.env.ENCRYPTION_KEY));
+      return json({ reasons: topQuoteReasons(consultations) });
+    }
     if (path === "/api/opinions") {
       // Poll only opinions, including during consultation editing. Avoid loading
       // the full catalogue/history state for notification checks.
@@ -1667,6 +1680,7 @@ export class Clinic extends DurableObject<Env> {
         s.consultations = s.consultations.map((c) => ({
           ...c,
           quote: emptyQuote(),
+          priceReasonHistory: [],
         }));
       }
       if (!allowed(user, "catalog.edit")) {

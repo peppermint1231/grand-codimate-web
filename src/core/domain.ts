@@ -1,3 +1,4 @@
+import type { Opinion } from "./model";
 import { offeringSchema, productComposition } from "./offerings";
 import {
   QUOTE_CONSENT_TEXT,
@@ -10,6 +11,8 @@ import {
   catalogRegularPrice,
   catalogDiscount,
   linePrices,
+  quoteLinePrices,
+  discountValue,
 } from "./quotePrices";
 import {
   mergeWebsiteCatalogs,
@@ -92,10 +95,7 @@ function discountOf(base: number, d: Discount) {
     d.kind !== "percent" || d.value <= 100,
     "할인은 100% 이하로 입력하세요",
   );
-  const v =
-    d.kind === "percent"
-      ? Math.round((base * d.value) / 100)
-      : Math.round(d.value);
+  const v = discountValue(base, d);
   ensure(v <= base, "할인이 금액보다 큽니다");
   return v;
 }
@@ -119,25 +119,18 @@ export function calculate(
       amount.parse(l.regularPrice);
       ensure(l.regularPrice >= l.price, "정가는 판매가 이상이어야 합니다");
     }
-    const b = Math.round(l.price * l.quantity);
+    if (l.customPrice !== undefined) amount.parse(l.customPrice);
+    const b = linePrices(l).sale;
     return b - discountOf(b, l.discount);
   });
   const subtotal = lines.reduce((s, l) => s + linePrices(l).regular, 0),
     net = bases.reduce((a, b) => a + b, 0),
     global = discountOf(net, discount);
-  const allocations = bases.map((b, i) => ({
-    i,
-    v: net ? Math.floor((global * b) / net) : 0,
-    f: net ? ((global * b) / net) % 1 : 0,
-  }));
-  let remainder = global - allocations.reduce((a, b) => a + b.v, 0);
-  for (const a of [...allocations].sort((a, b) => b.f - a.f || a.i - b.i)) {
-    if (remainder-- > 0) a.v++;
-  }
+  const prices = quoteLinePrices(lines, discount);
   let supply = 0,
     vatAmount = 0;
   lines.forEach((l, i) => {
-    const value = bases[i] - allocations[i].v;
+    const value = prices[i].discounted;
     if (l.tax === "exempt") supply += value;
     else if (l.tax === "inclusive" || vat === "included") {
       const tax = Math.round(value / 11);
@@ -201,6 +194,7 @@ export function renewalQuote(
     );
     return {
       ...old,
+      customPrice: undefined,
       id: `${id}-${index}`,
       catalogVersion: matchedCatalog!.version,
       book: catalogBook(matchedCatalog!),
@@ -948,6 +942,7 @@ export async function applyCommand(
             book: z.enum(catalogBooks).optional(),
             quantity: z.number().positive().max(1000),
             discount: discountSchema,
+            customPrice: amount.optional(),
           }),
         )
         .parse(p.lines || []);
@@ -991,7 +986,12 @@ export async function applyCommand(
             x.optionId === l.optionId,
         );
         if (old && (old.catalogVersion || c.catalogVersion) === version)
-          return { ...old, quantity: l.quantity, discount: l.discount };
+          return {
+            ...old,
+            quantity: l.quantity,
+            discount: l.discount,
+            customPrice: l.customPrice,
+          };
         const product = lineCatalog?.products.find(
             (x) => x.id === l.productId && x.active,
           ),
@@ -1032,6 +1032,21 @@ export async function applyCommand(
           quote.reason.trim(),
         "할인 사유를 입력하세요",
       );
+      ensure(
+        !lines.some((l) => l.customPrice !== undefined) || quote.reason.trim(),
+        "임의 가격 책정 사유를 입력하세요",
+      );
+      c.priceReasonHistory = [
+        ...new Set(
+          [...(c.priceReasonHistory || []), c.quote.reason, quote.reason]
+            .map((r) =>
+              String(r || "")
+                .trim()
+                .replace(/\s+/g, " "),
+            )
+            .filter(Boolean),
+        ),
+      ];
       c.quote = quote;
       c.catalogVersion = String(p.catalogVersion || c.catalogVersion);
       if (catalogVersions) c.catalogVersions = catalogVersions;
@@ -1739,18 +1754,52 @@ export async function applyCommand(
       text = "의사 답변 확인";
       break;
     }
+    case "opinion.direct":
     case "opinion.answer": {
-      const o = find(s.opinions);
-      ensure(
-        o.toId === user.id || isAdministrator(user),
-        "담당 의사만 답변할 수 있습니다",
-        403,
+      const direct = cmd.type === "opinion.direct";
+      if (direct)
+        ensure(
+          user.role === "doctor",
+          "의사 계정만 직접 의견을 작성할 수 있습니다",
+          403,
+        );
+      const existing = direct ? undefined : find(s.opinions);
+      if (existing)
+        ensure(
+          existing.toId === user.id || isAdministrator(user),
+          "담당 의사만 답변할 수 있습니다",
+          403,
+        );
+      const c = s.consultations.find(
+        (c) => c.id === (existing?.consultationId || p.consultationId),
       );
-      const c = s.consultations.find((c) => c.id === o.consultationId);
       ensure(
-        c && c.status === "H" && !c.cancelled,
-        "보류 상담에만 답변을 추가할 수 있습니다",
+        c && !c.cancelled && (direct || existing?.direct || c.status === "H"),
+        direct || existing?.direct
+          ? "취소된 상담에는 의견을 추가할 수 없습니다"
+          : "보류 상담에만 답변을 추가할 수 있습니다",
       );
+      if (direct) {
+        ensure(
+          c.rev === p.consultationRev,
+          "상담이 변경되었습니다. 최신 상담 사진을 확인해주세요",
+          409,
+        );
+        ensure(
+          !s.opinions.some((o) => o.id === id),
+          "이미 저장한 의견입니다",
+          409,
+        );
+      }
+      const o: Opinion = existing || {
+        ...base,
+        direct: true,
+        consultationId: c.id,
+        fromId: c.ownerId,
+        toId: user.id,
+        request: "",
+        answer: "",
+      };
       const answer = z
         .string()
         .trim()
@@ -1796,9 +1845,10 @@ export async function applyCommand(
       o.answerPhotoComments = comments;
       o.answeredAt = now;
       o.answerRevision = (o.answerRevision || 0) + 1;
-      touch(o);
+      if (direct) s.opinions.push(o);
+      else touch(o);
       patientId = c.patientId;
-      text = "의사 답변";
+      text = direct ? "의사 의견 직접 작성" : "의사 답변";
       break;
     }
     case "consent.save": {

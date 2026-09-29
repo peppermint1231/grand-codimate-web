@@ -1,3 +1,5 @@
+import { QuoteReasonInput } from "./components/QuoteReasonInput";
+import { DirectOpinion } from "./components/DirectOpinion";
 import { RestoreJobPanel } from "./components/RestoreJobPanel";
 import { AdministrationReview } from "./components/AdministrationReview";
 import { OfferingEditor } from "./components/OfferingEditor";
@@ -2877,6 +2879,8 @@ function ConsultationView({
     else localStorage.setItem("codimate-viewer-height", String(next));
   };
   const [cartOpen, setCartOpen] = useState(false);
+  const [directOpinionOpen, setDirectOpinionOpen] = useState(false);
+  useAppBack(directOpinionOpen, () => setDirectOpinionOpen(false), 85);
   const [exportFiles, setExportFiles] = useState<ExportDocument[]>([]);
   const [exportMessage, setExportMessage] = useState("");
   const exportContent = JSON.stringify({ draft, theme: quoteThemeId });
@@ -2970,9 +2974,10 @@ function ConsultationView({
   const dirty = JSON.stringify(draft) !== JSON.stringify(c);
   const validationError =
     quoteError ||
-    (quote.discountTotal > catalogDiscount(quote.lines) &&
+    ((quote.discountTotal > catalogDiscount(quote.lines) ||
+      quote.lines.some((l) => l.customPrice !== undefined)) &&
     !draft.quote.reason.trim()
-      ? "할인 사유를 입력하세요."
+      ? "할인·임의 가격 책정 사유를 입력하세요."
       : "") ||
     (c.status !== "H" && dirty && !readonly && !draft.quote.reason.trim()
       ? "확정 상담 수정 사유를 입력하세요."
@@ -3719,6 +3724,12 @@ function ConsultationView({
           >
             <button
               type="button"
+              className={draft.memo.trim() ? "has-memo" : undefined}
+              title={
+                draft.memo.trim()
+                  ? "작성된 상담메모가 있습니다"
+                  : "상담메모 작성"
+              }
               aria-label="상담메모 열기"
               aria-haspopup="dialog"
               onClick={() => {
@@ -3726,7 +3737,14 @@ function ConsultationView({
                 setNotePopup("memo");
               }}
             >
-              메모
+              메모{" "}
+              {draft.memo.trim() && (
+                <span
+                  className="memo-indicator"
+                  role="img"
+                  aria-label="메모 있음"
+                />
+              )}
             </button>
             <button
               type="button"
@@ -3739,6 +3757,20 @@ function ConsultationView({
             >
               의견 요청
             </button>
+            {user.role === "doctor" && !c.cancelled && (
+              <button
+                type="button"
+                aria-label="의사 의견 직접 작성"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setCartOpen(false);
+                  setNotePopup(null);
+                  setDirectOpinionOpen(true);
+                }}
+              >
+                의견 달기
+              </button>
+            )}
             {c.kind !== "interim" && (
               <button
                 type="button"
@@ -3761,6 +3793,38 @@ function ConsultationView({
           <span className="sr-only" role="status">
             장바구니 {draft.quote.lines.length}개 항목
           </span>
+          {directOpinionOpen && (
+            <PhotoModal
+              label="의사 의견 직접 작성"
+              className="overlay consultation-note-overlay"
+              close={() => setDirectOpinionOpen(false)}
+            >
+              <div className="card">
+                <div className="section-title">
+                  <h2>의견 달기</h2>
+                  <button onClick={() => setDirectOpinionOpen(false)}>
+                    닫기
+                  </button>
+                </div>
+                {dirty ? (
+                  <>
+                    <p>
+                      현재 사진과 상담 변경을 먼저 저장해주세요. 저장 후 의견
+                      달기를 다시 열어주세요.
+                    </p>
+                    <button onClick={() => work(save)}>상담 변경 저장</button>
+                  </>
+                ) : (
+                  <DirectOpinion
+                    consultation={c}
+                    user={user}
+                    send={send}
+                    onSaved={() => setDirectOpinionOpen(false)}
+                  />
+                )}
+              </div>
+            </PhotoModal>
+          )}
           {notePopup && (
             <PhotoModal
               label={notePopup === "memo" ? "상담메모" : "의사 의견 요청"}
@@ -3945,7 +4009,57 @@ function ConsultationView({
                             ? "부가세 확인 필요"
                             : "VAT 별도"}
                     </small>
-                    <QuoteLinePrice line={l} />
+                    <QuoteLinePrice line={l} quote={quote} />
+                    <div className="cart-custom-price">
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          aria-label={`${l.name} ${l.label} 임의 가격 사용`}
+                          checked={l.customPrice !== undefined}
+                          disabled={readonly}
+                          onChange={(e) => {
+                            const lines = [...draft.quote.lines];
+                            lines[i] = {
+                              ...l,
+                              customPrice: e.target.checked
+                                ? l.price
+                                : undefined,
+                            };
+                            updateQuote({ lines });
+                          }}
+                        />
+                        임의 가격
+                      </label>
+                      <label>
+                        단가 (원 / {l.unit || "개"})
+                        <input
+                          type="number"
+                          aria-label={`${l.name} ${l.label} 임의 단가`}
+                          min={0}
+                          max={1000000000}
+                          step={1}
+                          disabled={readonly || l.customPrice === undefined}
+                          value={
+                            l.customPrice === undefined
+                              ? l.price
+                              : Number.isFinite(l.customPrice)
+                                ? l.customPrice
+                                : ""
+                          }
+                          onChange={(e) => {
+                            const lines = [...draft.quote.lines];
+                            lines[i] = {
+                              ...l,
+                              customPrice:
+                                e.target.value === ""
+                                  ? NaN
+                                  : Number(e.target.value),
+                            };
+                            updateQuote({ lines });
+                          }}
+                        />
+                      </label>
+                    </div>
                     <div className="inline-fields">
                       <Field label="수량">
                         <input
@@ -4065,8 +4179,8 @@ function ConsultationView({
                   </select>
                 </div>
                 <p className="small">
-                  상품 할인가에 항목별 추가 할인을 적용한 뒤, 남은 금액에 전체
-                  할인을 적용합니다.
+                  상품 단가(임의 가격 선택 시 입력 단가)에 항목별 할인을 적용한
+                  뒤, 남은 금액에 전체 할인을 적용합니다.
                 </p>
                 <Field label="부가세 안내">
                   <select
@@ -4082,13 +4196,12 @@ function ConsultationView({
                     <option value="included">포함 금액으로 안내</option>
                   </select>
                 </Field>
-                <Field label="할인·변경 사유">
-                  <input
-                    value={draft.quote.reason}
-                    onChange={(e) => updateQuote({ reason: e.target.value })}
-                    disabled={readonly}
-                  />
-                </Field>
+                <QuoteReasonInput
+                  value={draft.quote.reason}
+                  onChange={(reason) => updateQuote({ reason })}
+                  disabled={readonly}
+                  consultations={s.consultations}
+                />
                 <QuoteTotals quote={quote} error={quoteError} />
                 {validationError && (
                   <p className="error" role="alert">
@@ -4153,7 +4266,7 @@ function ConsultationView({
                     {l.label} × {l.quantity}
                   </small>
                 </span>
-                <QuoteLinePrice line={l} />
+                <QuoteLinePrice line={l} quote={quote} />
               </div>
             ))}
             <QuoteTotals quote={quote} error={quoteError} />

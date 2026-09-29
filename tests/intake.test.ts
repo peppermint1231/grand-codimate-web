@@ -86,6 +86,19 @@ async function fixture() {
 }
 
 describe("intake patient mapping", () => {
+  it("decrypts tablet records when Workers rejects native PBKDF2 above 100000 iterations", async () => {
+    vi.spyOn(crypto.subtle, "deriveKey").mockRejectedValue(
+      new DOMException(
+        "Pbkdf2 failed: iteration counts above 100000 are not supported",
+        "NotSupportedError",
+      ),
+    );
+    expect(await decryptIntakeRecord(encrypt(), password)).toEqual(person);
+    await expect(decryptIntakeRecord(encrypt(), "wrong")).rejects.toThrow(
+      "비밀번호",
+    );
+  });
+
   it("decrypts the existing PBKDF2/AES-GCM format and omits sensitive fields", async () => {
     const fields = intakeFields(await decryptIntakeRecord(encrypt(), password));
     expect(fields).toEqual({
@@ -102,6 +115,14 @@ describe("intake patient mapping", () => {
     await expect(decryptIntakeRecord(encrypt(), "wrong")).rejects.toThrow(
       "비밀번호",
     );
+  });
+  it("does not misreport a server crypto failure as a wrong password", async () => {
+    vi.spyOn(crypto.subtle, "importKey").mockRejectedValue(
+      new Error("Runtime crypto unavailable"),
+    );
+    await expect(
+      decryptIntakeRecord(encrypt(), password),
+    ).rejects.toMatchObject({ status: 503 });
   });
   it("handles foreigner century/gender and leaves unknown or invalid dates empty", () => {
     expect(

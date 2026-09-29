@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { pbkdf2Async } from "@noble/hashes/pbkdf2.js";
+import { sha256 } from "@noble/hashes/sha2.js";
 import { DomainError, ensure, sha } from "../src/core/domain";
 import { isAdministrator, type State, type User } from "../src/core/model";
 import { intakeFields, type IntakeSelection } from "../src/core/intake";
@@ -93,25 +95,42 @@ export async function decryptIntakeRecord(
       ct = b64(item.ct);
     if (salt.length !== 16 || iv.length !== 12 || ct.length < 16)
       throw new Error();
-    const base = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(password),
-      "PBKDF2",
-      false,
-      ["deriveKey"],
-    );
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" },
-      base,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["decrypt"],
-    );
+    // Tablet records require exactly 120000 rounds. Workers' native PBKDF2
+    // rejects more than 100000 rounds, including node:crypto's implementation.
+    // Use the compatible JS KDF; never reduce rounds or rewrite source records.
+    let key: CryptoKey;
+    let derived: Uint8Array | undefined;
+    try {
+      derived = await pbkdf2Async(
+        sha256,
+        new TextEncoder().encode(password),
+        salt,
+        {
+          c: 120000,
+          dkLen: 32,
+        },
+      );
+      key = await crypto.subtle.importKey(
+        "raw",
+        new Uint8Array(derived),
+        { name: "AES-GCM" },
+        false,
+        ["decrypt"],
+      );
+    } catch {
+      throw new DomainError(
+        "서버에서 초진설문지 암호화를 처리하지 못했습니다. 잠시 후 다시 시도해 주세요",
+        503,
+      );
+    } finally {
+      derived?.fill(0);
+    }
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
     const record: unknown = JSON.parse(new TextDecoder().decode(plain));
     if (!isObject(record)) throw new Error();
     return record;
-  } catch {
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
     throw new DomainError(
       "초진설문지 관리자 비밀번호가 다르거나 기록이 손상되었습니다. 연동 설정을 확인하세요",
       400,

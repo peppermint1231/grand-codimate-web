@@ -1,7 +1,7 @@
 {
-  "version": "0.12.0",
-  "versionCode": 41,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.0.apk",
-  "sha256": "3234548d85eabf4eddd3cf8ffb4a1d5b0d94caeaac47704a2e1fc23a35c1805f",
-  "notes": "견적서 항목별 할인·할인가, 체크형 임의 단가와 공통 사유 TOP10, 메모 알림, 의사 직접 의견·사진 코멘트."
+  "version": "0.12.1",
+  "versionCode": 42,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.1.apk",
+  "sha256": "3c476c4e3ac033e7c0cd362417f1b2e7fe7169ec52d183191e0568686799b5d7",
+  "notes": "초진설문지 환자 검색·기본정보 자동 입력·기존 환자 열기 및 중복 등록 방지. 0.12.0 견적서·의사 의견 기능 포함."
 }

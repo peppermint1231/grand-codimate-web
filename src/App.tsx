@@ -1,6 +1,7 @@
 import { QuoteReasonInput } from "./components/QuoteReasonInput";
 import { DirectOpinion } from "./components/DirectOpinion";
 import { RestoreJobPanel } from "./components/RestoreJobPanel";
+import { IntakePatientImport } from "./components/IntakePatientImport";
 import { AdministrationReview } from "./components/AdministrationReview";
 import { OfferingEditor } from "./components/OfferingEditor";
 import { CatalogPublishReview } from "./components/CatalogPublishReview";
@@ -1534,9 +1535,16 @@ export function App() {
         <Modal title="새 환자 등록" close={() => setModal("")}>
           <PatientForm
             state={state}
-            save={(data) =>
+            openExisting={(id) => {
+              void work(async () => {
+                await refresh();
+                setModal("");
+                setPatientId(id);
+              });
+            }}
+            save={(data, intakeId) =>
               work(async () => {
-                const id = crypto.randomUUID();
+                const id = intakeId || crypto.randomUUID();
                 await send("patient.create", data, id);
                 setModal("");
                 setPatientId(id);
@@ -2175,11 +2183,14 @@ function PatientForm({
   state,
   patient,
   save,
+  openExisting,
 }: {
   state: State;
   patient?: Patient;
-  save: (data: Record<string, unknown>) => void;
+  save: (data: Record<string, unknown>, intakeId?: string) => void;
+  openExisting?: (id: string) => void;
 }) {
+  const [intakeId, setIntakeId] = useState<string>();
   const [data, setData] = useState({
     name: patient?.name || "",
     sex: patient?.sex || "F",
@@ -2190,86 +2201,119 @@ function PatientForm({
   });
   const found = duplicates(state, data).filter((p) => p.id !== patient?.id);
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (
-          found.length &&
-          !window.confirm(
-            "기존 환자 후보가 있습니다. 별도의 환자로 등록할까요?",
-          )
-        )
-          return;
-        save(data);
-      }}
-    >
-      <div className="form-grid">
-        {[
-          ["name", "이름"],
-          ["dob", "생년월일"],
-          ["phone", "전화번호"],
-          ["address", "주소 (동까지)"],
-        ].map(([k, label]) => (
-          <Field key={k} label={label}>
-            {k === "address" ? (
-              <AddressSearch
-                value={data.address}
-                onChange={(address) => setData({ ...data, address })}
-              />
-            ) : (
-              <input
-                type={k === "dob" ? "date" : "text"}
-                value={data[k as keyof typeof data]}
-                required
-                onChange={(e) => setData({ ...data, [k]: e.target.value })}
-              />
-            )}
-          </Field>
-        ))}
-        <Field label="유입경로 (선택)">
-          <select
-            value={data.acquisitionSource}
-            onChange={(e) =>
-              setData({ ...data, acquisitionSource: e.target.value })
-            }
-          >
-            <option value="">미입력</option>
-            {[
-              "검색",
-              "홈페이지",
-              "SNS",
-              "지인 소개",
-              "병원 인근",
-              "기존 환자",
-              "광고",
-              "기타",
-            ].map((v) => (
-              <option key={v}>{v}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="성별">
-          <select
-            value={data.sex}
-            onChange={(e) =>
-              setData({ ...data, sex: e.target.value as Patient["sex"] })
-            }
-          >
-            <option value="F">여성</option>
-            <option value="M">남성</option>
-            <option value="U">미상</option>
-          </select>
-        </Field>
-      </div>
-      {found.length > 0 && (
-        <div className="warning-panel">
-          기존 환자 후보:{" "}
-          {found.map((p) => `${p.name} (${p.dob}, ${p.phone})`).join(", ")}
-          <p>동명이인·가족 연락처는 자동 병합하지 않습니다.</p>
-        </div>
+    <>
+      {!patient && (
+        <IntakePatientImport
+          onOpenExisting={openExisting}
+          onSelect={(selection) => {
+            setData({
+              ...selection.fields,
+              acquisitionSource: selection.fields.acquisitionSource || "",
+            });
+            setIntakeId(selection.patientId);
+          }}
+        />
       )}
-      <button className="primary">저장</button>
-    </form>
+      {intakeId && (
+        <p role="status">
+          초진설문지 정보를 불러왔습니다. 내용을 확인하고 비어 있는 항목을
+          보완한 뒤 저장하세요.
+        </p>
+      )}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (
+            found.length &&
+            !window.confirm(
+              "기존 환자 후보가 있습니다. 별도의 환자로 등록할까요?",
+            )
+          )
+            return;
+          save(data, intakeId);
+        }}
+      >
+        <div className="form-grid">
+          {[
+            ["name", "이름"],
+            ["dob", "생년월일"],
+            ["phone", "전화번호"],
+            ["address", "주소 (동까지)"],
+          ].map(([k, label]) => (
+            <Field key={k} label={label}>
+              {k === "address" ? (
+                <AddressSearch
+                  value={data.address}
+                  onChange={(address) => setData({ ...data, address })}
+                />
+              ) : (
+                <input
+                  type={k === "dob" ? "date" : "text"}
+                  value={data[k as keyof typeof data]}
+                  required
+                  onChange={(e) => setData({ ...data, [k]: e.target.value })}
+                />
+              )}
+            </Field>
+          ))}
+          <Field label="유입경로 (선택)">
+            <select
+              value={data.acquisitionSource}
+              onChange={(e) =>
+                setData({ ...data, acquisitionSource: e.target.value })
+              }
+            >
+              <option value="">미입력</option>
+              {data.acquisitionSource &&
+                ![
+                  "검색",
+                  "홈페이지",
+                  "SNS",
+                  "지인 소개",
+                  "병원 인근",
+                  "기존 환자",
+                  "광고",
+                  "기타",
+                ].includes(data.acquisitionSource) && (
+                  <option>{data.acquisitionSource}</option>
+                )}
+              {[
+                "검색",
+                "홈페이지",
+                "SNS",
+                "지인 소개",
+                "병원 인근",
+                "기존 환자",
+                "광고",
+                "기타",
+              ].map((v) => (
+                <option key={v}>{v}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="성별">
+            <select
+              value={data.sex}
+              onChange={(e) =>
+                setData({ ...data, sex: e.target.value as Patient["sex"] })
+              }
+            >
+              <option value="F">여성</option>
+              <option value="M">남성</option>
+              <option value="U">미상</option>
+            </select>
+          </Field>
+        </div>
+        {found.length > 0 && (
+          <div className="warning-panel">
+            기존 환자 후보:{" "}
+            {found.map((p) => `${p.name} (${p.dob}, ${p.phone})`).join(", ")}
+            <p>동명이인·가족 연락처는 자동 병합하지 않습니다.</p>
+          </div>
+        )}
+        <button className="primary">저장</button>
+      </form>
+    </>
   );
 }
 function PatientDetail({

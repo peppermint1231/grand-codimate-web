@@ -1,5 +1,6 @@
 import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
+import { handleIntake } from "./intake";
 import {
   patientIndex,
   searchPatients,
@@ -545,7 +546,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.12.0",
+        version: "0.12.1",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -949,6 +950,18 @@ export class Clinic extends DurableObject<Env> {
       ensure(isAdministrator(user), "관리자만 가능합니다", 403);
     const executive = () =>
       ensure(canUseExecutiveFeatures(user), "관리자·임원만 가능합니다", 403);
+    if (path.startsWith("/api/intake/"))
+      return json(
+        await handleIntake(req, {
+          user,
+          drive: this.drive(),
+          getSettings: () => this.secret("intake-settings"),
+          saveSettings: (value) => this.setSecret("intake-settings", value),
+          patients: async () =>
+            (await this.state(false, ["patients"])).patients,
+          audit: (action, target) => this.auditAccess(user.id, action, target),
+        }),
+      );
     if (
       [
         "/api/commands",

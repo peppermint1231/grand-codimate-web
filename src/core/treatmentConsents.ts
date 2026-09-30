@@ -1,3 +1,4 @@
+import { fillConfirmedClinicContact } from "./clinicContact";
 import type { Consent } from "./model";
 
 export const CONSENT_DRAFT_REVISION = "2026-09-30.2";
@@ -588,10 +589,11 @@ function bodyFor(s: DraftSpec): string {
 }
 export const treatmentConsentDrafts = specs.map((s) => ({
   ...s,
-  body:
+  body: fillConfirmedClinicContact(
     s.key === "isotretinoin"
       ? bodyFor(s).replaceAll("시술", "치료")
       : bodyFor(s),
+  ),
   checks: [...(s.checks || commonChecks)],
   hospitalReview:
     s.hospitalReview ||

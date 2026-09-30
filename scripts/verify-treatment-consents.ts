@@ -117,12 +117,13 @@ try {
     );
     const text = await body.inputValue();
     const guides = page.locator(".consent-review-guide");
-    await expect(guides).toHaveCount(2);
-    await expect(guides.first()).toContainText("1899-5109");
-    await expect(guides.first()).toContainText("월~금 10:00~20:00");
-    await expect(guides.first()).toContainText("토요일 09:00~15:00");
-    await expect(guides.first()).toContainText("[병원 확인: 일요일·공휴일");
-    await expect(guides.nth(1)).toContainText("제품마다 단위");
+    await expect(guides).toHaveCount(1);
+    await expect(guides.first()).toContainText("제품마다 단위");
+    await expect(body).toContainText("점심시간 13:00~14:00");
+    await expect(body).toContainText("진료시간 외 상담 미운영");
+    await expect(body).not.toContainText(
+      "[병원 확인: 연락처 및 진료시간 외 대응 방법]",
+    );
     await expect(body).toHaveValue(text);
     await page.getByRole("button", { name: "환자 화면 미리보기" }).click();
     await expect(

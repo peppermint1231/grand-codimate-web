@@ -8,6 +8,9 @@ export type ConsentReviewGuide = {
 // Writing aids only. Never insert these into stored consent text automatically.
 // Unconfirmed values keep the existing review marker, including after manual copying.
 const fill = (label: string) => `[병원 확인: ${label}]`;
+// Supplied clinic footer image (2026-09-30). No inference about unlisted days or services.
+const clinicContactExample =
+  "그랜드아름다운의원 · 대표전화 1899-5109 / 주소: 강원특별자치도 춘천시 중앙로 68, 4층. 진료시간: 월~금 10:00~20:00, 토요일 09:00~15:00(점심시간 없음).";
 const procedureExamples: Record<string, string> = {
   toxin: `사용 제품은 ${fill("제품명·국내 허가 부위")}입니다. 이번 시술 부위와 부위별 용량은 ${fill("부위·용량")}이며 진료기록에 남깁니다. 재시술 간격은 ${fill("개인별 간격과 판단 기준")}입니다. 제품마다 단위가 달라 다른 독소 제품의 용량을 그대로 적용하지 않습니다.`,
   "ha-filler": `사용 제품·성분은 ${fill("제품명·성분")}, 국내 허가 부위와 이번 시술 부위는 ${fill("허가 부위·시술 부위")}입니다. 혈관 합병증이 의심되면 ${fill("병원의 즉시 진료·전원 연락 방법")}으로 대응합니다. 용해제 사용 가능 여부·한계·알레르기 위험은 ${fill("제품에 맞춘 설명")}입니다.`,
@@ -48,11 +51,11 @@ export function consentReviewGuide(
     return {
       kind: "contact",
       instruction:
-        "환자가 실제로 연락할 번호·운영시간·진료시간 밖의 연락 가능 여부를 적으세요. 임상 응급 연락과 계약 문의를 구분합니다.",
+        "병원명·대표전화·주소·진료시간은 제공하신 병원 안내 이미지에서 반영했습니다. 이미지에 없는 일요일·공휴일 운영과 야간 연락 방법은 확인 후 적으세요. 계약 접수시간·처리기한은 진료시간과 별도로 확인합니다.",
       example:
         topic === "연락처 및 진료시간 외 대응 방법"
-          ? `진료 문의: ${fill("대표 전화번호")} / 진료시간: ${fill("요일·시간·휴진일")}. 진료시간 외: ${fill("연락 가능한 채널·응답시간 또는 야간 상담 미운영 안내")}. 호흡곤란·의식저하 등 응급 상황에는 답변을 기다리지 말고 119 또는 가까운 응급실을 이용하세요.`
-          : `계약·해지·정산 문의는 ${fill("담당 부서·전화 또는 접수 채널")}로 신청해주세요. 접수 가능 시간은 ${fill("요일·시간")}이며, 신청에 필요한 정보와 처리 일정은 ${fill("필요 정보·회신/처리 기한")}입니다.`,
+          ? `${clinicContactExample} 일요일·공휴일 운영: ${fill("일요일·공휴일 진료 여부·휴진 안내")}. 진료시간 외: ${fill("연락 가능한 채널·응답시간 또는 야간 상담 미운영 안내")}. 호흡곤란·의식저하 등 응급 상황에는 답변을 기다리지 말고 119 또는 가까운 응급실을 이용하세요.`
+          : `${clinicContactExample} 계약·해지·정산은 대표전화로 문의 후 ${fill("담당 부서·정식 신청 방법")}으로 접수해주세요. 계약 문의 접수 가능 시간은 ${fill("실제 접수 요일·시간")}이며, 신청에 필요한 정보와 처리 일정은 ${fill("필요 정보·회신/처리 기한")}입니다.`,
     };
   }
   if (draftKey === "doctor-plan" || draftKey === "membership") {

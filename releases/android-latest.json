@@ -1,7 +1,7 @@
 {
-  "version": "0.12.7",
-  "versionCode": 47,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.7.apk",
-  "sha256": "65762334424e67b3697443a32a9c82ca848fdfebad67b7166d22b0af18de94bb",
-  "notes": "동의서 검토 항목별 작성 방법·문장 예시 추가. 연락처·시술별 확인사항·계약 기준 안내. 기존 동의서와 서명 보존."
+  "version": "0.12.8",
+  "versionCode": 48,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.8.apk",
+  "sha256": "dd9c27f57b14e65c6f021f82de27c3d4342b5b877c6085fd8d4e9638f4c59fea",
+  "notes": "병원 안내 이미지의 병원명·전화·주소·진료시간을 동의서 연락처 작성 예시에 반영. 야간·휴일 및 계약 처리 기준은 별도 검토."
 }

@@ -1,7 +1,7 @@
 {
-  "version": "0.12.10",
-  "versionCode": 50,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.10.apk",
-  "sha256": "46ab4fe4eae9cd3ed1c2fc8fce8c9ee3b8f7eaec15f5506bf736ca1b655aae4a",
-  "notes": "병원 원문에서 누락된 시술별 생활 주의사항·회복 경과 보완. 병원 수정 보존, 게시본은 별도 개정 초안, 원문 기간 참고와 검토 안내 추가."
+  "version": "0.12.11",
+  "versionCode": 51,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.11.apk",
+  "sha256": "74781bafe41f7dd941f72ff94c66392dd941a0005efb25ad517a9a1f477d4612",
+  "notes": "원문 87개 항목과 공통 조항 대조. 구체적인 기간·행동·경과를 동의서 본문에 복원하고 항목별 반영 내역 제공. 최신 개정안 우선 표시."
 }

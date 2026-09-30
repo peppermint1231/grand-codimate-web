@@ -1,3 +1,7 @@
+import {
+  detailedClausesFor,
+  DETAIL_HEADING,
+} from "../core/consentDetailedPrecautions";
 import { useRef, useState } from "react";
 import { consentReviewGuide } from "../core/consentReviewGuide";
 import type { Consent } from "../core/model";
@@ -90,6 +94,18 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
         </div>
       </div>
       {notice && <p role="status">{notice}</p>}
+      {consents.some(
+        (c) =>
+          c.status === "draft" &&
+          consents.some(
+            (p) => p.id === c.sourceTemplateId && p.status === "published",
+          ),
+      ) && (
+        <p className="small">
+          목록에는 최신 개정 초안을 우선 표시합니다. 환자 서명에는 현재 게시본이
+          사용되며, 개정 초안은 검토·게시 후 적용됩니다.
+        </p>
+      )}
       <div className="consent-manager-grid">
         <aside className="card consent-template-list">
           <label className="field">
@@ -102,7 +118,8 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
             />
           </label>
           <p className="small">
-            초안 {consents.filter((t) => t.status === "draft").length} · 게시됨{" "}
+            전체 이력 · 초안{" "}
+            {consents.filter((t) => t.status === "draft").length} · 게시됨{" "}
             {consents.filter((t) => t.status === "published").length}
           </p>
           <label className="check">
@@ -111,7 +128,7 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
               checked={showHistory}
               onChange={(e) => setShowHistory(e.target.checked)}
             />
-            이전 초안 함께 보기
+            이전 초안·게시본 함께 보기
           </label>
           <div className="consent-list-scroll">
             {consents
@@ -119,7 +136,6 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
                 (t) =>
                   showHistory ||
                   !t.draftKey ||
-                  t.status === "published" ||
                   !consents.some(
                     (other) =>
                       other.draftKey === t.draftKey &&
@@ -354,6 +370,39 @@ function ConsentEditor({
           {preview ? "본문 편집 보기" : "환자 화면 미리보기"}
         </button>
       </div>
+      {detailedClausesFor(template.draftKey).length > 0 &&
+        value.body.includes(DETAIL_HEADING) && (
+          <details className="card" aria-label="원문 항목별 반영 내역">
+            <summary>
+              원문 항목별 반영 내역 ·{" "}
+              {detailedClausesFor(template.draftKey).length}개
+            </summary>
+            <p className="small">
+              번호 항목과 공통 조항을 따로 대조했습니다. ‘표현 보완’에는 원문과
+              다르게 쓴 이유를 표시합니다. 본문을 수정하면 대조 상태도 바뀝니다.
+            </p>
+            <ol>
+              {detailedClausesFor(template.draftKey).map((clause) => (
+                <li key={clause.id} style={{ marginBottom: "1rem" }}>
+                  <b>
+                    {clause.id} ·{" "}
+                    {value.body.includes(clause.text)
+                      ? clause.reason
+                        ? "표현 보완"
+                        : "본문 반영"
+                      : "편집됨 · 본문 대조 필요"}
+                  </b>
+                  <p>{clause.text}</p>
+                  {clause.reason && (
+                    <p className="small">
+                      <b>수정 이유:</b> {clause.reason}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
       {reviewItems.length > 0 && (
         <section
           className="consent-review-required"

@@ -1,11 +1,9 @@
+import { supplementDetailedConsentBody } from "./consentDetailedPrecautions";
 import { fillConfirmedClinicContact } from "./clinicContact";
-import {
-  supplementConsentBody,
-  supplementConsentChecks,
-} from "./consentPrecautions";
+import { supplementConsentChecks } from "./consentPrecautions";
 import type { Consent } from "./model";
 
-export const CONSENT_DRAFT_REVISION = "2026-09-30.3";
+export const CONSENT_DRAFT_REVISION = "2026-09-30.4";
 export const consentSources = {
   isotretinoin: {
     title: "식약처 · 이소트레티노인 안전사용",
@@ -593,7 +591,7 @@ function bodyFor(s: DraftSpec): string {
 }
 export const treatmentConsentDrafts = specs.map((s) => ({
   ...s,
-  body: supplementConsentBody(
+  body: supplementDetailedConsentBody(
     s.key,
     fillConfirmedClinicContact(
       s.key === "isotretinoin"

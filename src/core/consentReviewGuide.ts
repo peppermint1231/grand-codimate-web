@@ -1,3 +1,4 @@
+import { DETAIL_REVIEW_TOPIC } from "./consentDetailedPrecautions";
 import { precautionFor, PRECAUTION_REVIEW_TOPIC } from "./consentPrecautions";
 import { CONFIRMED_CLINIC_CONTACT } from "./clinicContact";
 import { treatmentConsentDrafts } from "./treatmentConsents";
@@ -44,6 +45,21 @@ export function consentReviewGuide(
     .replace(/^\[병원 확인\s*[:：]\s*/, "")
     .replace(/\]$/, "")
     .trim();
+  if (topic === DETAIL_REVIEW_TOPIC)
+    return {
+      kind: "procedure",
+      instruction:
+        "기간·횟수·세안/운동·회복 경과 등 구체적인 문장은 이미 본문에 들어 있습니다. 실제 시술에 맞지 않는 항목만 수정하고 확정한 기준을 적으세요. 숫자를 모두 삭제하거나 포괄적인 개별 안내 문구로 바꾸지 않아도 됩니다.",
+      example:
+        "본문의 적용 범위와 기간을 검토했습니다. 조정한 항목: [병원 확인: 변경한 항목·최종 기간·예외 또는 조정 없음]. 기존 병원 안내와 다른 부분은 함께 정리했습니다.",
+    };
+  if (/^(리팟 드레싱|밴드 이탈|복용 전 1개월|기미 연고)/.test(topic))
+    return {
+      kind: "procedure",
+      instruction:
+        "해당 항목의 구체적 기준은 본문에 보존했습니다. 제품 지침·진료 절차와 맞춰 적용 조건과 예외를 채우세요.",
+      example: `${topic}: ${fill("확인한 제품/절차·적용 조건·제한 및 예외·이상 시 대응")}`,
+    };
   const precaution = precautionFor(draftKey);
   if (topic === PRECAUTION_REVIEW_TOPIC && precaution) {
     return {

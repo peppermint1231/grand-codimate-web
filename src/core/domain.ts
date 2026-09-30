@@ -1,7 +1,5 @@
-import {
-  supplementConsentBody,
-  supplementConsentChecks,
-} from "./consentPrecautions";
+import { supplementDetailedConsentBody } from "./consentDetailedPrecautions";
+import { supplementConsentChecks } from "./consentPrecautions";
 import {
   treatmentConsentDrafts,
   CONSENT_DRAFT_REVISION,
@@ -1893,7 +1891,7 @@ export async function applyCommand(
           )[0];
         const template = treatmentConsentDrafts.find((t) => t.key === key)!;
         const body = source
-          ? supplementConsentBody(key, source.body)
+          ? supplementDetailedConsentBody(key, source.body)
           : template.body;
         const checks = source
           ? supplementConsentChecks(key, source.checks)
@@ -1902,7 +1900,7 @@ export async function applyCommand(
         // remain history; published forms always receive a separate draft version.
         if (
           source?.status === "draft" &&
-          source.draftRevision === "2026-09-30.2"
+          ["2026-09-30.2", "2026-09-30.3"].includes(source.draftRevision || "")
         ) {
           source.body = body;
           source.checks = checks;

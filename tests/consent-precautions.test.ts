@@ -1,3 +1,4 @@
+import { DETAIL_REVIEW_TOPIC } from "../src/core/consentDetailedPrecautions";
 import { expect, it } from "vitest";
 import { applyCommand } from "../src/core/domain";
 import { emptyState, type Command } from "../src/core/model";
@@ -22,15 +23,15 @@ const install = (keys = treatmentConsentDrafts.map((t) => t.key)): Command => ({
 });
 it("adds missing behavioral instructions to all affected procedure families and preserves confirmed contact", () => {
   const expected: Record<string, string[]> = {
-    toxin: ["음주·흡연", "세안·샤워", "근육의 돌출", "볼패임", "무거운 느낌"],
-    "ha-filler": ["음주·흡연", "수영", "세안·샤워·화장"],
-    threads: ["수영", "처방약", "실을 잡아당기지"],
-    "eye-bag": ["세안·화장", "음주·흡연", "사우나·수영"],
-    juvegen: ["음주·흡연", "수영", "피부염", "리터치"],
-    "lesion-removal": ["물에 오래 담그기", "드레싱", "수개월", "목·몸"],
+    toxin: ["음주·흡연", "세안·샤워", "근육이 돌출", "볼패임", "무거운 느낌"],
+    "ha-filler": ["금연·금주", "수영", "물 세안·메이크업"],
+    threads: ["수영", "처방약", "직접 누르거나 당기지"],
+    "eye-bag": ["물 세안·메이크업", "금연·금주", "사우나·수영"],
+    juvegen: ["금연·금주", "수영", "피부염", "리터치"],
+    "lesion-removal": ["물에 오래 담그는", "드레싱", "수개월", "목·몸"],
     repot: ["클렌징 티슈", "이중세안", "전동 브러시", "임상 사진", "진물"],
-    scalp: ["샴푸", "음주·흡연", "수영", "주삿바늘 자국"],
-    "pigment-laser": ["보습", "수분 섭취", "딱지", "자외선"],
+    scalp: ["샴푸", "음주·흡연", "수영", "바늘 자국"],
+    "pigment-laser": ["보습", "수분을 섭취", "딱지", "자외선"],
     "hair-removal": ["뽑거나 왁싱하지", "샤워와 면도", "모낭염"],
     isotretinoin: ["두 가지 피임법", "반납·폐기", "레티노이드"],
   };
@@ -43,16 +44,16 @@ it("adds missing behavioral instructions to all affected procedure families and 
   expect(precautionFor("peeling")).toBeDefined();
   expect(precautionFor("iv-injection")).toBeUndefined();
 });
-it("separates original numeric references from patient text and shows a review example", () => {
+it("keeps detailed periods in the draft body with an actionable review example", () => {
   const t = treatmentConsentDrafts.find((t) => t.key === "juvegen")!;
-  expect(t.body).not.toContain("2~4주");
+  expect(t.body).toContain("2~4주");
   const guide = consentReviewGuide(
     t.key,
-    `[병원 확인: ${PRECAUTION_REVIEW_TOPIC}]`,
+    `[병원 확인: ${DETAIL_REVIEW_TOPIC}]`,
   );
-  expect(guide.reference).toContain("2~4주");
+
   expect(guide.example).toContain("[병원 확인:");
-  expect(guide.instruction).toContain("확정된 환자 지침이 아닙니다");
+  expect(guide.instruction).toContain("이미 본문에 들어 있습니다");
 });
 it("preserves custom body and checks, inserts before choice and is idempotent", () => {
   const old = "병원별 제품·용량 $& 원문\n\n6. 환자의 선택\n병원 안내";

@@ -119,8 +119,14 @@ try {
     const guides = page.locator(".consent-review-guide");
     await expect(guides).toHaveCount(2);
     await expect(guides.first()).toContainText("제품마다 단위");
-    await expect(guides.nth(1)).toContainText("병원 원문 참고");
-    await expect(guides.nth(1)).toContainText("3~4시간");
+    await expect(guides.nth(1)).toContainText("이미 본문에 들어 있습니다");
+    await expect(body).toContainText("3~4시간");
+    await page
+      .getByText("원문 항목별 반영 내역 · 15개", { exact: true })
+      .click();
+    await expect(page.getByLabel("원문 항목별 반영 내역")).toContainText(
+      "toxin-fat-09",
+    );
     await expect(body).toContainText("볼패임");
     await expect(body).toContainText("점심시간 13:00~14:00");
     await expect(body).toContainText("진료시간 외 상담 미운영");
@@ -132,6 +138,9 @@ try {
     await expect(
       page.getByRole("region", { name: "동의서 미리보기" }),
     ).not.toContainText("작성 예시");
+    await expect(
+      page.getByRole("region", { name: "동의서 미리보기" }),
+    ).toContainText("3~4시간");
     await page.getByRole("button", { name: "본문 편집 보기" }).click();
     await body.fill(
       text.replace(/\[병원 확인:[^\]]+\]/g, "합성 검증용 병원 안내"),

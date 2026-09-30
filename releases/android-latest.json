@@ -1,7 +1,7 @@
 {
-  "version": "0.12.6",
-  "versionCode": 46,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.6.apk",
-  "sha256": "600d130b6cba37b22e44bc9a5827d931ffe0a9eb18262a62aa35bc872feb02ea",
-  "notes": "이벤트 SSOT 기본 선택 및 추천기 초기화, 사진 자동 배치·세로 격벽 조정, 병원 동의서 23종 보완과 검토 항목 빨간 강조."
+  "version": "0.12.7",
+  "versionCode": 47,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.7.apk",
+  "sha256": "65762334424e67b3697443a32a9c82ca848fdfebad67b7166d22b0af18de94bb",
+  "notes": "동의서 검토 항목별 작성 방법·문장 예시 추가. 연락처·시술별 확인사항·계약 기준 안내. 기존 동의서와 서명 보존."
 }

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { consentReviewGuide } from "../core/consentReviewGuide";
 import type { Consent } from "../core/model";
 import {
   consentPublishIssues,
@@ -342,19 +343,33 @@ function ConsentEditor({
           aria-label="검토 필요 항목"
         >
           <b>검토 필요 {reviewItems.length}개</b>
-          <p className="small">항목을 누르면 수정할 위치가 선택됩니다.</p>
+          <p className="small">
+            항목을 누르면 수정할 위치가 선택됩니다. 아래는 작성 형식 예시이며
+            병원의 확정 지침이 아닙니다. 예시의 [병원 확인: …]을 실제 정보로
+            바꾸세요. 예시는 본문에 자동 저장되지 않습니다.
+          </p>
           <ul>
-            {reviewItems.map((item, i) => (
-              <li key={`${item.field}-${item.index}`}>
-                <button
-                  type="button"
-                  className="consent-review-jump"
-                  onClick={() => jumpToReview(item)}
-                >
-                  {i + 1}. {item.text}
-                </button>
-              </li>
-            ))}
+            {reviewItems.map((item, i) => {
+              const guide = consentReviewGuide(template.draftKey, item.text);
+              return (
+                <li key={`${item.field}-${item.index}`}>
+                  <button
+                    type="button"
+                    className="consent-review-jump"
+                    onClick={() => jumpToReview(item)}
+                  >
+                    {i + 1}. {item.text}
+                  </button>
+                  <div className="consent-review-guide">
+                    <p>
+                      <b>작성 방법</b> {guide.instruction}
+                    </p>
+                    <b className="small">작성 예시 · 실제 정보로 수정</b>
+                    <blockquote>{guide.example}</blockquote>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

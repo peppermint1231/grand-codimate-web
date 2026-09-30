@@ -116,6 +116,16 @@ try {
       ),
     );
     const text = await body.inputValue();
+    const guides = page.locator(".consent-review-guide");
+    await expect(guides).toHaveCount(2);
+    await expect(guides.first()).toContainText("진료시간");
+    await expect(guides.nth(1)).toContainText("제품마다 단위");
+    await expect(body).toHaveValue(text);
+    await page.getByRole("button", { name: "환자 화면 미리보기" }).click();
+    await expect(
+      page.getByRole("region", { name: "동의서 미리보기" }),
+    ).not.toContainText("작성 예시");
+    await page.getByRole("button", { name: "본문 편집 보기" }).click();
     await body.fill(
       text.replace(/\[병원 확인:[^\]]+\]/g, "합성 검증용 병원 안내"),
     );

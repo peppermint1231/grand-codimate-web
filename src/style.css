@@ -5188,3 +5188,9 @@ html.custom-pull-refresh {
  .compact-photo-actions > div{position:absolute;right:0;top:100%;display:grid;gap:3px;background:#fff;padding:4px;border-radius:8px;box-shadow:0 3px 10px #0003;width:calc(100cqw - 8px);max-width:82px}
  .compact-photo-actions button{width:100%;padding:4px 2px;font-size:12px}
 }
+
+.consent-review-required[aria-label="검토 필요 항목"] > ul{max-height:clamp(280px,50dvh,600px);padding:0;list-style:none}
+.consent-review-required[aria-label="검토 필요 항목"] > ul > li + li{border-top:1px solid #efd1d5;margin-top:12px;padding-top:12px}
+.consent-review-guide{color:#294b47;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+.consent-review-guide p{margin:5px 0 8px}
+.consent-review-guide blockquote{margin:5px 0 8px;padding:10px 12px;background:#fff;border:1px solid #e3dcdd;border-left:3px solid #a9beba;border-radius:6px;white-space:pre-wrap;user-select:text}

@@ -1,9 +1,11 @@
+import { precautionFor, PRECAUTION_REVIEW_TOPIC } from "./consentPrecautions";
 import { CONFIRMED_CLINIC_CONTACT } from "./clinicContact";
 import { treatmentConsentDrafts } from "./treatmentConsents";
 
 export type ConsentReviewGuide = {
   kind: "contact" | "procedure" | "contract" | "custom";
   confirmed?: boolean;
+  reference?: string;
   instruction: string;
   example: string;
 };
@@ -42,6 +44,17 @@ export function consentReviewGuide(
     .replace(/^\[병원 확인\s*[:：]\s*/, "")
     .replace(/\]$/, "")
     .trim();
+  const precaution = precautionFor(draftKey);
+  if (topic === PRECAUTION_REVIEW_TOPIC && precaution) {
+    return {
+      kind: "procedure",
+      instruction:
+        "추가된 행동 안내를 실제 시술·제품에 맞게 검토하고 아래 항목별 기간과 예외를 적으세요. 원문 참고값은 확정된 환자 지침이 아닙니다.",
+      reference: precaution.reference,
+      example: `${precaution.fields}: ${fill("항목별 허용/제한 기간·예외·예상 경과·재내원 기준")}
+해당하지 않는 제한은 적용하지 않음을 명시하고, 기존 본문과 다른 지침이 있다면 함께 정리합니다.`,
+    };
+  }
   if (
     /^(연락처 및 진료시간 외 대응 방법|문의 연락처|해지\/정산 문의 방법)$/.test(
       topic,

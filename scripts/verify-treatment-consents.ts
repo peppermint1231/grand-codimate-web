@@ -117,8 +117,11 @@ try {
     );
     const text = await body.inputValue();
     const guides = page.locator(".consent-review-guide");
-    await expect(guides).toHaveCount(1);
+    await expect(guides).toHaveCount(2);
     await expect(guides.first()).toContainText("제품마다 단위");
+    await expect(guides.nth(1)).toContainText("병원 원문 참고");
+    await expect(guides.nth(1)).toContainText("3~4시간");
+    await expect(body).toContainText("볼패임");
     await expect(body).toContainText("점심시간 13:00~14:00");
     await expect(body).toContainText("진료시간 외 상담 미운영");
     await expect(body).not.toContainText(

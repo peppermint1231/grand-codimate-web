@@ -1,7 +1,11 @@
 import { fillConfirmedClinicContact } from "./clinicContact";
+import {
+  supplementConsentBody,
+  supplementConsentChecks,
+} from "./consentPrecautions";
 import type { Consent } from "./model";
 
-export const CONSENT_DRAFT_REVISION = "2026-09-30.2";
+export const CONSENT_DRAFT_REVISION = "2026-09-30.3";
 export const consentSources = {
   isotretinoin: {
     title: "식약처 · 이소트레티노인 안전사용",
@@ -589,12 +593,15 @@ function bodyFor(s: DraftSpec): string {
 }
 export const treatmentConsentDrafts = specs.map((s) => ({
   ...s,
-  body: fillConfirmedClinicContact(
-    s.key === "isotretinoin"
-      ? bodyFor(s).replaceAll("시술", "치료")
-      : bodyFor(s),
+  body: supplementConsentBody(
+    s.key,
+    fillConfirmedClinicContact(
+      s.key === "isotretinoin"
+        ? bodyFor(s).replaceAll("시술", "치료")
+        : bodyFor(s),
+    ),
   ),
-  checks: [...(s.checks || commonChecks)],
+  checks: supplementConsentChecks(s.key, s.checks || commonChecks),
   hospitalReview:
     s.hospitalReview ||
     "병원 원문의 시술일·병력·복용약·마취 확인, 사후 관리·추가 치료 설명을 보완했습니다. 고정된 회복기간·횟수·환불률이나 책임 면제를 일괄 적용하지 않습니다.",

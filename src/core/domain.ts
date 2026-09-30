@@ -1,4 +1,8 @@
 import {
+  supplementConsentBody,
+  supplementConsentChecks,
+} from "./consentPrecautions";
+import {
   treatmentConsentDrafts,
   CONSENT_DRAFT_REVISION,
   consentPublishIssues,
@@ -1872,6 +1876,7 @@ export async function applyCommand(
         "초안 종류를 확인하세요",
       );
       let added = 0;
+      let updated = 0;
       for (const key of new Set(keys)) {
         if (
           s.consents.some(
@@ -1887,6 +1892,27 @@ export async function applyCommand(
               b.version - a.version || b.updatedAt.localeCompare(a.updatedAt),
           )[0];
         const template = treatmentConsentDrafts.find((t) => t.key === key)!;
+        const body = source
+          ? supplementConsentBody(key, source.body)
+          : template.body;
+        const checks = source
+          ? supplementConsentChecks(key, source.checks)
+          : [...template.checks];
+        // Only current hospital-library drafts are updated in place. Older drafts
+        // remain history; published forms always receive a separate draft version.
+        if (
+          source?.status === "draft" &&
+          source.draftRevision === "2026-09-30.2"
+        ) {
+          source.body = body;
+          source.checks = checks;
+          source.draftRevision = CONSENT_DRAFT_REVISION;
+          delete source.reviewedBy;
+          delete source.reviewedAt;
+          touch(source);
+          updated++;
+          continue;
+        }
         const templateId = source
           ? `treatment-consent-${key}-${CONSENT_DRAFT_REVISION.replace(/\W/g, "")}`
           : `treatment-consent-${key}`;
@@ -1897,9 +1923,9 @@ export async function applyCommand(
         s.consents.push({
           ...base,
           id: templateId,
-          name: template.name + " 동의서",
-          body: template.body,
-          checks: [...template.checks],
+          name: source?.name || template.name + " 동의서",
+          body,
+          checks,
           productIds: [...(source?.productIds || [])],
           status: "draft",
           version: source ? source.version + 1 : 1,
@@ -1909,7 +1935,7 @@ export async function applyCommand(
         });
         added++;
       }
-      text = `시술동의서 초안 ${added}종 등록 (기존 양식 유지)`;
+      text = `시술동의서 초안 ${added}종 등록·${updated}종 보완 (게시본·서명 유지)`;
       break;
     }
     case "consent.save": {

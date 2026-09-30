@@ -75,7 +75,7 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
                   keys: missing.map((t) => t.key),
                 });
                 setNotice(
-                  `${missing.length}종을 초안으로 등록했습니다. 기존 양식은 유지됩니다.`,
+                  `${missing.length}종을 보완했습니다. 미게시 초안은 업데이트하고 게시본은 별도 개정 초안으로 만들었습니다. 기존 서명은 유지됩니다.`,
                 );
               })
             }
@@ -142,6 +142,23 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
                   {/\[병원 확인\s*[:：]/.test(t.body) && (
                     <span className="consent-review-badge">검토 필요</span>
                   )}
+                  {consents.some(
+                    (c) =>
+                      c.sourceTemplateId === t.id &&
+                      c.status === "draft" &&
+                      c.draftRevision === CONSENT_DRAFT_REVISION,
+                  ) && (
+                    <span className="consent-review-badge">
+                      보완 개정 초안 있음
+                    </span>
+                  )}
+                  {t.status === "draft" &&
+                    consents.some(
+                      (c) =>
+                        c.id === t.sourceTemplateId && c.status === "published",
+                    ) && (
+                      <span className="small">게시본을 보완한 개정 초안</span>
+                    )}
                   <span className="small">
                     {t.status === "draft" ? "검토 전 초안" : "게시됨"} · v
                     {t.version}
@@ -364,6 +381,13 @@ function ConsentEditor({
                     <p>
                       <b>작성 방법</b> {guide.instruction}
                     </p>
+                    {guide.reference && (
+                      <p className="small">
+                        <b>병원 원문 참고 · 기간 확인 필요</b>
+                        <br />
+                        {guide.reference}
+                      </p>
+                    )}
                     <b className="small">
                       {guide.confirmed
                         ? "병원 확정 문구 · 추가 검토 불필요"

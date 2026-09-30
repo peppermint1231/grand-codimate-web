@@ -1,7 +1,7 @@
 {
-  "version": "0.12.9",
-  "versionCode": 49,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.9.apk",
-  "sha256": "53067fce632103db344fa81a18063a63448dfcc6fef07e17a86242cd2a444636",
-  "notes": "병원에서 확정한 연락처·진료시간·점심시간·휴일 및 진료시간 외 상담 미운영 문구를 동의서에 반영."
+  "version": "0.12.10",
+  "versionCode": 50,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.10.apk",
+  "sha256": "46ab4fe4eae9cd3ed1c2fc8fce8c9ee3b8f7eaec15f5506bf736ca1b655aae4a",
+  "notes": "병원 원문에서 누락된 시술별 생활 주의사항·회복 경과 보완. 병원 수정 보존, 게시본은 별도 개정 초안, 원문 기간 참고와 검토 안내 추가."
 }

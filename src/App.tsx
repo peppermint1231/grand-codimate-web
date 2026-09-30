@@ -6556,6 +6556,7 @@ function SettingsView({
       {activeTab === "consent" && (
         <TreatmentConsentManager
           consents={s.consents}
+          signatures={s.signatures}
           send={send}
           work={work}
         />

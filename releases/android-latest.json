@@ -1,7 +1,7 @@
 {
-  "version": "0.12.11",
-  "versionCode": 51,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.11.apk",
-  "sha256": "74781bafe41f7dd941f72ff94c66392dd941a0005efb25ad517a9a1f477d4612",
-  "notes": "원문 87개 항목과 공통 조항 대조. 구체적인 기간·행동·경과를 동의서 본문에 복원하고 항목별 반영 내역 제공. 최신 개정안 우선 표시."
+  "version": "0.12.12",
+  "versionCode": 52,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.12.apk",
+  "sha256": "2823523e913a2ebfdf6f73caaa02035bae3c780d97841b38ee0da10a41809443",
+  "notes": "받은 서명이 없는 동의서 양식 영구삭제. 서명 기록 보호, 삭제 확인 및 동기화·복구 반영."
 }

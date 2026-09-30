@@ -7,7 +7,7 @@ import {
   type PatientSearchRow,
 } from "../src/core/patientSearch";
 import { buildAnalytics } from "../src/core/analytics";
-import { lightCatalog, visibleChanges } from "../src/core/stateChanges";
+import { lightCatalog, visibleChanges, diffStateChanges, isConsentDeletion } from "../src/core/stateChanges";
 import {
   QuoteShares,
   quoteShareInput,
@@ -483,13 +483,15 @@ export class Clinic extends DurableObject<Env> {
       const encrypted = await Promise.all(
         op.changes.map(async (c) => ({
           ...c,
-          value: await seal(c.value, this.env.ENCRYPTION_KEY),
+          value: isConsentDeletion(c) ? null : await seal(c.value, this.env.ENCRYPTION_KEY),
         })),
       );
       this.patientRows = undefined;
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
-          this.sql.exec(
+          if (isConsentDeletion(c))
+            this.sql.exec("DELETE FROM entities WHERE section=? AND id=?", c.section, c.id);
+          else this.sql.exec(
             "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
             c.section,
             c.id,
@@ -546,7 +548,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.12.11",
+        version: "0.12.12",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1832,6 +1834,8 @@ export class Clinic extends DurableObject<Env> {
               ...changed,
               value: await open(current.value, this.env.ENCRYPTION_KEY),
             });
+          else if (changed.section === "consents")
+            changes.push({ ...changed, value: null });
         }
         return json({
           ok: true,
@@ -1926,17 +1930,7 @@ export class Clinic extends DurableObject<Env> {
           }
         }
       }
-      const changes: Change[] = [];
-      for (const section of Object.keys(before) as (keyof State)[]) {
-        if (section === "users") continue;
-        const prior = new Map(before[section].map((v) => [v.id, v]));
-        for (const v of after[section])
-          if (
-            prior.get(v.id) !== v &&
-            JSON.stringify(prior.get(v.id)) !== JSON.stringify(v)
-          )
-            changes.push({ section, id: v.id, value: v });
-      }
+      const changes = diffStateChanges(before, after);
       await this.persistChanges(cmd.id, user.id, digest, changes);
       return json({
         ok: true,
@@ -1980,7 +1974,7 @@ export class Clinic extends DurableObject<Env> {
       const encrypted = await Promise.all(
         changes.map(async (c) => ({
           ...c,
-          value: await seal(c.value, this.env.ENCRYPTION_KEY),
+          value: isConsentDeletion(c) ? null : await seal(c.value, this.env.ENCRYPTION_KEY),
         })),
       );
       const restored: { table: string; id: string; value: string }[] = [];
@@ -2078,7 +2072,9 @@ export class Clinic extends DurableObject<Env> {
             r.value,
           );
         for (const c of encrypted)
-          this.sql.exec(
+          if (isConsentDeletion(c))
+            this.sql.exec("DELETE FROM entities WHERE section=? AND id=?", c.section, c.id);
+          else this.sql.exec(
             "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
             c.section,
             c.id,

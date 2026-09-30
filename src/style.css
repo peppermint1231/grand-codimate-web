@@ -5194,3 +5194,6 @@ html.custom-pull-refresh {
 .consent-review-guide{color:#294b47;font-size:13px;line-height:1.7;overflow-wrap:anywhere}
 .consent-review-guide p{margin:5px 0 8px}
 .consent-review-guide blockquote{margin:5px 0 8px;padding:10px 12px;background:#fff;border:1px solid #e3dcdd;border-left:3px solid #a9beba;border-radius:6px;white-space:pre-wrap;user-select:text}
+
+.consent-delete-actions { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border, #dbe5e1); }
+.consent-delete-button { color: #a32935; border-color: #d9abb0; }

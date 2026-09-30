@@ -4,7 +4,7 @@ import {
 } from "../core/consentDetailedPrecautions";
 import { useRef, useState } from "react";
 import { consentReviewGuide } from "../core/consentReviewGuide";
-import type { Consent } from "../core/model";
+import type { Consent, Signature } from "../core/model";
 import {
   consentPublishIssues,
   consentSources,
@@ -14,16 +14,24 @@ import {
 
 type Props = {
   consents: Consent[];
+  signatures: Pick<Signature, "templateId">[];
   send: (...args: any[]) => Promise<any>;
   work: (fn: () => Promise<any>) => any;
 };
-export function TreatmentConsentManager({ consents, send, work }: Props) {
+export function TreatmentConsentManager({
+  consents,
+  signatures,
+  send,
+  work,
+}: Props) {
   const [selected, setSelected] = useState<Consent>();
   const [dirty, setDirty] = useState(false);
   const [editorKey, setEditorKey] = useState(0);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const deleteLock = useRef(false);
   const missing = treatmentConsentDrafts.filter(
     (t) =>
       !consents.some(
@@ -191,6 +199,41 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
             key={editorKey}
             template={selected}
             dirty={dirty}
+            signatureCount={
+              signatures.filter((s) => s.templateId === selected.id).length
+            }
+            deleting={deleting}
+            onDelete={() => {
+              if (
+                deleteLock.current ||
+                !window.confirm(
+                  `“${selected.name}” v${selected.version}을 영구삭제할까요?\n복구할 수 없으며, 이 양식에서 만든 개정 초안은 유지됩니다.${dirty ? "\n저장하지 않은 변경도 버려집니다." : ""}`,
+                )
+              )
+                return;
+              deleteLock.current = true;
+              setDeleting(true);
+              work(async () => {
+                try {
+                  const result = await send(
+                    "consent.delete",
+                    { confirmed: true },
+                    selected.id,
+                    selected.rev,
+                  );
+                  setSelected(undefined);
+                  setDirty(false);
+                  setNotice(
+                    result === false
+                      ? "삭제 요청 동기화 대기 중입니다. 서버에서 받은 서명을 다시 확인한 후 처리합니다."
+                      : "양식을 영구삭제했습니다. 개정 초안은 유지됩니다.",
+                  );
+                } finally {
+                  deleteLock.current = false;
+                  setDeleting(false);
+                }
+              });
+            }}
             onDirty={setDirty}
             onCancel={() => {
               if (!dirty || window.confirm("변경을 취소할까요?")) {
@@ -250,6 +293,9 @@ function ConsentEditor({
   onSave,
   onCancel,
   onClone,
+  onDelete,
+  signatureCount,
+  deleting,
 }: {
   template: Consent;
   dirty: boolean;
@@ -257,6 +303,9 @@ function ConsentEditor({
   onSave: (value: Consent, reviewed: boolean) => void;
   onCancel: () => void;
   onClone: () => void;
+  onDelete: () => void;
+  signatureCount: number;
+  deleting: boolean;
 }) {
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const checksRef = useRef<HTMLTextAreaElement>(null);
@@ -538,6 +587,24 @@ function ConsentEditor({
             </button>
           </div>
         </>
+      )}
+      {template.id && (
+        <div className="consent-delete-actions">
+          <p className="small">
+            받은 서명 {signatureCount}건 ·{" "}
+            {signatureCount
+              ? "서명 기록이 있는 양식은 삭제할 수 없습니다."
+              : "받은 서명이 없는 양식은 영구삭제할 수 있습니다."}
+          </p>
+          <button
+            type="button"
+            className="consent-delete-button"
+            disabled={signatureCount > 0 || deleting}
+            onClick={onDelete}
+          >
+            {deleting ? "삭제 처리 중…" : "양식 영구삭제"}
+          </button>
+        </div>
       )}
     </div>
   );

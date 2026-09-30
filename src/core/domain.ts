@@ -1936,6 +1936,19 @@ export async function applyCommand(
       text = `시술동의서 초안 ${added}종 등록·${updated}종 보완 (게시본·서명 유지)`;
       break;
     }
+    case "consent.delete": {
+      executive();
+      const template = find(s.consents);
+      ensure(p.confirmed === true, "영구삭제 확인이 필요합니다");
+      ensure(
+        !s.signatures.some((signature) => signature.templateId === template.id),
+        "받은 서명이 있는 양식은 영구삭제할 수 없습니다",
+        409,
+      );
+      s.consents = s.consents.filter((item) => item.id !== template.id);
+      text = `동의서 양식 영구삭제: ${template.name} · v${template.version}`;
+      break;
+    }
     case "consent.save": {
       executive();
       const d = z
@@ -1957,6 +1970,7 @@ export async function applyCommand(
           ? { reviewedBy: user.id, reviewedAt: now }
           : {};
       const old = s.consents.find((x) => x.id === id);
+      ensure(old || cmd.baseRev === undefined, "삭제되었거나 없는 양식입니다", 404);
       if (old) {
         find(s.consents);
         ensure(old.status === "draft", "게시된 양식은 복제해서 수정하세요");

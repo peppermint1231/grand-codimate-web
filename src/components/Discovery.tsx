@@ -47,7 +47,7 @@ export function Discovery() {
     [receipt, setReceipt] = useState("");
   const reset = () => {
     setStep(0);
-    setBook("미용");
+    setBook("이벤트");
     setFolderFilter("");
     setFilterConcerns(true);
     setConcerns([]);

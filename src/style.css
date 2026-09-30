@@ -5185,6 +5185,6 @@ html.custom-pull-refresh {
  .compact-photo-actions summary{list-style:none;background:#ffffffd9;border-radius:8px;padding:4px 8px;min-height:32px;cursor:pointer;font-size:13px}
  .compact-photo-actions summary::-webkit-details-marker{display:none}
  .compact-photo-actions[open]{z-index:4}
- .compact-photo-actions > div{position:absolute;right:0;top:100%;display:grid;gap:3px;background:#fff;padding:4px;border-radius:8px;box-shadow:0 3px 10px #0003;width:82px}
+ .compact-photo-actions > div{position:absolute;right:0;top:100%;display:grid;gap:3px;background:#fff;padding:4px;border-radius:8px;box-shadow:0 3px 10px #0003;width:calc(100cqw - 8px);max-width:82px}
  .compact-photo-actions button{width:100%;padding:4px 2px;font-size:12px}
 }

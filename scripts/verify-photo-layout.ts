@@ -154,6 +154,24 @@ try {
     );
     await panel.scrollIntoViewIfNeeded();
     await page.waitForTimeout(200);
+    if (width === 390) {
+      const menu = grid.locator(".compact-photo-actions").first();
+      await menu.locator("summary").click();
+      const figure = (await grid.locator("figure").first().boundingBox())!;
+      const info = menu.getByRole("button", { name: "상세정보", exact: true });
+      const bounds = (await info.boundingBox())!;
+      assert(
+        bounds.x >= figure.x &&
+          bounds.x + bounds.width <= figure.x + figure.width,
+        "Compact menu stays inside photo",
+      );
+      await info.click();
+      await expect(
+        page.getByRole("dialog", { name: "사진 상세정보" }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await menu.locator("summary").click();
+    }
     await page.screenshot({ path: `artifacts/photo-layout-${width}.png` });
   }
   await page.setViewportSize({ width: 768, height: 1024 });
@@ -231,6 +249,13 @@ try {
   await expect(
     page.locator('[aria-label="고민 단가표 구분"] > button'),
   ).toHaveText(["이벤트", "미용", "보험"]);
+  await expect(
+    page.locator('[aria-label="고민 단가표 구분"] > button').first(),
+  ).toHaveClass(/active|selected/);
+  await page.reload();
+  await expect(
+    page.locator('[aria-label="고민 단가표 구분"] > button').first(),
+  ).toHaveClass(/active|selected/);
   assert.deepEqual(errors, []);
   await writeFile(
     "artifacts/photo-layout-browser.json",

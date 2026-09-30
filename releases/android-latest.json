@@ -1,7 +1,7 @@
 {
-  "version": "0.12.5",
-  "versionCode": 45,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.5.apk",
-  "sha256": "f227509107a93f5294f0c8d0f1450cd79eebcc8f6fa8bed1999e5653b7a5a394",
-  "notes": "이벤트 SSOT 기본 선택, 사진 자동 배치·세로 격벽 조정, 병원 동의서 23종 보완 및 검토 항목 빨간 강조."
+  "version": "0.12.6",
+  "versionCode": 46,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.6.apk",
+  "sha256": "600d130b6cba37b22e44bc9a5827d931ffe0a9eb18262a62aa35bc872feb02ea",
+  "notes": "이벤트 SSOT 기본 선택 및 추천기 초기화, 사진 자동 배치·세로 격벽 조정, 병원 동의서 23종 보완과 검토 항목 빨간 강조."
 }

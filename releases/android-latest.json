@@ -1,7 +1,7 @@
 {
-  "version": "0.12.1",
-  "versionCode": 42,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.1.apk",
-  "sha256": "3c476c4e3ac033e7c0cd362417f1b2e7fe7169ec52d183191e0568686799b5d7",
-  "notes": "초진설문지 환자 검색·기본정보 자동 입력·기존 환자 열기 및 중복 등록 방지. 0.12.0 견적서·의사 의견 기능 포함."
+  "version": "0.12.3",
+  "versionCode": 43,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.3.apk",
+  "sha256": "d7acf94b800f84fd15594cdcb40a1da13b65c5b55f7703d62a1f72bcf936ee35",
+  "notes": "시술동의서 16종 초안, 본문·확인 항목 편집과 미리보기, 의료진 검토 후 게시, 게시본 복제. 초안은 자동 게시되지 않습니다."
 }

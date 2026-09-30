@@ -9,3 +9,5 @@
 검증: 운영 오류 재현, native PBKDF2 사용 불가 조건에서 기존 암호문 해독/잘못된 비밀번호 거부 회귀 테스트, 서버 오류 분리, 전체 42개 파일 280개 테스트와 빌드 통과.
 
 근거: https://github.com/cloudflare/workerd/issues/1346 및 https://github.com/cloudflare/workerd/pull/7550
+
+배포 완료: 서버 0.12.2, 원격 커밋 `7f2b885229413d0513082f1648b70abc51f75688`. 실제 OneDrive의 같은 자료·같은 관리자 비밀번호로 수정 전 HTTP400 → 수정 후 HTTP200 연결 성공 확인. 연동 설정 저장 완료. 독립 workerd에서 native PBKDF2를 차단한 상태로 복호화 성공(512ms), 운영 정적 파일 48개 일치. APK는 기존 0.12.1을 사용합니다.

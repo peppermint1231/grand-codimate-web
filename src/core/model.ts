@@ -291,6 +291,10 @@ export interface Opinion extends Base {
   answerReadBy?: Record<string, string>;
 }
 export interface Consent extends Base {
+  draftKey?: string;
+  sourceTemplateId?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
   name: string;
   productIds: string[];
   body: string;

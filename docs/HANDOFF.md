@@ -1,6 +1,12 @@
+# 0.12.3 · 시술동의서 검토용 초안
+
+[변경 기록](RELEASE-0.12.3.md), [검토 방법](TREATMENT-CONSENTS.md). 기본 16종을 consent.installDrafts로 관리자·임원만 등록하며 draftKey 기준으로 중복/덮어쓰기를 방지한다. 초안 재편집·미리보기·검토 후 게시·게시본 복제, 서버의 미확정 항목/검토 확인 검사, 게시 담당자·시각을 추가했다. 자동 상품 연결이나 자동 게시 없음. 환자별 진료 기록 및 제품·장비/국내 허가/병원 연락처 보완은 의료진 검토 대상. 284개 테스트와 1440/768/390px 브라우저 확인. 물리 기기 미검증.
+
+0.12.1 초진설문지 환자 불러오기와 0.12.2 운영 PBKDF2 호환 수정도 포함한다. 해당 연동은 설정 저장 및 실제 OneDrive 연결 확인 완료: RELEASE-0.12.1.md / RELEASE-0.12.2.md.
+
 ## 2026-09-29 항목별 견적 금액·공통 사유·직접 의견 — 0.12.0
 
-[변경 기록](RELEASE-0.12.0.md). quoteLinePrices로 항목/전체 할인 배분 표시와 총액 계산 통일. customPrice 선택적 단가 override, 원단가 유지·사유 필수·PDF/JPG 내부사유 제외. priceReasonHistory는 상담별 고유 사유 이력이며 /quote-reasons에서 계정 공통 TOP10 집계. 직접 의견은 opinion.direct로 역할/상담rev/사진 검사 후 기존 답변·알림에 연결. 메모 점 애니메이션, 의사 모바일 2줄 플로팅 버튼. 검증 기록 artifacts/pricing012-*.json. 운영 배포 확인 중.
+[변경 기록](RELEASE-0.12.0.md). quoteLinePrices로 항목/전체 할인 배분 표시와 총액 계산 통일. customPrice 선택적 단가 override, 원단가 유지·사유 필수·PDF/JPG 내부사유 제외. priceReasonHistory는 상담별 고유 사유 이력이며 /quote-reasons에서 계정 공통 TOP10 집계. 직접 의견은 opinion.direct로 역할/상담rev/사진 검사 후 기존 답변·알림에 연결. 메모 점 애니메이션, 의사 모바일 2줄 플로팅 버튼. 검증 기록 artifacts/pricing012-*.json. 운영 배포 `686c843578a4dd52e5b228880d39828c07d67703`의 GitHub 검사·Workers 배포 성공. 269개 테스트/웹·Android 빌드 통과. APK 0.12.0/code41 기존 서명 유지, 내장·운영 파일48개 및 공개 APK SHA-256 `3234548d85eabf4eddd3cf8ffb4a1d5b0d94caeaac47704a2e1fc23a35c1805f` 일치. 운영 장바구니 새 입력/공통 사유, 390~1440px 화면, 기존 금액 확인. 업무 자료 쓰기0건, 전체 State 해시 동일·미전송0건. 최종 기록 artifacts/deployment-0.12.0.json. 물리 Android·프린터 미검증.
 
 ## 2026-09-28 견적서 출력 수정 — 0.11.1
 

@@ -1,3 +1,7 @@
+import {
+  treatmentConsentDrafts,
+  consentPublishIssues,
+} from "./treatmentConsents";
 import type { Opinion } from "./model";
 import { offeringSchema, productComposition } from "./offerings";
 import {
@@ -1851,25 +1855,88 @@ export async function applyCommand(
       text = direct ? "의사 의견 직접 작성" : "의사 답변";
       break;
     }
+    case "consent.installDrafts": {
+      executive();
+      const keys = z
+        .array(z.string())
+        .min(1)
+        .max(treatmentConsentDrafts.length)
+        .parse(p.keys);
+      ensure(
+        keys.every((key) => treatmentConsentDrafts.some((t) => t.key === key)),
+        "초안 종류를 확인하세요",
+      );
+      let added = 0;
+      for (const key of new Set(keys)) {
+        if (s.consents.some((t) => t.draftKey === key)) continue;
+        const template = treatmentConsentDrafts.find((t) => t.key === key)!;
+        const templateId = `treatment-consent-${key}`;
+        ensure(
+          !s.consents.some((t) => t.id === templateId),
+          "동일한 양식 ID가 있습니다",
+        );
+        s.consents.push({
+          ...base,
+          id: templateId,
+          name: template.name + " 동의서",
+          body: template.body,
+          checks: [...template.checks],
+          productIds: [],
+          status: "draft",
+          version: 1,
+          draftKey: key,
+        });
+        added++;
+      }
+      text = `시술동의서 초안 ${added}종 등록 (기존 양식 유지)`;
+      break;
+    }
     case "consent.save": {
       executive();
       const d = z
         .object({
-          name: z.string().min(1),
-          body: z.string().min(1).max(30000),
-          checks: z.array(z.string().min(1)),
+          name: z.string().trim().min(1).max(200),
+          body: z.string().trim().min(1).max(30000),
+          checks: z.array(z.string().trim().min(1).max(1000)).max(100),
           productIds: z.array(z.string()),
           status: z.enum(["draft", "published"]),
         })
         .parse(p);
+      if (d.status === "published") {
+        const issues = consentPublishIssues(d);
+        ensure(!issues.length, issues.join(" "));
+        ensure(p.reviewConfirmed === true, "병원 검토 완료를 확인하세요");
+      }
+      const review =
+        d.status === "published"
+          ? { reviewedBy: user.id, reviewedAt: now }
+          : {};
       const old = s.consents.find((x) => x.id === id);
       if (old) {
         find(s.consents);
         ensure(old.status === "draft", "게시된 양식은 복제해서 수정하세요");
-        Object.assign(old, d);
+        Object.assign(old, d, review);
         touch(old);
-      } else s.consents.push({ ...base, ...d, version: 1 });
-      text = "동의서 양식 저장";
+      } else {
+        const sourceId = z.string().optional().parse(p.sourceTemplateId);
+        const source = sourceId
+          ? s.consents.find((t) => t.id === sourceId)
+          : undefined;
+        ensure(!sourceId || source, "복제할 원본 양식을 찾을 수 없습니다");
+        s.consents.push({
+          ...base,
+          ...d,
+          ...review,
+          version: source ? source.version + 1 : 1,
+          ...(source
+            ? { sourceTemplateId: source.id, draftKey: source.draftKey }
+            : {}),
+        });
+      }
+      text =
+        d.status === "published"
+          ? "동의서 병원 검토 완료·게시"
+          : "동의서 초안 저장";
       break;
     }
     case "quote.consent": {

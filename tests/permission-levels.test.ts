@@ -149,7 +149,8 @@ it("allows executive patient archive/restore/merge and consent management but de
   const consent = cmd("consent.save", {
     name: "동의서",
     body: "설명",
-    checks: [],
+    checks: ["설명을 확인했습니다"],
+    reviewConfirmed: true,
     productIds: [],
     status: "published",
   });

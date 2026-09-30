@@ -5056,3 +5056,107 @@ html.custom-pull-refresh {
 @media (max-width: 600px) {
   .content:has(.consult-floating-actions > button[aria-label="의사 의견 직접 작성"]) .consult-layout { padding-bottom: 130px; }
 }
+
+
+/* Consent review keeps the template list compact and the document readable. */
+.consent-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 16px;
+}
+.consent-intro p {
+  max-width: 78ch;
+}
+.consent-intro .button-row {
+  flex-shrink: 0;
+}
+.consent-manager-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+.consent-template-list,
+.consent-editor {
+  min-width: 0;
+}
+.consent-list-scroll {
+  max-height: 65vh;
+  overflow-y: auto;
+}
+.consent-template-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  width: 100%;
+  gap: 5px;
+  margin: 5px 0;
+  white-space: normal;
+}
+.consent-template-row.active {
+  border-color: var(--primary, #155e59);
+  background: #edf6f3;
+}
+.consent-review-notes {
+  background: #f3f7f4;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin: 12px 0;
+  overflow-wrap: anywhere;
+}
+.consent-review-notes summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.consent-body-editor {
+  width: 100%;
+  box-sizing: border-box;
+  line-height: 1.8;
+  margin: 10px 0;
+  resize: vertical;
+}
+.consent-preview {
+  max-height: 65vh;
+  overflow: auto;
+  border: 1px solid #dbe4df;
+  padding: 20px;
+  margin: 12px 0;
+  border-radius: 10px;
+}
+.consent-preview .consent-text {
+  max-height: none;
+  overflow: visible;
+  white-space: pre-wrap;
+  line-height: 1.85;
+}
+.consent-editor .field {
+  margin: 12px 0;
+}
+.consent-editor .check {
+  white-space: normal;
+  align-items: flex-start;
+  line-height: 1.6;
+}
+.consent-save-actions {
+  margin-top: 16px;
+}
+@media (max-width: 800px) {
+  .consent-intro {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .consent-manager-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .consent-list-scroll {
+    max-height: 230px;
+  }
+}
+
+.consent-editor .check input { flex-shrink: 0; margin-top: 3px; }
+
+.treatment-consent-signing .check { white-space: normal; align-items: flex-start; }
+.treatment-consent-signing .check input { flex-shrink: 0; margin-top: 3px; }

@@ -1,3 +1,4 @@
+import { TreatmentConsentManager } from "./components/TreatmentConsentManager";
 import { QuoteReasonInput } from "./components/QuoteReasonInput";
 import { DirectOpinion } from "./components/DirectOpinion";
 import { RestoreJobPanel } from "./components/RestoreJobPanel";
@@ -4532,7 +4533,7 @@ function ConsultationView({
               <button>상태 저장</button>
             </form>
           </div>
-          <div className="card">
+          <div className="card treatment-consent-signing">
             <h3>시술동의서</h3>
             <select
               value={template}
@@ -6479,77 +6480,11 @@ function SettingsView({
         </div>
       )}
       {activeTab === "consent" && (
-        <div className="detail-grid">
-          <div className="card">
-            <h3>양식 목록</h3>
-            {s.consents.map((t) => (
-              <div className="list-row" key={t.id}>
-                <span>
-                  <b>{t.name}</b>
-                  <small>
-                    v{t.version} ·{" "}
-                    {t.status === "published" ? "게시됨" : "초안"}
-                  </small>
-                </span>
-                {t.status === "draft" && (
-                  <button
-                    onClick={() =>
-                      work(() =>
-                        send(
-                          "consent.save",
-                          {
-                            name: t.name,
-                            body: t.body,
-                            productIds: t.productIds,
-                            checks: t.checks,
-                            status: "published",
-                          },
-                          t.id,
-                          t.rev,
-                        ),
-                      )
-                    }
-                  >
-                    병원 검토 완료·게시
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <form
-            className="card"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const d = new FormData(e.currentTarget);
-              work(() =>
-                send("consent.save", {
-                  name: d.get("name"),
-                  body: d.get("body"),
-                  checks: String(d.get("checks")).split("\n").filter(Boolean),
-                  productIds: [],
-                  status: "draft",
-                }),
-              );
-            }}
-          >
-            <h3>동의서 초안 등록</h3>
-            <Field label="양식명">
-              <input name="name" required />
-            </Field>
-            <Field label="본문">
-              <textarea
-                name="body"
-                required
-                rows={12}
-                placeholder="병원에서 검토할 시술동의서 문구를 입력하세요."
-              />
-            </Field>
-            <Field label="필수 확인 항목 (한 줄에 하나)">
-              <textarea name="checks" />
-            </Field>
-            <button className="primary">초안 저장</button>
-          </form>
-        </div>
+        <TreatmentConsentManager
+          consents={s.consents}
+          send={send}
+          work={work}
+        />
       )}
       {activeTab === "connection" && (
         <div className="detail-grid">

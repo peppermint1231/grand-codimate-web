@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import {
-  catalogBooks,
+  catalogBookDisplayOrder,
   money,
   type CatalogBook,
   type State,
@@ -175,7 +175,7 @@ export function Discovery() {
                 <span>여러 개 선택할 수 있어요</span>
               </div>
               <div className="tabs" aria-label="고민 단가표 구분">
-                {catalogBooks.map((kind) => (
+                {catalogBookDisplayOrder.map((kind) => (
                   <button
                     key={kind}
                     className={kind === book ? "active" : ""}
@@ -261,7 +261,7 @@ export function Discovery() {
                 </button>
               </div>
               <div className="tabs" aria-label="시술 단가표 구분">
-                {catalogBooks.map((kind) => (
+                {catalogBookDisplayOrder.map((kind) => (
                   <button
                     key={kind}
                     className={book === kind ? "active" : ""}

@@ -12,7 +12,13 @@ import {
   type Performance,
 } from "../core/analytics";
 import { analyticsWorkbook } from "../core/analyticsExcel";
-import { allowed, money, type User, type State } from "../core/model";
+import {
+  allowed,
+  money,
+  catalogBookDisplayOrder,
+  type User,
+  type State,
+} from "../core/model";
 const fmt = (n: number) => n.toLocaleString("ko-KR"),
   pct = (n: number) => n.toFixed(1) + "%";
 function Bars({ rows, unit = "명" }: { rows: Bucket[]; unit?: string }) {
@@ -337,7 +343,7 @@ export function Statistics({
               onChange={(e) => setBook(e.target.value)}
             >
               <option value="">전체 구분</option>
-              {["미용", "보험", "이벤트"].map((b) => (
+              {catalogBookDisplayOrder.map((b) => (
                 <option key={b}>{b}</option>
               ))}
             </select>

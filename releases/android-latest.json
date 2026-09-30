@@ -1,7 +1,7 @@
 {
-  "version": "0.12.3",
-  "versionCode": 43,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.3.apk",
-  "sha256": "d7acf94b800f84fd15594cdcb40a1da13b65c5b55f7703d62a1f72bcf936ee35",
-  "notes": "시술동의서 16종 초안, 본문·확인 항목 편집과 미리보기, 의료진 검토 후 게시, 게시본 복제. 초안은 자동 게시되지 않습니다."
+  "version": "0.12.4",
+  "versionCode": 44,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.4.apk",
+  "sha256": "bf91ad298e4f59eb95f38d96a44716505370c13675137de4cba99fd097f7c07b",
+  "notes": "단가표 관리·상담 시술 선택·맞춤 시술 찾기·통계의 SSOT 순서를 이벤트 / 미용 / 보험으로 변경."
 }

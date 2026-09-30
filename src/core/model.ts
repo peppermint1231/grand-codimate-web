@@ -380,6 +380,11 @@ export const emptyQuote = (): Quote => ({
 });
 export const catalogBooks = ["미용", "보험", "이벤트"] as const;
 export type CatalogBook = (typeof catalogBooks)[number];
+export const catalogBookDisplayOrder: readonly CatalogBook[] = [
+  "이벤트",
+  "미용",
+  "보험",
+];
 export interface CatalogFolder {
   linkTo?: string;
   color?: string;

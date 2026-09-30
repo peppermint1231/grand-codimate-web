@@ -133,7 +133,7 @@ import {
   emptyQuote,
   latestCatalog,
   latestCatalogs,
-  catalogBooks,
+  catalogBookDisplayOrder,
   catalogBook,
   type CatalogBook,
   allowed,
@@ -3562,7 +3562,7 @@ function ConsultationView({
                 <div className="procedure-picker-controls">
                   <div className="procedure-picker-toolbar">
                     <div className="tabs" aria-label="상담 단가표 구분">
-                      {catalogBooks.map((kind) => (
+                      {catalogBookDisplayOrder.map((kind) => (
                         <button
                           type="button"
                           key={kind}
@@ -5037,7 +5037,7 @@ function CatalogView({
         }
       />
       <div className="tabs" aria-label="단가표 구분">
-        {catalogBooks.map((kind) => (
+        {catalogBookDisplayOrder.map((kind) => (
           <button
             type="button"
             key={kind}

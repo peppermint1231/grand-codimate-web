@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Consent } from "../core/model";
 import {
   consentPublishIssues,
@@ -18,8 +18,13 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
   const [editorKey, setEditorKey] = useState(0);
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const missing = treatmentConsentDrafts.filter(
-    (t) => !consents.some((c) => c.draftKey === t.key),
+    (t) =>
+      !consents.some(
+        (c) =>
+          c.draftKey === t.key && c.draftRevision === CONSENT_DRAFT_REVISION,
+      ),
   );
   const choose = (t: Consent) => {
     if (
@@ -51,7 +56,8 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
           <h3>시술별 동의서 초안</h3>
           <p>
             목적·대안·위험·사후 관리·환자 확인 항목을 작성해 두었습니다. 본문의{" "}
-            <b>[병원 확인: …]</b>을 보완하고 담당 의료진의 검토 후 게시하세요.
+            <b className="consent-review-badge">검토 필요 · [병원 확인: …]</b>을
+            보완하고 담당 의료진의 검토 후 게시하세요.
           </p>
           <p className="small">
             복합 시술은 각 시술에 필요한 양식을 함께 사용합니다. 초안은 환자
@@ -74,8 +80,8 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
             }
           >
             {missing.length
-              ? `기본 초안 ${missing.length}종 등록`
-              : "기본 초안 등록 완료"}
+              ? `초안 ${missing.length}종 등록·업그레이드`
+              : "최신 초안 등록 완료"}
           </button>
           <button type="button" onClick={() => choose(blank())}>
             새 양식 작성
@@ -98,8 +104,27 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
             초안 {consents.filter((t) => t.status === "draft").length} · 게시됨{" "}
             {consents.filter((t) => t.status === "published").length}
           </p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={showHistory}
+              onChange={(e) => setShowHistory(e.target.checked)}
+            />
+            이전 초안 함께 보기
+          </label>
           <div className="consent-list-scroll">
             {consents
+              .filter(
+                (t) =>
+                  showHistory ||
+                  !t.draftKey ||
+                  t.status === "published" ||
+                  !consents.some(
+                    (other) =>
+                      other.draftKey === t.draftKey &&
+                      other.version > t.version,
+                  ),
+              )
               .filter((t) =>
                 `${t.name} ${treatmentConsentDrafts.find((d) => d.key === t.draftKey)?.examples || ""}`.includes(
                   search.trim(),
@@ -113,6 +138,9 @@ export function TreatmentConsentManager({ consents, send, work }: Props) {
                   onClick={() => choose(t)}
                 >
                   <b>{t.name}</b>
+                  {/\[병원 확인\s*[:：]/.test(t.body) && (
+                    <span className="consent-review-badge">검토 필요</span>
+                  )}
                   <span className="small">
                     {t.status === "draft" ? "검토 전 초안" : "게시됨"} · v
                     {t.version}
@@ -196,6 +224,8 @@ function ConsentEditor({
   onCancel: () => void;
   onClone: () => void;
 }) {
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  const checksRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValue] = useState(template);
   const [checks, setChecks] = useState(template.checks.join("\n"));
   const [reviewed, setReviewed] = useState(false);
@@ -212,6 +242,31 @@ function ConsentEditor({
       .filter(Boolean),
   };
   const issues = consentPublishIssues(data);
+  const reviewItems = (["body", "checks"] as const).flatMap((field) => {
+    const text = field === "body" ? value.body : checks;
+    return [...text.matchAll(/\[병원 확인\s*[:：][^\]]*(?:\]|$)/g)].map(
+      (match) => ({ field, text: match[0], index: match.index! }),
+    );
+  });
+  const highlight = (text: string) =>
+    text.split(/(\[병원 확인\s*[:：][^\]]*(?:\]|$))/g).map((part, i) =>
+      part.startsWith("[병원 확인") ? (
+        <mark className="consent-review-mark" key={i}>
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
+    );
+  const jumpToReview = (item: (typeof reviewItems)[number]) => {
+    setPreview(false);
+    requestAnimationFrame(() => {
+      const input = item.field === "body" ? bodyRef.current : checksRef.current;
+      input?.focus();
+      input?.setSelectionRange(item.index, item.index + item.text.length);
+      input?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  };
   const change = (patch: Partial<Consent>) => {
     setValue((v) => ({ ...v, ...patch }));
     onDirty(true);
@@ -227,14 +282,25 @@ function ConsentEditor({
         </span>
       </div>
       {source && (
-        <details className="consent-review-notes">
-          <summary>검토할 내용·참고 자료</summary>
+        <details className="consent-review-notes consent-review-required" open>
+          <summary>
+            <span className="consent-review-badge">의료진 검토</span> 검토할
+            내용·참고 자료
+          </summary>
           <p>
             <b>적용 예시:</b> {source.examples}
           </p>
           <p>
             <b>의료진 확인:</b> {source.review}
           </p>
+          <p>
+            <b>병원 양식 반영:</b> {source.hospitalReview}
+          </p>
+          {template.draftRevision !== CONSENT_DRAFT_REVISION && (
+            <p className="consent-review-badge">
+              이전 초안입니다. 최신 보완본을 등록·업그레이드해 비교하세요.
+            </p>
+          )}
           <p className="small">
             작성 기준 {CONSENT_DRAFT_REVISION}. 아래 자료는 일반적인 위험 설명의
             참고 자료입니다. 국내 제품의 허가 범위·용량·금기와 해당 병원 장비의
@@ -270,12 +336,34 @@ function ConsentEditor({
           {preview ? "본문 편집 보기" : "환자 화면 미리보기"}
         </button>
       </div>
+      {reviewItems.length > 0 && (
+        <section
+          className="consent-review-required"
+          aria-label="검토 필요 항목"
+        >
+          <b>검토 필요 {reviewItems.length}개</b>
+          <p className="small">항목을 누르면 수정할 위치가 선택됩니다.</p>
+          <ul>
+            {reviewItems.map((item, i) => (
+              <li key={`${item.field}-${item.index}`}>
+                <button
+                  type="button"
+                  className="consent-review-jump"
+                  onClick={() => jumpToReview(item)}
+                >
+                  {i + 1}. {item.text}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {preview ? (
         <section className="consent-preview" aria-label="동의서 미리보기">
-          <div className="consent-text">{value.body}</div>
+          <div className="consent-text">{highlight(value.body)}</div>
           <h4>필수 확인 항목</h4>
           {data.checks.map((c, i) => (
-            <p key={i}>□ {c}</p>
+            <p key={i}>□ {highlight(c)}</p>
           ))}
           <p className="small">
             서명은 게시된 양식을 상담에서 선택한 뒤 받습니다.
@@ -283,6 +371,7 @@ function ConsentEditor({
         </section>
       ) : (
         <textarea
+          ref={bodyRef}
           aria-label="동의서 본문"
           className="consent-body-editor"
           rows={22}
@@ -295,6 +384,7 @@ function ConsentEditor({
       <label className="field">
         필수 확인 항목 (한 줄에 하나)
         <textarea
+          ref={checksRef}
           rows={6}
           value={checks}
           readOnly={published}
@@ -317,8 +407,8 @@ function ConsentEditor({
       ) : (
         <>
           {issues.length > 0 && (
-            <div className="consent-review-notes">
-              <b>게시 전 보완</b>
+            <div className="consent-review-notes consent-review-required">
+              <b>검토 필요 · 게시 전 보완</b>
               <ul>
                 {issues.map((x) => (
                   <li key={x}>{x}</li>

@@ -1,3 +1,9 @@
+import { useViewport } from "./lib/useViewport";
+import {
+  photoColumnCount,
+  clampViewerHeight,
+  viewerHeightBounds,
+} from "./core/photoLayout";
 import { TreatmentConsentManager } from "./components/TreatmentConsentManager";
 import { QuoteReasonInput } from "./components/QuoteReasonInput";
 import { DirectOpinion } from "./components/DirectOpinion";
@@ -2908,17 +2914,17 @@ function ConsultationView({
   useEffect(() => {
     setDraft((d) => (d.rev === c.rev ? { ...d, updatedAt: c.updatedAt } : d));
   }, [c.updatedAt, c.rev]);
-  const [book, setBook] = useState<CatalogBook>(c.category);
+  const [book, setBook] = useState<CatalogBook>("이벤트");
+  const viewport = useViewport();
   const pickerRef = useRef<HTMLDivElement>(null);
   const [viewerHeight, setViewerHeight] = useState<number | null>(() => {
     const saved = Number(localStorage.getItem("codimate-viewer-height"));
-    return saved >= 480 && saved <= 1600 ? saved : null;
+    return saved >= viewerHeightBounds.min && saved <= viewerHeightBounds.max
+      ? saved
+      : null;
   });
   const resizeViewer = (height: number | null) => {
-    const next =
-      height === null
-        ? null
-        : Math.max(480, Math.min(1600, Math.round(height)));
+    const next = height === null ? null : clampViewerHeight(height);
     setViewerHeight(next);
     if (next === null) localStorage.removeItem("codimate-viewer-height");
     else localStorage.setItem("codimate-viewer-height", String(next));
@@ -3090,7 +3096,12 @@ function ConsultationView({
         vat: draft.quote.vat,
         memo: draft.memo,
         photos: draft.photos,
-        photoColumns: draft.photoColumns || 2,
+        photoColumns: photoColumnCount(
+          draft.photos.filter((p) => p.selected).length,
+          viewport.portrait,
+          draft.photoLayout === "manual" ? draft.photoColumns : undefined,
+        ),
+        photoLayout: draft.photoLayout || "auto",
         reason: draft.quote.reason,
         catalogVersion: draft.catalogVersion,
         catalogVersions: draft.catalogVersions,
@@ -3410,13 +3421,21 @@ function ConsultationView({
                 onChoosePhotos={() => setTab("photo")}
                 photos={draft.photos}
                 columns={draft.photoColumns || 2}
+                autoColumns={draft.photoLayout !== "manual"}
+                onAutoColumns={() =>
+                  setDraft((d) => ({ ...d, photoLayout: "auto" }))
+                }
                 userId={user.id}
                 readonly={readonly}
                 canAnnotate={!readonly || user.role === "doctor"}
                 admin={isAdministrator(user)}
                 onChange={(photos) => setDraft((d) => ({ ...d, photos }))}
                 onColumns={(photoColumns) =>
-                  setDraft((d) => ({ ...d, photoColumns }))
+                  setDraft((d) => ({
+                    ...d,
+                    photoColumns,
+                    photoLayout: "manual",
+                  }))
                 }
               />
               {tab === "consult" && (
@@ -3426,8 +3445,8 @@ function ConsultationView({
                   tabIndex={0}
                   aria-label="상담 사진뷰어 높이 조절"
                   aria-orientation="horizontal"
-                  aria-valuemin={480}
-                  aria-valuemax={1600}
+                  aria-valuemin={viewerHeightBounds.min}
+                  aria-valuemax={viewerHeightBounds.max}
                   aria-valuenow={viewerHeight ?? undefined}
                   onDoubleClick={() => resizeViewer(null)}
                   onKeyDown={(e) => {
@@ -3441,9 +3460,9 @@ function ConsultationView({
                         .height;
                     resizeViewer(
                       e.key === "Home"
-                        ? 480
+                        ? viewerHeightBounds.min
                         : e.key === "End"
-                          ? 1600
+                          ? viewerHeightBounds.max
                           : current + (e.key === "ArrowUp" ? -40 : 40),
                     );
                   }}
@@ -3497,57 +3516,112 @@ function ConsultationView({
               role="separator"
               tabIndex={0}
               aria-label="사진과 시술 선택 분할선"
-              aria-valuenow={ratio}
-              aria-valuemin={25}
-              aria-valuemax={75}
+              aria-orientation={viewport.stacked ? "horizontal" : "vertical"}
+              aria-valuenow={
+                viewport.stacked
+                  ? (viewerHeight ??
+                    Math.min(
+                      1000,
+                      Math.max(360, Math.round(viewport.height * 0.62)),
+                    ))
+                  : ratio
+              }
+              aria-valuemin={viewport.stacked ? viewerHeightBounds.min : 25}
+              aria-valuemax={viewport.stacked ? viewerHeightBounds.max : 75}
+              onDoubleClick={() =>
+                viewport.stacked ? resizeViewer(null) : setRatio(50)
+              }
               onKeyDown={(e) => {
                 if (
-                  ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"].includes(
-                    e.key,
-                  )
+                  ![
+                    "ArrowLeft",
+                    "ArrowUp",
+                    "ArrowRight",
+                    "ArrowDown",
+                    "Home",
+                    "End",
+                  ].includes(e.key)
                 )
-                  e.preventDefault();
-                if (["ArrowLeft", "ArrowUp"].includes(e.key))
-                  setRatio(Math.max(25, ratio - 5));
-                if (["ArrowRight", "ArrowDown"].includes(e.key))
-                  setRatio(Math.min(75, ratio + 5));
+                  return;
+                e.preventDefault();
+                const negative = ["ArrowLeft", "ArrowUp"].includes(e.key);
+                if (viewport.stacked) {
+                  const panel = e.currentTarget.parentElement!.querySelector(
+                    ".consultation-viewer-panel",
+                  )!;
+                  resizeViewer(
+                    e.key === "Home"
+                      ? viewerHeightBounds.min
+                      : e.key === "End"
+                        ? viewerHeightBounds.max
+                        : panel.getBoundingClientRect().height +
+                          (negative ? -40 : 40),
+                  );
+                } else
+                  setRatio(
+                    e.key === "Home"
+                      ? 25
+                      : e.key === "End"
+                        ? 75
+                        : Math.max(
+                            25,
+                            Math.min(75, ratio + (negative ? -5 : 5)),
+                          ),
+                  );
               }}
               onPointerDown={(e) => {
+                if (e.button !== 0) return;
                 const el = e.currentTarget,
                   parent = el.parentElement!;
-                const vertical =
-                  getComputedStyle(parent).flexDirection === "column";
-                el.dataset.vertical = String(vertical);
-                el.dataset.start = String(vertical ? e.clientY : e.clientX);
+                el.dataset.vertical = String(viewport.stacked);
+                el.dataset.start = String(
+                  viewport.stacked ? e.clientY : e.clientX,
+                );
                 el.dataset.ratio = String(ratio);
+                el.dataset.height = String(
+                  parent
+                    .querySelector(".consultation-viewer-panel")!
+                    .getBoundingClientRect().height,
+                );
                 el.dataset.extent = String(
-                  vertical
-                    ? window.innerHeight
-                    : parent.getBoundingClientRect().width,
+                  parent.getBoundingClientRect().width,
                 );
                 el.setPointerCapture(e.pointerId);
               }}
               onPointerMove={(e) => {
                 const el = e.currentTarget;
                 if (!el.hasPointerCapture(e.pointerId)) return;
-                const at =
-                  el.dataset.vertical === "true" ? e.clientY : e.clientX;
-                setRatio(
-                  Math.round(
-                    Math.max(
-                      25,
-                      Math.min(
-                        75,
-                        Number(el.dataset.ratio) +
-                          ((at - Number(el.dataset.start)) * 100) /
-                            Number(el.dataset.extent),
+                if (el.dataset.vertical === "true")
+                  resizeViewer(
+                    Number(el.dataset.height) +
+                      e.clientY -
+                      Number(el.dataset.start),
+                  );
+                else
+                  setRatio(
+                    Math.round(
+                      Math.max(
+                        25,
+                        Math.min(
+                          75,
+                          Number(el.dataset.ratio) +
+                            ((e.clientX - Number(el.dataset.start)) * 100) /
+                              Number(el.dataset.extent),
+                        ),
                       ),
                     ),
-                  ),
-                );
+                  );
+              }}
+              onPointerUp={(e) => {
+                if (e.currentTarget.hasPointerCapture(e.pointerId))
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+              }}
+              onPointerCancel={(e) => {
+                if (e.currentTarget.hasPointerCapture(e.pointerId))
+                  e.currentTarget.releasePointerCapture(e.pointerId);
               }}
             >
-              ⋮
+              {viewport.stacked ? "↕ 사진 · 시술 선택 크기 조절" : "⋮"}
             </div>
           )}
           {tab === "consult" && c.kind !== "interim" && (
@@ -4683,7 +4757,7 @@ function CatalogView({
     localStorage.setItem("codimate-folder-width", String(next));
   };
 
-  const [book, setBook] = useState<CatalogBook>("미용");
+  const [book, setBook] = useState<CatalogBook>("이벤트");
   const [drafts, setDrafts] = useState<Partial<Record<CatalogBook, Catalog>>>(
     {},
   );

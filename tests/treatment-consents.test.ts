@@ -4,6 +4,7 @@ import { emptyState, type Command } from "../src/core/model";
 import { catalogAdmin } from "./fixtures/catalogs";
 import {
   treatmentConsentDrafts,
+  CONSENT_DRAFT_REVISION,
   consentPublishIssues,
 } from "../src/core/treatmentConsents";
 const cmd = (
@@ -20,7 +21,7 @@ it("installs review-only drafts once and never overwrites hospital edits", async
   const input = emptyState();
   let s = await applyCommand(input, catalogAdmin, install());
   expect(input.consents).toEqual([]);
-  expect(s.consents).toHaveLength(16);
+  expect(s.consents).toHaveLength(23);
   expect(
     s.consents.every(
       (t) =>
@@ -202,4 +203,41 @@ it("requires published templates for signing and snapshots the reviewed text", a
   s = await applyCommand(s, catalogAdmin, cmd("signature.create", payload));
   expect(s.signatures[0].templateBody).toBe(t.body);
   expect(s.signatures[0].templateVersion).toBe(t.version);
+});
+
+it("upgrades older hospital drafts as new versions and preserves published forms and signatures", async () => {
+  let state = await applyCommand(emptyState(), catalogAdmin, install());
+  state.consents = state.consents
+    .slice(0, 16)
+    .map((t, i) => ({
+      ...t,
+      draftRevision: undefined,
+      body: t.body + "\n병원별 기존 수정",
+      status: i === 0 ? "published" : "draft",
+    }));
+  const originals = structuredClone(state.consents);
+  const signatures = structuredClone(state.signatures);
+  state = await applyCommand(state, catalogAdmin, install());
+  expect(state.consents).toHaveLength(39);
+  expect(state.consents.slice(0, 16)).toEqual(originals);
+  expect(state.signatures).toEqual(signatures);
+  const updated = state.consents.filter(
+    (t) => t.draftRevision === CONSENT_DRAFT_REVISION,
+  );
+  expect(updated).toHaveLength(23);
+  expect(updated.every((t) => t.status === "draft")).toBe(true);
+  expect(
+    updated.find((t) => t.draftKey === originals[0].draftKey)?.sourceTemplateId,
+  ).toBe(originals[0].id);
+  const again = await applyCommand(state, catalogAdmin, install());
+  expect(again.consents).toEqual(state.consents);
+});
+it("blocks unresolved review placeholders in patient checks too", () => {
+  expect(
+    consentPublishIssues({
+      name: "양식",
+      body: "검토된 본문",
+      checks: ["[병원 확인: 약제]"],
+    }),
+  ).not.toEqual([]);
 });

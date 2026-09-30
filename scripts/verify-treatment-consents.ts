@@ -78,11 +78,13 @@ try {
     await page
       .getByRole("button", { name: "동의서 양식", exact: true })
       .click();
-    await page.getByRole("button", { name: "기본 초안 16종 등록" }).click();
+    await page
+      .getByRole("button", { name: "초안 23종 등록·업그레이드" })
+      .click();
     await expect(
-      page.getByRole("button", { name: "기본 초안 등록 완료" }),
+      page.getByRole("button", { name: "최신 초안 등록 완료" }),
     ).toBeDisabled();
-    assert.equal(state.consents.length, 16);
+    assert.equal(state.consents.length, 23);
     assert(state.consents.every((t) => t.status === "draft"));
     await page
       .getByRole("button", { name: /보툴리눔 독소 주사 동의서/ })
@@ -96,11 +98,23 @@ try {
     await expect(
       page.getByRole("region", { name: "동의서 미리보기" }),
     ).toContainText("환자의 선택");
+    await expect(
+      page.locator(".consent-preview .consent-review-mark").first(),
+    ).toBeVisible();
     await page.getByRole("button", { name: "본문 편집 보기" }).click();
     const body = page.getByRole("textbox", {
       name: "동의서 본문",
       exact: true,
     });
+    await expect(
+      page.getByRole("region", { name: "검토 필요 항목" }),
+    ).toBeVisible();
+    await page.locator(".consent-review-jump").first().click();
+    assert(
+      await body.evaluate(
+        (el: HTMLTextAreaElement) => el.selectionEnd > el.selectionStart,
+      ),
+    );
     const text = await body.inputValue();
     await body.fill(
       text.replace(/\[병원 확인:[^\]]+\]/g, "합성 검증용 병원 안내"),
@@ -125,9 +139,9 @@ try {
     const original = structuredClone(state.consents[0]);
     await page.getByRole("button", { name: "복제하여 수정" }).click();
     await page.getByRole("button", { name: "초안 저장", exact: true }).click();
-    assert.equal(state.consents.length, 17);
+    assert.equal(state.consents.length, 24);
     assert.deepEqual(state.consents[0], original);
-    assert.equal(state.consents[16].version, 2);
+    assert.equal(state.consents[23].version, 2);
     await page.getByRole("button", { name: /히알루론산 필러 동의서/ }).click();
     await page.screenshot({
       path: `artifacts/consents-${viewport.width}.png`,
@@ -152,7 +166,7 @@ try {
     ).toHaveValue("");
     results.push({
       viewport,
-      install: 16,
+      install: 23,
       edit: true,
       reviewGate: true,
       clonePreservesOriginal: true,

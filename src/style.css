@@ -5160,3 +5160,31 @@ html.custom-pull-refresh {
 
 .treatment-consent-signing .check { white-space: normal; align-items: flex-start; }
 .treatment-consent-signing .check input { flex-shrink: 0; margin-top: 3px; }
+
+/* Share the same height between the portrait split handle and viewer resize handle. */
+.consult-layout:not(.photo-only) .consultation-viewer-panel { min-height: 360px; }
+@media (orientation: portrait), (max-width: 760px) {
+  .consult-layout { display: flex; flex-direction: column; }
+  .consult-layout > .split-handle { width: 100%; height: 44px; min-height: 44px; cursor: row-resize; flex-shrink: 0; font-size: 12px; user-select: none; }
+  .consult-layout:not(.photo-only) .consultation-viewer-panel { height: clamp(360px, 62dvh, 1000px); min-height: 360px; max-height: none; overflow: hidden; }
+  .consult-layout > .catalog-panel { width: 100%; }
+}
+
+.consent-review-badge{display:inline-block;color:#a71925;background:#fff0f1;border:1px solid #efb9be;border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700}
+.consent-review-required{border:1px solid #df9ca3;border-left:4px solid #bc2637;background:#fff6f6;border-radius:8px;padding:12px;color:#85202b;margin:12px 0}
+.consent-review-mark{color:#a71925;background:#ffe1e4;font-weight:700;border-bottom:2px solid #c02c3c;padding:1px 2px;box-decoration-break:clone}
+.consent-review-jump{color:#a71925;background:transparent;text-align:left;white-space:normal;padding:5px 0;border:0;text-decoration:underline;text-underline-offset:3px;min-height:36px}
+.consent-review-required ul{padding-left:20px;max-height:240px;overflow:auto}
+
+.viewer-viewport .comparison-grid figure{container-type:inline-size}
+.compact-photo-actions{display:none}
+@container (max-width:180px){
+ .viewer-viewport .comparison-grid .photo-overlay-actions{inset:4px 4px auto;padding:0}
+ .photo-overlay-actions > .photo-index,.photo-overlay-actions > button{display:none}
+ .compact-photo-actions{display:block;position:relative;margin-left:auto;color:#133e34}
+ .compact-photo-actions summary{list-style:none;background:#ffffffd9;border-radius:8px;padding:4px 8px;min-height:32px;cursor:pointer;font-size:13px}
+ .compact-photo-actions summary::-webkit-details-marker{display:none}
+ .compact-photo-actions[open]{z-index:4}
+ .compact-photo-actions > div{position:absolute;right:0;top:100%;display:grid;gap:3px;background:#fff;padding:4px;border-radius:8px;box-shadow:0 3px 10px #0003;width:82px}
+ .compact-photo-actions button{width:100%;padding:4px 2px;font-size:12px}
+}

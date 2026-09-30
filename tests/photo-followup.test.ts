@@ -271,6 +271,7 @@ it("photo selection, ordering, free rotation and styles round-trip; foreign anno
       ...emptyQuote(),
       photos: [own, photo],
       photoColumns: 4,
+      photoLayout: "manual",
       memo: "경과 확인",
     },
     "consult",
@@ -281,6 +282,7 @@ it("photo selection, ordering, free rotation and styles round-trip; foreign anno
     "photo",
   ]);
   expect(s.consultations[0].photoColumns).toBe(4);
+  expect(s.consultations[0].photoLayout).toBe("manual");
   expect(s.consultations[0].photos[0].annotations[0]).toMatchObject({
     opacity: 0.8,
     dashed: true,

@@ -1,5 +1,6 @@
 import {
   treatmentConsentDrafts,
+  CONSENT_DRAFT_REVISION,
   consentPublishIssues,
 } from "./treatmentConsents";
 import type { Opinion } from "./model";
@@ -864,6 +865,7 @@ export async function applyCommand(
         sourceConsultationId: source?.id,
         sourceRev: source?.rev,
         photoColumns: source?.photoColumns || 2,
+        photoLayout: source?.photoLayout || "auto",
         catalogVersion: cat?.version || "",
         catalogVersions: Object.fromEntries(
           latestCatalogs(s).map((c) => [catalogBook(c), c.version]),
@@ -1111,6 +1113,9 @@ export async function applyCommand(
         .min(1)
         .max(4)
         .parse(p.photoColumns || c.photoColumns || 2);
+      c.photoLayout = z
+        .enum(["auto", "manual"])
+        .parse(p.photoLayout ?? c.photoLayout ?? "auto");
       c.documents = [];
       c.reason = String(p.reason || "");
       touch(c);
@@ -1868,9 +1873,23 @@ export async function applyCommand(
       );
       let added = 0;
       for (const key of new Set(keys)) {
-        if (s.consents.some((t) => t.draftKey === key)) continue;
+        if (
+          s.consents.some(
+            (t) =>
+              t.draftKey === key && t.draftRevision === CONSENT_DRAFT_REVISION,
+          )
+        )
+          continue;
+        const source = s.consents
+          .filter((t) => t.draftKey === key)
+          .sort(
+            (a, b) =>
+              b.version - a.version || b.updatedAt.localeCompare(a.updatedAt),
+          )[0];
         const template = treatmentConsentDrafts.find((t) => t.key === key)!;
-        const templateId = `treatment-consent-${key}`;
+        const templateId = source
+          ? `treatment-consent-${key}-${CONSENT_DRAFT_REVISION.replace(/\W/g, "")}`
+          : `treatment-consent-${key}`;
         ensure(
           !s.consents.some((t) => t.id === templateId),
           "동일한 양식 ID가 있습니다",
@@ -1881,10 +1900,12 @@ export async function applyCommand(
           name: template.name + " 동의서",
           body: template.body,
           checks: [...template.checks],
-          productIds: [],
+          productIds: [...(source?.productIds || [])],
           status: "draft",
-          version: 1,
+          version: source ? source.version + 1 : 1,
           draftKey: key,
+          draftRevision: CONSENT_DRAFT_REVISION,
+          ...(source ? { sourceTemplateId: source.id } : {}),
         });
         added++;
       }
@@ -1929,7 +1950,11 @@ export async function applyCommand(
           ...review,
           version: source ? source.version + 1 : 1,
           ...(source
-            ? { sourceTemplateId: source.id, draftKey: source.draftKey }
+            ? {
+                sourceTemplateId: source.id,
+                draftKey: source.draftKey,
+                draftRevision: source.draftRevision,
+              }
             : {}),
         });
       }

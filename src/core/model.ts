@@ -241,6 +241,7 @@ export interface Consultation extends Base {
   sourceConsultationId?: string;
   sourceRev?: number;
   photoColumns?: number;
+  photoLayout?: "auto" | "manual";
   packageProgress?: { total?: number; used?: number; complete: boolean };
   patientId: string;
   patient: Pick<Patient, "name" | "sex" | "dob" | "phone" | "address">;
@@ -292,6 +293,7 @@ export interface Opinion extends Base {
 }
 export interface Consent extends Base {
   draftKey?: string;
+  draftRevision?: string;
   sourceTemplateId?: string;
   reviewedBy?: string;
   reviewedAt?: string;

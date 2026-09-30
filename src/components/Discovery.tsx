@@ -33,7 +33,7 @@ export function Discovery() {
   const [step, setStep] = useState(0),
     [selectedConcerns, setConcerns] = useState<string[]>([]),
     [answers, setAnswers] = useState<string[]>([]);
-  const [book, setBook] = useState<CatalogBook>("미용"),
+  const [book, setBook] = useState<CatalogBook>("이벤트"),
     [search, setSearch] = useState(""),
     [selected, setSelected] = useState<
       { productId: string; optionId: string; catalogVersion: string }[]

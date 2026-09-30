@@ -1,3 +1,5 @@
+import { useViewport } from "../lib/useViewport";
+import { photoColumnCount } from "../core/photoLayout";
 import { createPortal } from "react-dom";
 import { PhotoOrder } from "./PhotoOrder";
 import { applyPhotoOrder } from "../core/photoOrder";
@@ -126,6 +128,8 @@ export function PhotoModal({
 function PhotoViewer({
   photos,
   columns,
+  autoColumns = true,
+  onAutoColumns,
   onColumns,
   onOrder,
   readonly,
@@ -136,6 +140,8 @@ function PhotoViewer({
 }: {
   photos: Photo[];
   columns: number;
+  autoColumns?: boolean;
+  onAutoColumns?: () => void;
   onColumns: (n: number) => void;
   onOrder: (ids: string[]) => void;
   readonly: boolean;
@@ -166,11 +172,22 @@ function PhotoViewer({
           </button>
         )}
         <div className="button-row" role="group" aria-label="사진 열 수">
+          <button
+            type="button"
+            aria-pressed={autoColumns}
+            className={autoColumns ? "selected" : ""}
+            onClick={() => {
+              setSingleId(null);
+              onAutoColumns?.();
+            }}
+          >
+            자동 배치
+          </button>
           {[1, 2, 3, 4].map((n) => (
             <button
               key={n}
-              className={columns === n ? "selected" : ""}
-              aria-pressed={columns === n}
+              className={!autoColumns && columns === n ? "selected" : ""}
+              aria-pressed={!autoColumns && columns === n}
               onClick={() => {
                 setSingleId(null);
                 onColumns(n);
@@ -227,6 +244,26 @@ function PhotoViewer({
                   <PhotoPreview photo={p} />
                 </button>
                 <figcaption className="photo-overlay-actions">
+                  <details className="compact-photo-actions">
+                    <summary
+                      aria-label={`${photos.findIndex((x) => x.id === p.id) + 1}번 사진 메뉴`}
+                    >
+                      {photos.findIndex((x) => x.id === p.id) + 1} ···
+                    </summary>
+                    <div>
+                      {!single && (
+                        <button
+                          data-photo-drag
+                          disabled={readonly}
+                          aria-label={`${p.name} 비교 순서 이동`}
+                        >
+                          ⠿ 이동
+                        </button>
+                      )}
+                      <button onClick={() => onInfo(p.id)}>상세정보</button>
+                      <button onClick={() => onEdit(p.id)}>편집·확대</button>
+                    </div>
+                  </details>
                   <span className="photo-index">
                     {photos.findIndex((x) => x.id === p.id) + 1}
                   </span>
@@ -283,6 +320,8 @@ function PhotoViewer({
 export function PhotoBoard({
   photos,
   columns,
+  autoColumns = true,
+  onAutoColumns,
   onChange,
   onColumns,
   userId,
@@ -294,6 +333,8 @@ export function PhotoBoard({
 }: {
   photos: Photo[];
   columns: number;
+  autoColumns?: boolean;
+  onAutoColumns?: () => void;
   onChange: (p: Photo[]) => void;
   onColumns: (n: number) => void;
   userId: string;
@@ -312,6 +353,7 @@ export function PhotoBoard({
     null,
   );
   useEffect(() => watchUploads(() => update((v) => v + 1)), []);
+  const viewportSize = useViewport();
   const selected = photos.filter((p) => p.selected),
     edit = photos.find((p) => p.id === editing),
     info = photos.find((p) => p.id === infoId);
@@ -336,7 +378,13 @@ export function PhotoBoard({
   const viewerContent = () => (
     <PhotoViewer
       photos={selected}
-      columns={columns}
+      columns={photoColumnCount(
+        selected.length,
+        viewportSize.portrait,
+        autoColumns ? undefined : columns,
+      )}
+      autoColumns={autoColumns}
+      onAutoColumns={onAutoColumns}
       onColumns={onColumns}
       onOrder={order}
       readonly={readonly}

@@ -288,3 +288,45 @@ export type WebsiteBases = Record<
   "beauty" | "event",
   { id: string; rev: number; publishedId: string }
 >;
+
+/** Website refresh has one writable destination; beauty is only the classification reference. */
+export function mergeHomepageCatalog(
+  beauty: Catalog,
+  base: Catalog | undefined,
+  pages: WebsiteEvent[],
+  now = new Date().toISOString(),
+) {
+  if (catalogBook(beauty) !== "미용")
+    throw new Error("기준 미용 SSOT가 필요합니다.");
+  if (!pages.length || !pages.some((p) => p.offers.length))
+    throw new Error("홈페이지 전체 조회가 완료되지 않았습니다.");
+  const result = mergeWebsiteEvents(base, pages, now, beauty, false, "all");
+  result.catalog = withBeautyRootLabels(result.catalog, beauty);
+  checkWebsiteListings(result.catalog, pages, now);
+  result.catalog.websiteImport!.scope = "all";
+  result.catalog.version = "홈페이지 갱신 · " + now.slice(0, 10);
+  return result;
+}
+
+/** Restore the hospital-maintained book without rewriting its products, prices or taxonomy. */
+export function independentBeautyCatalog(base: Catalog): Catalog {
+  if (catalogBook(base) !== "미용") throw new Error("미용 SSOT를 선택하세요.");
+  const catalog = structuredClone(base);
+  delete catalog.websiteImport;
+  catalog.products = catalog.products
+    .filter((p) => !/^grand4-beauty-\d+-\d+$/.test(p.id))
+    .map((p) => {
+      delete p.websiteListings;
+      delete p.webEvent;
+      return p;
+    });
+  catalog.folderTree = catalog.folderTree?.filter(
+    (f) =>
+      !/^website-additions-\d+$/.test(f.id) ||
+      catalog.products.some((p) => p.folderId === f.id) ||
+      catalog.folderTree?.some(
+        (other) => other.parentId === f.id || other.linkTo === f.id,
+      ),
+  );
+  return catalog;
+}

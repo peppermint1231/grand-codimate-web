@@ -7,7 +7,7 @@ export const websitePresenceStyles = {
   mixed: { color: "#a16207", label: "홈페이지 게시 상태 혼합" },
 };
 export function websiteFolderPresence(catalog: Catalog, folderId: string) {
-  if (catalogBook(catalog) === "보험") return;
+  if (catalogBook(catalog) !== "이벤트") return;
   const products = catalog.products.filter((p) =>
     inFolder(catalog, p, folderId),
   );

@@ -11,9 +11,7 @@ import {
   productFolder,
   productFolderPaths,
 } from "../core/catalogFolders";
-const needsReview = (p: Product) =>
-  !p.options.length ||
-  p.options.some((o) => o.review || o.price === null || o.tax === "unknown");
+import { needsProductReview as needsReview } from "../core/catalogProducts";
 type Work = (fn: () => Promise<unknown>) => unknown;
 export function CatalogProductRows({
   catalog,
@@ -107,6 +105,16 @@ export function CatalogProductRows({
             onClick={() => onSelection(products.map((p) => p.id))}
           >
             현재 목록 선택
+          </button>
+          <button
+            type="button"
+            {...catalogCommand("selectUnreviewed")}
+            disabled={!products.some(needsReview)}
+            onClick={() =>
+              onSelection(products.filter(needsReview).map((p) => p.id))
+            }
+          >
+            미검토 항목만 선택 ({products.filter(needsReview).length}개)
           </button>
           <button
             {...catalogCommand("selectNone")}
@@ -376,7 +384,7 @@ export function CatalogProductRows({
                             {catalogBook(catalog) === "이벤트" ||
                             p.webEvent ||
                             o.priceKind === "event"
-                              ? "이벤트가 (원)"
+                              ? "판매가 (원)"
                               : "가격 (원)"}
                             <input
                               type="number"

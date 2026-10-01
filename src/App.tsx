@@ -53,6 +53,7 @@ import { OpinionInbox } from "./components/OpinionInbox";
 import { CatalogBulkEdit } from "./components/CatalogBulkEdit";
 import { CatalogDeleteConfirm } from "./components/CatalogDeleteConfirm";
 import {
+  needsProductReview,
   matchesCatalogSearch,
   deleteCatalogProducts,
   type CatalogSearchScope,
@@ -140,6 +141,7 @@ import {
   latestCatalog,
   latestCatalogs,
   catalogBookDisplayOrder,
+  catalogBookLabel,
   catalogBook,
   type CatalogBook,
   allowed,
@@ -3647,7 +3649,7 @@ function ConsultationView({
                             setCategory("");
                           }}
                         >
-                          {kind}
+                          {catalogBookLabel(kind)}
                         </button>
                       ))}
                     </div>
@@ -3693,7 +3695,7 @@ function ConsultationView({
                 {newestBook && newestBook.version !== catalog?.version && (
                   <div className="catalog-product-save">
                     <small>
-                      이 상담은 이전 {book} 단가표를 사용하고 있습니다.
+                      이 상담은 이전 {catalogBookLabel(book)} 단가표를 사용하고 있습니다.
                     </small>
                     <button
                       type="button"
@@ -3709,13 +3711,13 @@ function ConsultationView({
                         setSearch("");
                       }}
                     >
-                      최신 {book} 단가표 불러오기
+                      최신 {catalogBookLabel(book)} 단가표 불러오기
                     </button>
                     {draft.quote.lines.some(
                       (line) => (line.book || "미용") === book,
                     ) && (
                       <small>
-                        장바구니의 {book} 상품을 먼저 제거하면 불러올 수
+                        장바구니의 {catalogBookLabel(book)} 상품을 먼저 제거하면 불러올 수
                         있습니다. 다른 단가표의 장바구니 상품은 유지됩니다.
                       </small>
                     )}
@@ -3822,10 +3824,10 @@ function ConsultationView({
                     {availableProducts.length
                       ? "검색 조건에 맞는 시술이 없습니다."
                       : !catalog
-                        ? `${book} 단가표가 아직 게시되지 않았습니다. 단가표 관리에서 초안을 저장한 뒤 게시하세요.`
+                        ? `${catalogBookLabel(book)} 단가표가 아직 게시되지 않았습니다. 단가표 관리에서 초안을 저장한 뒤 게시하세요.`
                         : catalog.products.length &&
                             !catalog.products.some((p) => p.active)
-                          ? `${book} 게시본의 상품 ${catalog.products.length}개가 모두 판매 비활성입니다. 단가표 관리에서 상담 판매를 활성화하고 초안 저장·게시하세요.`
+                          ? `${catalogBookLabel(book)} 게시본의 상품 ${catalog.products.length}개가 모두 판매 비활성입니다. 단가표 관리에서 상담 판매를 활성화하고 초안 저장·게시하세요.`
                           : "게시된 판매상품이 없습니다. 관리자 단가표에서 검토 후 게시하세요."}
                   </Empty>
                 )}
@@ -4119,7 +4121,7 @@ function ConsultationView({
                   <div className="cart-line" key={l.id}>
                     <b>{l.name}</b>
                     <small>
-                      {l.book || "미용"} · {l.label} ·{" "}
+                      {catalogBookLabel(l.book)} · {l.label} ·{" "}
                       {l.tax === "inclusive"
                         ? "VAT 포함"
                         : l.tax === "exempt"
@@ -4861,7 +4863,7 @@ function CatalogView({
       (p) =>
         (!category || (current && inFolder(current, p, category))) &&
         matchesCatalogSearch(current, p, search, searchScope) &&
-        (!onlyReview || p.options.some((o) => o.review)) &&
+        (!onlyReview || needsProductReview(p)) &&
         (reviewFilter === "all" ||
           p.options.some((o) =>
             reviewFilter === "tax"
@@ -4907,7 +4909,7 @@ function CatalogView({
     if (
       changed &&
       !window.confirm(
-        `${book} 단가표의 저장하지 않은 변경을 버리고 편집을 취소할까요?`,
+        `${catalogBookLabel(book)} 단가표의 저장하지 않은 변경을 버리고 편집을 취소할까요?`,
       )
     )
       return;
@@ -5026,7 +5028,7 @@ function CatalogView({
     <div data-catalog-editor>
       <Title
         title="단가표 관리"
-        description="미용·보험·이벤트별 원본과 게시 버전을 관리합니다. 맞춤 시술 찾기에서도 같은 상품을 사용합니다."
+        description="홈페이지·미용·보험별 원본과 게시 버전을 관리합니다. 맞춤 시술 찾기에서도 같은 상품을 사용합니다."
         action={
           <div className="button-row">
             {can && !folderDraft && (
@@ -5069,7 +5071,7 @@ function CatalogView({
                     return;
                   download(
                     catalogCSV(current!),
-                    `코디메이트_${book}_단가표.csv`,
+                    `코디메이트_${catalogBookLabel(book)}_단가표.csv`,
                   );
                 })
               }
@@ -5099,7 +5101,7 @@ function CatalogView({
                       undefined,
                       includeInactive,
                     ),
-                    `코디메이트_${book}_단가표_${date()}.xlsx`,
+                    `코디메이트_${catalogBookLabel(book)}_단가표_${date()}.xlsx`,
                   );
                 })
               }
@@ -5125,11 +5127,11 @@ function CatalogView({
               setBulkIds([]);
             }}
           >
-            {kind} SSOT
+            {catalogBookLabel(kind)} SSOT
           </button>
         ))}
       </div>
-      {book !== "보험" && can && (
+      {book === "이벤트" && can && (
         <EventCatalogRefresh
           catalog={workingCatalog(s, "이벤트")}
           beauty={workingCatalog(s, "미용")}
@@ -5149,7 +5151,7 @@ function CatalogView({
           onImport={async (pages, bases) => {
             if (
               await send(
-                "catalog.website.import",
+                "catalog.homepage.import",
                 { pages, bases, complete: true },
                 crypto.randomUUID(),
               )
@@ -5208,7 +5210,7 @@ function CatalogView({
                   updatedAt: now,
                   schemaVersion: 1,
                   book,
-                  version: `${book} 초안`,
+                  version: `${catalogBookLabel(book)} 초안`,
                   status: "draft",
                   products: [],
                   folders: [],
@@ -5216,7 +5218,7 @@ function CatalogView({
                 });
               }}
             >
-              새 {book} 단가표 작성
+              새 {catalogBookLabel(book)} 단가표 작성
             </button>
           )}
           {current && can && !folderDraft && (
@@ -5351,7 +5353,7 @@ function CatalogView({
         <div className="card" data-catalog-scope="products">
           {current?.status === "published" && !folderDraft && !editPaused && (
             <div className="catalog-product-save" role="status">
-              <strong>{book} SSOT · 게시됨</strong>
+              <strong>{catalogBookLabel(book)} SSOT · 게시됨</strong>
               <small>
                 {catalogTime(current.publishedAt || current.updatedAt)} · 상담
                 판매 활성 {current.products.filter((p) => p.active).length}개
@@ -5363,7 +5365,7 @@ function CatalogView({
             <div className="catalog-product-save">
               <div role="status" className="catalog-save-status">
                 <strong>
-                  {book} SSOT ·{" "}
+                  {catalogBookLabel(book)} SSOT ·{" "}
                   {currentDirty
                     ? "저장하지 않은 변경사항이 있습니다"
                     : "초안 저장됨"}
@@ -5419,7 +5421,7 @@ function CatalogView({
           {editPaused && can && current && !folderDraft && (
             <div className="catalog-product-save">
               <span>
-                {book} SSOT ·{" "}
+                {catalogBookLabel(book)} SSOT ·{" "}
                 {current.status === "published"
                   ? "게시됨"
                   : "초안 저장됨 · 상담 미반영"}
@@ -5503,6 +5505,7 @@ function CatalogView({
           )}
           {editable && current && (
             <CatalogBulkEdit
+                  onSelection={setBulkIds}
               key={`${book}:${current.id}:${current.rev}`}
               catalog={current}
               ids={bulkIds}
@@ -5968,7 +5971,7 @@ function CatalogView({
                     book === "이벤트" ||
                     product.webEvent ||
                     o.priceKind === "event"
-                      ? "이벤트가 (원)"
+                      ? "판매가 (원)"
                       : "가격 (원)"
                   }
                 >
@@ -5997,7 +6000,7 @@ function CatalogView({
                       o.price !== null &&
                       o.price > eventOptionPrices(product, o).regularPrice! && (
                         <small>
-                          이벤트가가 정가보다 높아 할인율을 표시하지 않습니다.
+                          판매가가 정가보다 높아 할인율을 표시하지 않습니다.
                         </small>
                       )}
                   </div>

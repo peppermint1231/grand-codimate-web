@@ -1,4 +1,9 @@
-import { catalogBook, type Catalog, type Consultation } from "./model";
+import {
+  catalogBookLabel,
+  catalogBook,
+  type Catalog,
+  type Consultation,
+} from "./model";
 
 export function refreshConsultationBook(
   consultation: Consultation,
@@ -9,7 +14,7 @@ export function refreshConsultationBook(
     throw new Error("게시된 단가표만 불러올 수 있습니다.");
   if (consultation.quote.lines.some((line) => (line.book || "미용") === book))
     throw new Error(
-      `${book} 장바구니 상품을 먼저 제거하세요. 기존 금액은 자동으로 바꾸지 않습니다.`,
+      `${catalogBookLabel(book)} 장바구니 상품을 먼저 제거하세요. 기존 금액은 자동으로 바꾸지 않습니다.`,
     );
   return {
     ...consultation,

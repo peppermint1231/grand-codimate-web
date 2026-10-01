@@ -133,6 +133,7 @@ export interface Catalog extends Base {
   /** Client read projection; must fetch the complete record before editing. */
   workspaceOnly?: boolean;
   websiteImport?: {
+    scope?: "all";
     sourceUrl: string;
     checkedAt: string;
     pageCount: number;
@@ -382,6 +383,9 @@ export const emptyQuote = (): Quote => ({
 });
 export const catalogBooks = ["미용", "보험", "이벤트"] as const;
 export type CatalogBook = (typeof catalogBooks)[number];
+// Retain stored book IDs so existing quotes, history and older encrypted backups stay readable.
+export const catalogBookLabel = (book?: string) =>
+  book === "이벤트" ? "홈페이지" : book || "미용";
 export const catalogBookDisplayOrder: readonly CatalogBook[] = [
   "이벤트",
   "미용",

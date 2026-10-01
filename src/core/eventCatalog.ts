@@ -118,10 +118,11 @@ export function mergeWebsiteEvents(
   now = new Date().toISOString(),
   beauty?: Catalog,
   allowEmpty = false,
+  scope: "events" | "all" = "events",
 ) {
   if (base && base.book !== "이벤트")
-    throw new Error("이벤트 SSOT에서만 갱신할 수 있습니다.");
-  events = selectWebsiteOffers(events, "이벤트");
+    throw new Error("홈페이지 SSOT에서만 갱신할 수 있습니다.");
+  if (scope === "events") events = selectWebsiteOffers(events, "이벤트");
   if (!allowEmpty && (!events.length || !events.some((e) => e.offers.length)))
     throw new Error(
       "홈페이지에서 상품을 확인하지 못했습니다. 기존 단가표는 유지됩니다.",
@@ -259,13 +260,17 @@ export function mergeWebsiteEvents(
                   id:
                     old?.options[0]?.id ||
                     `grand4-option-${event.id}-${offer.id}`,
-                  label: "이벤트가",
+                  label: scope === "all" ? "홈페이지 가격" : "이벤트가",
                   ...(old?.options[0]?.regularPrice !== undefined
                     ? { regularPrice: old.options[0].regularPrice }
                     : {}),
                   price: offer.price,
                   tax: offer.tax,
-                  priceKind: "event",
+                  priceKind:
+                    isEventBanner(event.name, event.categoryName) ||
+                    isEventBanner(offer.name)
+                      ? "event"
+                      : "clinic",
                   unit: old?.options[0]?.unit || "건",
                   review: true,
                   issues: [

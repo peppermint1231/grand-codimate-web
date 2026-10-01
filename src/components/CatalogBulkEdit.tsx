@@ -1,27 +1,33 @@
 import { useState } from "react";
 import type { Catalog, Option } from "../core/model";
-import { bulkEditCatalogProducts } from "../core/catalogProducts";
+import { bulkEditCatalogProductsResult } from "../core/catalogProducts";
 import { catalogCommand } from "../lib/catalogShortcuts";
 
 export function CatalogBulkEdit({
   catalog,
   ids,
   onChange,
+  onSelection,
 }: {
   catalog: Catalog;
   ids: string[];
   onChange: (catalog: Catalog) => void;
+  onSelection: (ids: string[]) => void;
 }) {
   const [tax, setTax] = useState<Option["tax"] | "">("");
   const [visibility, setVisibility] = useState("");
   const [sale, setSale] = useState("");
   const [review, setReview] = useState(false);
   const [message, setMessage] = useState("");
+  const [skipped, setSkipped] = useState<
+    ReturnType<typeof bulkEditCatalogProductsResult>["skipped"]
+  >([]);
   const [error, setError] = useState("");
   const selected = catalog.products.filter((p) => ids.includes(p.id));
   const clearMessage = () => {
     setMessage("");
     setError("");
+    setSkipped([]);
   };
   return (
     <section className="catalog-bulk-settings" aria-label="선택 상품 일괄 수정">
@@ -101,18 +107,16 @@ export function CatalogBulkEdit({
           onClick={() => {
             clearMessage();
             try {
-              onChange(
-                bulkEditCatalogProducts(catalog, ids, {
-                  ...(tax ? { tax } : {}),
-                  ...(sale ? { active: sale === "active" } : {}),
-                  ...(visibility
-                    ? { publicVisible: visibility === "show" }
-                    : {}),
-                  completeReview: review,
-                }),
-              );
+              const result = bulkEditCatalogProductsResult(catalog, ids, {
+                ...(tax ? { tax } : {}),
+                ...(sale ? { active: sale === "active" } : {}),
+                ...(visibility ? { publicVisible: visibility === "show" } : {}),
+                completeReview: review,
+              });
+              if (result.appliedIds.length) onChange(result.catalog);
+              setSkipped(result.skipped);
               setMessage(
-                `${selected.length}개 상품에 적용했습니다. 초안을 저장하세요.`,
+                `${result.appliedIds.length}개 상품 적용${review ? "·검토완료" : ""} · ${result.skipped.length}개 미적용. ${result.appliedIds.length ? "완료된 변경은 유지됩니다. 초안을 저장하세요." : "아래 항목을 보완한 뒤 다시 적용하세요."}`,
               );
               setTax("");
               setVisibility("");
@@ -133,6 +137,28 @@ export function CatalogBulkEdit({
         눌러야 상담·맞춤 시술 찾기에 반영됩니다.
       </p>
       {message && <p role="status">{message}</p>}
+      {skipped.length > 0 && (
+        <div
+          className="catalog-bulk-skipped"
+          role="region"
+          aria-label="일괄 적용 미완료 상품"
+        >
+          <p>다음 상품은 입력 확인이 필요해 기존 상태를 유지했습니다.</p>
+          <button
+            type="button"
+            onClick={() => onSelection(skipped.map((p) => p.id))}
+          >
+            미완료 상품만 선택 ({skipped.length}개)
+          </button>
+          <ul>
+            {skipped.map((p) => (
+              <li key={p.id}>
+                <b>{p.name}</b> · {p.reasons.join(" / ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {error && (
         <p className="error" role="alert">
           {error}

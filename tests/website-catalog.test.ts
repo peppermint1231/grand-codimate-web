@@ -4,6 +4,8 @@ import { applyCommand, validateCatalog } from "../src/core/domain";
 import { emptyState, latestCatalog, type Command } from "../src/core/model";
 import {
   mergeWebsiteCatalogs,
+  mergeHomepageCatalog,
+  independentBeautyCatalog,
   workingCatalog,
   websitePagesSchema,
   websiteReviewNeeded,
@@ -53,7 +55,7 @@ function fixture() {
   };
   const command: Command = {
     id: "combined",
-    type: "catalog.website.import",
+    type: "catalog.homepage.import",
     payload: { pages: [page], bases, complete: true },
   };
   return { state, beauty, event, page, command };
@@ -113,9 +115,7 @@ it("tracks removal and reappearance independently of preserved beauty selling st
     now,
   );
   expect(missing.beauty.products[0].active).toBe(true);
-  expect(websiteFolderPresence(missing.beauty, "manual")?.label).toBe(
-    "홈페이지에서 제외됨",
-  );
+  expect(websiteFolderPresence(missing.beauty, "manual")).toBeUndefined();
   page.offers[0].price = 13000;
   const returned = mergeWebsiteCatalogs(
     missing.beauty,
@@ -130,9 +130,7 @@ it("tracks removal and reappearance independently of preserved beauty selling st
     priceDiffers: true,
   });
   expect(websiteReviewNeeded(returned.beauty.products[0])).toBe(true);
-  expect(websiteFolderPresence(returned.beauty, "manual")?.label).toBe(
-    "홈페이지 게시 확인",
-  );
+  expect(websiteFolderPresence(returned.beauty, "manual")).toBeUndefined();
 });
 it("backfills old imported sources, distinguishes unknown/mixed, and keeps option sources separate", () => {
   const { beauty, event, page } = fixture(),
@@ -141,13 +139,9 @@ it("backfills old imported sources, distinguishes unknown/mixed, and keeps optio
   const again = mergeWebsiteCatalogs(first.beauty, first.event, [page], now);
   expect(again.beauty.products[1].websiteListings?.[0].missing).toBe(false);
   again.beauty.products.push({ ...beauty.products[0], id: "unknown" });
-  expect(websiteFolderPresence(again.beauty, "manual")?.label).toBe(
-    "홈페이지 게시 상태 혼합",
-  );
+  expect(websiteFolderPresence(again.beauty, "manual")).toBeUndefined();
   const unknown = { ...beauty, products: [beauty.products[0]] };
-  expect(websiteFolderPresence(unknown, "manual")?.label).toBe(
-    "홈페이지 게시 여부 미확인",
-  );
+  expect(websiteFolderPresence(unknown, "manual")).toBeUndefined();
 });
 it("handles a complete site with no event offers, distinguishes event scope from website presence, rejects empty/invalid data", () => {
   const { beauty, event, page } = fixture(),
@@ -173,24 +167,33 @@ it("handles a complete site with no event offers, distinguishes event scope from
     ]),
   ).toThrow();
 });
-it("saves both drafts in one command with distinct history IDs, immutable previous snapshots and unchanged published versions", async () => {
+it("saves only a homepage draft with all offers, immutable beauty and previous published snapshots", async () => {
   const { state, command, beauty, event } = fixture(),
     before = structuredClone(state);
   const after = await applyCommand(state, catalogAdmin, command, now);
-  expect(after.catalogs).toHaveLength(5);
-  expect(workingCatalog(after, "미용")?.id).toBe("combined-beauty");
-  expect(workingCatalog(after, "이벤트")?.id).toBe("combined-event");
+  expect(after.catalogs).toHaveLength(4);
+  expect(workingCatalog(after, "미용")).toEqual(beauty);
+  const homepage = workingCatalog(after, "이벤트")!;
+  expect(homepage.id).toBe("combined-homepage");
+  expect(homepage.products.filter((p) => p.webEvent)).toHaveLength(3);
+  expect(homepage.websiteImport?.scope).toBe("all");
   expect(latestCatalog(after, "미용")).toBe(beauty);
   expect(latestCatalog(after, "이벤트")).toBe(event);
-  expect(after.catalogRevisions).toHaveLength(4);
-  expect(new Set(after.catalogRevisions.map((r) => r.id)).size).toBe(4);
-  expect(
-    after.catalogRevisions.some((r) =>
-      r.changes.some((c) => c.includes("홈페이지 게시 상태")),
-    ),
-  ).toBe(true);
+  expect(after.catalogRevisions).toHaveLength(2);
+  expect(after.catalogRevisions.every((r) => r.book === "이벤트")).toBe(true);
   expect(state).toEqual(before);
   expect(after.catalogs[0]).toBe(state.catalogs[0]);
+});
+it("blocks the retired combined refresh command so older clients cannot update beauty", async () => {
+  const { state, command } = fixture();
+  await expect(
+    applyCommand(
+      state,
+      catalogAdmin,
+      { ...command, type: "catalog.website.import" },
+      now,
+    ),
+  ).rejects.toThrow("업데이트");
 });
 it("rejects either stale base, incomplete scan or denied permission without changing either SSOT", async () => {
   for (const key of ["beauty", "event"]) {
@@ -242,4 +245,109 @@ it("keeps the matched option when a multi-option product and labels are renamed"
     optionId: beauty.products[0].options[0].id,
     priceDiffers: true,
   });
+});
+
+it("imports ordinary and event offers together, preserving manual placement and review on repeat scans", () => {
+  const { beauty, event, page } = fixture();
+  const before = structuredClone(beauty);
+  const first = mergeHomepageCatalog(beauty, event, [page], now);
+  expect(first.summary.added).toBe(3);
+  expect(beauty).toEqual(before);
+  validateCatalog(first.catalog);
+  const p = first.catalog.products.find((p) => p.webEvent)!;
+  p.name = "수동 이름";
+  p.options[0].review = false;
+  p.options[0].tax = "inclusive";
+  p.active = true;
+  const again = mergeHomepageCatalog(beauty, first.catalog, [page], now);
+  expect(again.summary.added).toBe(0);
+  expect(again.summary.unchanged).toBe(3);
+  expect(again.catalog.products.find((x) => x.id === p.id)).toMatchObject({
+    name: "수동 이름",
+    active: true,
+    folderId: p.folderId,
+    options: [{ review: false, tax: "inclusive" }],
+  });
+  const without = mergeHomepageCatalog(
+    beauty,
+    again.catalog,
+    [{ ...page, offers: page.offers.slice(1) }],
+    now,
+  );
+  expect(without.catalog.products.find((x) => x.id === p.id)).toMatchObject({
+    active: false,
+    webEvent: { missing: true },
+  });
+  expect(beauty).toEqual(before);
+});
+it("separates website additions from beauty while keeping hospital folders, product IDs, options and prices", () => {
+  const { beauty, page } = fixture();
+  const mixed = mergeWebsiteCatalogs(beauty, undefined, [page], now).beauty;
+  const before = structuredClone(mixed);
+  const independent = independentBeautyCatalog(mixed);
+  expect(independent.products).toEqual(beauty.products);
+  expect(independent.folderTree).toEqual(beauty.folderTree);
+  expect(independent.websiteImport).toBeUndefined();
+  expect(mixed).toEqual(before);
+  validateCatalog(independent);
+});
+it("restores independent beauty with revision guards and preserves old catalogue/consultation snapshots", async () => {
+  const { state, beauty, event, page } = fixture();
+  const mixed = mergeWebsiteCatalogs(beauty, event, [page], now).beauty;
+  mixed.id = "mixed";
+  mixed.status = "published";
+  mixed.rev = 1;
+  mixed.publishedAt = now;
+  state.catalogs.push(mixed);
+  const command: Command = {
+    id: "detach-001",
+    type: "catalog.beauty.detachWebsite",
+    entityId: mixed.id,
+    baseRev: 1,
+    payload: { basePublishedId: mixed.id, publish: true },
+  };
+  const before = structuredClone(state);
+  const after = await applyCommand(
+    state,
+    catalogAdmin,
+    command,
+    "2026-10-01T01:00:00Z",
+  );
+  const restored = latestCatalog(after, "미용")!;
+  expect(restored.products).toEqual(beauty.products);
+  expect(restored.websiteImport).toBeUndefined();
+  expect(restored.id).toBe("detach-001-beauty");
+  expect(restored.status).toBe("published");
+  expect(after.catalogs.slice(0, state.catalogs.length)).toEqual(
+    state.catalogs,
+  );
+  expect(after.consultations).toEqual(state.consultations);
+  expect(state).toEqual(before);
+  await expect(
+    applyCommand(state, catalogAdmin, { ...command, baseRev: 0 }),
+  ).rejects.toMatchObject({ status: 409 });
+  const newer = {
+    ...structuredClone(mixed),
+    id: "unsaved-changes",
+    status: "draft" as const,
+    updatedAt: "2026-10-01T02:00:00Z",
+  };
+  newer.products[0].name = "미게시 수정";
+  state.catalogs.push(newer);
+  await expect(
+    applyCommand(
+      state,
+      catalogAdmin,
+      { ...command, entityId: newer.id },
+      "2026-10-01T03:00:00Z",
+    ),
+  ).rejects.toThrow("미게시");
+  const draft = await applyCommand(
+    state,
+    catalogAdmin,
+    { ...command, entityId: newer.id, payload: { basePublishedId: mixed.id } },
+    "2026-10-01T03:00:00Z",
+  );
+  expect(workingCatalog(draft, "미용")?.products[0].name).toBe("미게시 수정");
+  expect(latestCatalog(draft, "미용")?.id).toBe(mixed.id);
 });

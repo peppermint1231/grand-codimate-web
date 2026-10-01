@@ -1,7 +1,7 @@
 {
-  "version": "0.12.12",
-  "versionCode": 52,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.12.12.apk",
-  "sha256": "2823523e913a2ebfdf6f73caaa02035bae3c780d97841b38ee0da10a41809443",
-  "notes": "받은 서명이 없는 동의서 양식 영구삭제. 서명 기록 보호, 삭제 확인 및 동기화·복구 반영."
+  "version": "0.13.0",
+  "versionCode": 53,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.0.apk",
+  "sha256": "e2d864c993307e1d32f39760bf2815883a978661e29dbcb04b96a1c4adaa7cdf",
+  "notes": "홈페이지 SSOT 전체 상품 연동·미용 독립 관리. 미검토 항목 선택, 일괄 검토 부분 적용과 미완료 사유 안내."
 }

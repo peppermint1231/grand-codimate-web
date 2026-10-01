@@ -12,6 +12,7 @@ import {
 import { api } from "../lib/api";
 import {
   catalogBookDisplayOrder,
+  catalogBookLabel,
   money,
   type CatalogBook,
   type State,
@@ -184,7 +185,7 @@ export function Discovery() {
                       setFolderFilter("");
                     }}
                   >
-                    {kind}
+                    {catalogBookLabel(kind)}
                   </button>
                 ))}
               </div>
@@ -270,7 +271,7 @@ export function Discovery() {
                       setFolderFilter("");
                     }}
                   >
-                    {kind}
+                    {catalogBookLabel(kind)}
                   </button>
                 ))}
               </div>
@@ -347,7 +348,7 @@ export function Discovery() {
                     {p.event && (
                       <div className="event-source-info">
                         <p className="event-period">
-                          이벤트 기간: {p.event.period || "홈페이지 미표기"}
+                          게시 기간: {p.event.period || "홈페이지 미표기"}
                         </p>
                         <EventPrice {...p.event} />
                       </div>
@@ -497,7 +498,7 @@ export function Discovery() {
                       key={item.catalogVersion + item.productId + item.optionId}
                     >
                       <span>
-                        {p?.book} · {p?.name} / {o?.label}
+                        {catalogBookLabel(p?.book)} · {p?.name} / {o?.label}
                       </span>
                       <button
                         type="button"
@@ -778,7 +779,7 @@ export function DiscoveryDesk({
             </p>
             {selected.selections.map((s) => (
               <p key={s.catalogVersion + s.productId + s.optionId}>
-                {s.book} · {s.name} / {s.label}
+                {catalogBookLabel(s.book)} · {s.name} / {s.label}
               </p>
             ))}
             <p className="small">

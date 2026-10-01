@@ -22,14 +22,14 @@ import {
   discountValue,
 } from "./quotePrices";
 import {
-  mergeWebsiteCatalogs,
+  mergeHomepageCatalog,
+  independentBeautyCatalog,
   websitePagesSchema,
   websiteListingSchema,
   workingCatalog,
 } from "./websiteCatalog";
 import {
   eventAvailability,
-  isEventBanner,
   safeEventImage,
   EVENT_ORIGIN,
   EVENT_LIST_URL,
@@ -532,11 +532,8 @@ export function validateCatalog(c: Catalog, posting = false) {
       );
       ensure(
         typeof e.eventName === "string" &&
-          (e.categoryName === undefined ||
-            typeof e.categoryName === "string") &&
-          (isEventBanner(e.eventName, e.categoryName) ||
-            isEventBanner(e.offerName || p.name)),
-        "배너·분류·상품명에 이벤트 또는 EVENT가 있는 상품만 연동할 수 있습니다",
+          (e.categoryName === undefined || typeof e.categoryName === "string"),
+        "홈페이지 배너·분류 정보를 확인하세요",
       );
       ensure(
         typeof e.period === "string" &&
@@ -1405,7 +1402,63 @@ export async function applyCommand(
       text = p.gradeId ? "환자 등급 수동 고정" : "환자 등급 자동 산정 복귀";
       break;
     }
+    case "catalog.beauty.detachWebsite": {
+      need("catalog.edit");
+      const source = find(s.catalogs);
+      const published = latestCatalog(s, "미용");
+      ensure(
+        catalogBook(source) === "미용" &&
+          workingCatalog(s, "미용")?.id === source.id &&
+          (published?.id || "") === p.basePublishedId,
+        "미용 단가표가 변경되었습니다. 최신 자료를 확인하세요",
+        409,
+      );
+      const candidate = independentBeautyCatalog(source);
+      if (p.publish === true) {
+        ensure(published, "게시된 미용 단가표가 없습니다");
+        const original = independentBeautyCatalog(published);
+        ensure(
+          JSON.stringify(candidate.products) ===
+            JSON.stringify(original.products) &&
+            JSON.stringify(candidate.folderTree) ===
+              JSON.stringify(original.folderTree) &&
+            JSON.stringify(candidate.folders) ===
+              JSON.stringify(original.folders),
+          "미게시 상품·분류 변경이 있습니다. 분리 초안을 검토한 뒤 게시하세요",
+          409,
+        );
+      }
+      Object.assign(candidate, base, {
+        id: cmd.id + "-beauty",
+        authorId: user.id,
+        status: p.publish === true ? "published" : "draft",
+        version: "미용 독립 구성 · " + now.slice(0, 10),
+      });
+      delete candidate.publishedAt;
+      if (p.publish === true) candidate.publishedAt = now;
+      ensure(
+        !s.catalogs.some((c) => c.id === candidate.id),
+        "이미 저장된 분리본입니다",
+        409,
+      );
+      validateCatalog(candidate, p.publish === true);
+      s.catalogs.push(candidate);
+      recordCatalog(
+        source,
+        candidate,
+        "미용 SSOT 독립 구성 · 홈페이지 자동 추가분 분리",
+      );
+      text = "미용 SSOT 홈페이지 연동 해제·기존 구성 복원";
+      break;
+    }
     case "catalog.website.import": {
+      need("catalog.edit");
+      throw new DomainError(
+        "홈페이지 갱신 방식이 변경되었습니다. 앱을 업데이트한 뒤 홈페이지 SSOT에서 갱신하세요",
+        409,
+      );
+    }
+    case "catalog.homepage.import": {
       need("catalog.edit");
       ensure(p.complete === true, "홈페이지 전체 조회를 완료한 뒤 저장하세요");
       const pages = websitePagesSchema.parse(p.pages);
@@ -1437,35 +1490,21 @@ export async function applyCommand(
           409,
         );
       ensure(beauty, "기준 미용 SSOT가 필요합니다");
-      const result = mergeWebsiteCatalogs(beauty, event, pages, now);
-      const candidates = [result.beauty, result.event];
-      for (const [i, candidate] of candidates.entries()) {
-        Object.assign(candidate, base, {
-          id: cmd.id + (i === 0 ? "-beauty" : "-event"),
-          authorId: user.id,
-        });
-        ensure(
-          !s.catalogs.some((c) => c.id === candidate.id),
-          "이미 저장된 갱신입니다",
-          409,
-        );
-        validateCatalog(candidate);
-      }
-      // Validate both before adding either; the worker persists one command atomically.
-      s.catalogs.push(...candidates);
-      recordCatalog(
-        beauty,
-        result.beauty,
-        "홈페이지 미용·이벤트 통합 갱신",
-        "-beauty",
+      const result = mergeHomepageCatalog(beauty, event, pages, now);
+      const candidate = result.catalog;
+      Object.assign(candidate, base, {
+        id: cmd.id + "-homepage",
+        authorId: user.id,
+      });
+      ensure(
+        !s.catalogs.some((c) => c.id === candidate.id),
+        "이미 저장된 갱신입니다",
+        409,
       );
-      recordCatalog(
-        event,
-        result.event,
-        "홈페이지 미용·이벤트 통합 갱신",
-        "-event",
-      );
-      text = "홈페이지 미용·이벤트 갱신 초안 저장";
+      validateCatalog(candidate);
+      s.catalogs.push(candidate);
+      recordCatalog(event, candidate, "홈페이지 전체 상품 갱신", "-homepage");
+      text = "홈페이지 SSOT 갱신 초안 저장";
       break;
     }
     case "catalog.events.import":
@@ -1474,6 +1513,11 @@ export async function applyCommand(
       const catalog = p.catalog as unknown as Catalog;
       validateCatalog(catalog);
       if (cmd.type === "catalog.events.import") {
+        ensure(
+          workingCatalog(s, "이벤트")?.websiteImport?.scope !== "all",
+          "앱을 업데이트한 뒤 홈페이지 SSOT에서 전체 상품을 갱신하세요",
+          409,
+        );
         ensure(
           catalogBook(catalog) === "이벤트" && catalog.eventImport,
           "이벤트 갱신 자료를 확인하세요",
@@ -1970,7 +2014,11 @@ export async function applyCommand(
           ? { reviewedBy: user.id, reviewedAt: now }
           : {};
       const old = s.consents.find((x) => x.id === id);
-      ensure(old || cmd.baseRev === undefined, "삭제되었거나 없는 양식입니다", 404);
+      ensure(
+        old || cmd.baseRev === undefined,
+        "삭제되었거나 없는 양식입니다",
+        404,
+      );
       if (old) {
         find(s.consents);
         ensure(old.status === "draft", "게시된 양식은 복제해서 수정하세요");

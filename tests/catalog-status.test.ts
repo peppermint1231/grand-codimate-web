@@ -4,7 +4,10 @@ import {
   catalogTime,
   catalogVersionLabel,
 } from "../src/core/catalogStatus";
-import { bulkEditCatalogProducts } from "../src/core/catalogProducts";
+import {
+  bulkEditCatalogProducts,
+  bulkEditCatalogProductsResult,
+} from "../src/core/catalogProducts";
 import { applyCommand } from "../src/core/domain";
 import { emptyState, latestCatalog } from "../src/core/model";
 import { threeCatalogs, catalogAdmin } from "./fixtures/catalogs";
@@ -40,9 +43,10 @@ it("requires reviewed prices for bulk activation and keeps activation distinct f
   c.products[0].active = false;
   c.products[0].publicVisible = false;
   c.products[0].options[0].review = true;
-  expect(() =>
-    bulkEditCatalogProducts(c, [c.products[0].id], { active: true }),
-  ).toThrow("검토완료");
+  expect(
+    bulkEditCatalogProductsResult(c, [c.products[0].id], { active: true })
+      .skipped[0].reasons,
+  ).toContain("옵션 검토완료 필요");
   const next = bulkEditCatalogProducts(c, [c.products[0].id], {
     active: true,
     completeReview: true,
@@ -51,9 +55,10 @@ it("requires reviewed prices for bulk activation and keeps activation distinct f
   expect(next.products[0].publicVisible).toBe(false);
   expect(c.products[0].active).toBe(false);
   next.products[0].options[0].tax = "unknown";
-  expect(() =>
-    bulkEditCatalogProducts(next, [next.products[0].id], { active: true }),
-  ).toThrow();
+  expect(
+    bulkEditCatalogProductsResult(next, [next.products[0].id], { active: true })
+      .skipped,
+  ).toHaveLength(1);
   expect(
     bulkEditCatalogProducts(next, [next.products[0].id], { active: false })
       .products[0].active,

@@ -9,10 +9,10 @@ export async function scanWebsiteCatalog(
     if (signal?.aborted) throw new DOMException("갱신 취소", "AbortError");
   };
   check();
-  progress("이벤트 분류 확인 중…");
+  progress("홈페이지 분류 확인 중…");
   const root = (await load("")) as EventPage;
   if (!root.categories.length || root.categories.length > 80)
-    throw new Error("이벤트 분류를 확인할 수 없습니다.");
+    throw new Error("홈페이지 분류를 확인할 수 없습니다.");
   const items = new Map<string, EventItem>();
   let pagesRead = 0;
   for (const category of root.categories) {
@@ -35,7 +35,7 @@ export async function scanWebsiteCatalog(
         if (!items.has(item.id)) items.set(item.id, item);
       if (items.size > 400)
         throw new Error(
-          "이벤트 수가 제한을 넘었습니다. 기존 단가표를 유지합니다.",
+          "배너 수가 제한을 넘었습니다. 기존 단가표를 유지합니다.",
         );
       for (const next of result.pages)
         if (!visited.has(next)) pending.push(next);
@@ -43,7 +43,7 @@ export async function scanWebsiteCatalog(
   }
   if (!items.size)
     throw new Error(
-      "홈페이지 이벤트가 비어 있습니다. 기존 단가표를 유지합니다.",
+      "홈페이지 상품이 비어 있습니다. 기존 단가표를 유지합니다.",
     );
   const ordered = [...items.values()],
     events = new Array<WebsiteEvent>(ordered.length);
@@ -59,7 +59,7 @@ export async function scanWebsiteCatalog(
         `?category=${item.categoryId}&item=${item.id}`,
       )) as WebsiteEvent;
       if (event.id !== item.id || !Array.isArray(event.offers))
-        throw new Error("이벤트 상세를 확인할 수 없습니다.");
+        throw new Error("홈페이지 상세를 확인할 수 없습니다.");
       events[index] = event;
       completed++;
       progress(

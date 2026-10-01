@@ -1,5 +1,5 @@
 import {
-  mergeWebsiteCatalogs,
+  mergeHomepageCatalog,
   websiteReviewNeeded,
   type WebsiteBases,
 } from "../core/websiteCatalog";
@@ -11,7 +11,6 @@ import { money, type Catalog, type Product } from "../core/model";
 import {
   EVENT_LIST_URL,
   eventAvailability,
-  selectWebsiteOffers,
   safeEventImage,
   type EventOriginInfo,
   type WebsiteEvent,
@@ -32,7 +31,10 @@ export function EventPrice({
         <strong className="event-discount">{discountRate}% 할인</strong>
       )}
       <strong>
-        할인가 {salePrice === null ? "원문 확인" : money(salePrice)}
+        {regularPrice !== null && salePrice !== null && regularPrice > salePrice
+          ? "할인가 "
+          : "판매가 "}
+        {salePrice === null ? "원문 확인" : money(salePrice)}
       </strong>
     </span>
   );
@@ -63,14 +65,14 @@ export function EventSourceInfo({
   return (
     <div className={`event-source-info ${compact ? "compact" : ""}`}>
       <p className="event-period">
-        이벤트 기간: {info.period || "홈페이지 미표기"}
+        게시 기간: {info.period || "홈페이지 미표기"}
         {availability !== "current" && (
           <b className="event-status">
             {availability === "ended"
               ? "종료"
               : availability === "upcoming"
                 ? "시작 전"
-                : "이벤트 대상에서 제외됨"}
+                : "홈페이지에서 제외됨"}
           </b>
         )}
       </p>
@@ -89,7 +91,8 @@ export function EventSourceInfo({
           {!!info.posterUrls.length && (
             <details className="event-posters">
               <summary>
-                <ImageIcon size={16} /> 이벤트 포스터 ({info.posterUrls.length})
+                <ImageIcon size={16} /> 홈페이지 포스터 (
+                {info.posterUrls.length})
               </summary>
               <PosterLinks urls={info.posterUrls} name={info.eventName} />
             </details>
@@ -142,7 +145,7 @@ export function WebsiteSourceInfo({ product }: { product: Product }) {
           <br />
           {link.missing
             ? "홈페이지에서 제외됨"
-            : `홈페이지 게시 확인 · ${link.book} · ${link.price === null ? "가격 미표기" : money(link.price)}`}
+            : `홈페이지 게시 확인 · ${link.book === "이벤트" ? "이벤트 상품" : "일반 상품"} · ${link.price === null ? "가격 미표기" : money(link.price)}`}
           {link.changed && " · 원문 변경"}
           {link.priceDiffers && " · SSOT 가격/부가세와 다름"}
           <br />
@@ -192,7 +195,7 @@ export function EventCatalogRefresh({
       );
       setScan({ pages, beauty, event: catalog, bases });
       setProgress(
-        "전체 홈페이지 확인 완료 · 미용·이벤트 변경 내용을 확인한 뒤 초안을 저장하세요.",
+        "전체 홈페이지 확인 완료 · 홈페이지 SSOT 변경 내용을 확인한 뒤 초안을 저장하세요.",
       );
     } catch (e) {
       if (!controller.signal.aborted)
@@ -205,18 +208,15 @@ export function EventCatalogRefresh({
     if (!scan) return {};
     try {
       return {
-        preview: mergeWebsiteCatalogs(scan.beauty, scan.event, scan.pages),
+        preview: mergeHomepageCatalog(scan.beauty, scan.event, scan.pages),
       };
     } catch (e) {
       return { previewError: (e as Error).message };
     }
   }, [scan]);
-  const eventPages = useMemo(
-    () => (scan ? selectWebsiteOffers(scan.pages, "이벤트") : []),
-    [scan],
-  );
+  const eventPages = scan?.pages || [];
   const stale = !!scan && JSON.stringify(scan.bases) !== JSON.stringify(bases);
-  const recent = beauty?.websiteImport || catalog?.websiteImport;
+  const recent = catalog?.websiteImport;
   return (
     <section className="card event-refresh" aria-label="홈페이지 단가표 갱신">
       <div className="section-title">
@@ -231,23 +231,22 @@ export function EventCatalogRefresh({
         </button>
       </div>
       <p>
-        홈페이지 전체를 조회해 미용·이벤트 SSOT를 함께 점검합니다.
-        배너명·분류명·상품명에 ‘이벤트’ 또는 ‘EVENT’가 있으면 이벤트로
-        구분합니다. 신규 상품은 최근 저장한 미용 SSOT의 분류를 따르고, 판단이
-        어려우면 ‘미분류·검토 필요’에 둡니다.
+        홈페이지에 게시된 모든 분류·배너·상품을 홈페이지 SSOT로 가져옵니다.
+        정가·판매가·할인율·게시 기간과 원본 포스터 링크를 함께 확인할 수
+        있습니다. 신규 상품 분류는 직접 구성한 미용 SSOT를 참고합니다.
       </p>
       <p>
-        기존 미용 가격·판매 상태·직접 배치한 폴더는 유지하며 원문과의 차이를
-        표시합니다. 하위 폴더는 게시 확인·제외·미확인·혼합 색상으로 구분합니다.
-        포스터는 원본 링크로 표시합니다.
+        미용 SSOT는 홈페이지 갱신과 독립적으로 관리됩니다. 홈페이지 SSOT에서
+        직접 배치한 폴더와 원문이 동일한 상품의 검토 상태는 유지합니다.
       </p>
       <a href={EVENT_LIST_URL} target="_blank" rel="noopener noreferrer">
         홈페이지 가격표 열기 <ExternalLink size={14} />
       </a>
       {recent && (
         <small>
-          최근 통합 갱신: {new Date(recent.checkedAt).toLocaleString("ko-KR")} ·
-          배너 {recent.pageCount}개 / 상품 {recent.offerCount}개
+          최근 홈페이지 갱신:{" "}
+          {new Date(recent.checkedAt).toLocaleString("ko-KR")} · 배너{" "}
+          {recent.pageCount}개 / 상품 {recent.offerCount}개
         </small>
       )}
       {disabled && (
@@ -266,25 +265,19 @@ export function EventCatalogRefresh({
       )}
       {preview && scan && (
         <>
-          <div className="event-sync-summary" aria-label="미용 갱신 요약">
-            <b>미용</b>
-            <b>신규 {preview.summary.beauty.added}개</b>
-            <span>기존 일치 {preview.summary.beauty.existing}건</span>
-            <span>원문 변경·가격 확인 {preview.summary.beauty.review}개</span>
-            <span>원문 제외 {preview.summary.beauty.missing}개</span>
-          </div>
-          <div className="event-sync-summary" aria-label="이벤트 갱신 요약">
-            <b>이벤트</b>
-            <b>신규 {preview.summary.event.added}개</b>
-            <b>변경 {preview.summary.event.changed}개</b>
-            <span>동일 {preview.summary.event.unchanged}개</span>
-            <span>이벤트 대상 제외 {preview.summary.event.missing}개</span>
-            <span>기간 종료 {preview.summary.event.ended}개</span>
+          <div className="event-sync-summary" aria-label="홈페이지 갱신 요약">
+            <b>홈페이지 SSOT</b>
+            <b>신규 {preview.summary.added}개</b>
+            <b>변경 {preview.summary.changed}개</b>
+            <span>동일 {preview.summary.unchanged}개</span>
+            <span>홈페이지 제외 {preview.summary.missing}개</span>
+            <span>기간 종료 {preview.summary.ended}개</span>
           </div>
           <p>
-            신규 미용 상품과 신규·변경 이벤트는 검토 후 활성화가 필요합니다.
-            홈페이지에서 제외된 이벤트는 비활성화합니다. 부가세 미표기는 항목별
-            확인 대상으로 남깁니다. 저장만으로 상담·추천기에 게시되지 않습니다.
+            신규·변경 상품은 검토 후 활성화가 필요합니다. 홈페이지에서 제외된
+            상품은 비활성화합니다. 부가세 미표기는 항목별 확인 대상으로
+            남깁니다. 초안 저장 후 검토·게시하면 상담과 맞춤 시술 찾기에
+            반영됩니다.
           </p>
           {stale && (
             <p className="error">
@@ -302,11 +295,11 @@ export function EventCatalogRefresh({
                 if (await onImport(scan.pages, scan.bases)) {
                   setScan(undefined);
                   setProgress(
-                    "미용·이벤트 갱신 초안을 함께 저장했습니다. 각 SSOT에서 검토 후 ‘검증 후 게시’를 눌러 반영하세요.",
+                    "홈페이지 SSOT 갱신 초안을 저장했습니다. 검토 후 ‘검증 후 게시’를 눌러 반영하세요.",
                   );
                 } else
                   setError(
-                    "기기에 저장됐습니다. 동기화 완료 후 두 SSOT의 갱신 결과를 확인하세요.",
+                    "기기에 저장됐습니다. 동기화 완료 후 홈페이지 SSOT의 갱신 결과를 확인하세요.",
                   );
               } catch (e) {
                 setError((e as Error).message);
@@ -315,42 +308,11 @@ export function EventCatalogRefresh({
               }
             }}
           >
-            미용·이벤트 갱신 초안 저장
+            홈페이지 갱신 초안 저장
           </button>
           <details className="event-sync-preview">
-            <summary>미용 신규·변경·제외 상품 확인</summary>
-            {preview.beauty.products
-              .filter(
-                (p) =>
-                  preview.beautyDecisions.some(
-                    (d) => d.id === p.id && d.status === "added",
-                  ) ||
-                  websiteReviewNeeded(p) ||
-                  p.websiteListings?.some((l) => l.missing),
-              )
-              .map((p) => (
-                <div className="event-preview-item" key={p.id}>
-                  <b>{p.name}</b>
-                  <p>
-                    {preview.beautyDecisions.find((d) => d.id === p.id)
-                      ?.status === "added"
-                      ? "신규 검토 후보"
-                      : "기존 SSOT 유지 · 원문 확인"}{" "}
-                    · SSOT{" "}
-                    {p.options
-                      .map(
-                        (o) =>
-                          `${o.label} ${o.price === null ? "미확정" : money(o.price)}`,
-                      )
-                      .join(" / ")}
-                  </p>
-                  <WebsiteSourceInfo product={p} />
-                </div>
-              ))}
-          </details>
-          <details className="event-sync-preview">
             <summary>
-              가져온 이벤트·가격·포스터 확인 ({eventPages.length}개)
+              가져온 전체 상품·가격·포스터 확인 ({eventPages.length}개)
             </summary>
             {eventPages.map((event) => (
               <details key={event.id} className="event-preview-item">

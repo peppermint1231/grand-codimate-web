@@ -16,6 +16,7 @@ import {
   allowed,
   money,
   catalogBookDisplayOrder,
+  catalogBookLabel,
   type User,
   type State,
 } from "../core/model";
@@ -344,7 +345,7 @@ export function Statistics({
             >
               <option value="">전체 구분</option>
               {catalogBookDisplayOrder.map((b) => (
-                <option key={b}>{b}</option>
+                <option key={b} value={b}>{catalogBookLabel(b)}</option>
               ))}
             </select>
           </label>
@@ -472,7 +473,7 @@ export function Statistics({
                 <PerformanceTable
                   rows={report.strengths.map((r) => ({
                     ...r,
-                    name: r.name + " / " + r.book,
+                    name: r.name + " / " + catalogBookLabel(r.book),
                   }))}
                   financial={report.financial}
                 />
@@ -560,7 +561,7 @@ export function Statistics({
                         {incentive.map((r, i) => (
                           <tr key={report.strengths[i].id}>
                             <th>
-                              {r.employee} · {r.book}
+                              {r.employee} · {catalogBookLabel(r.book)}
                             </th>
                             <td>{money(r.basis)}</td>
                             <td>
@@ -690,7 +691,7 @@ export function Statistics({
                       {report.products.map((r, i) => (
                         <tr key={i}>
                           <th>{r.name}</th>
-                          <td>{r.book}</td>
+                          <td>{catalogBookLabel(r.book)}</td>
                           <td>{r.consultations}</td>
                           <td>{r.success}</td>
                           <td>

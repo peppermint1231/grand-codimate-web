@@ -1,3 +1,4 @@
+import { catalogBookLabel } from "./model";
 import ExcelJS from "exceljs";
 import {
   incentiveRows,
@@ -25,7 +26,7 @@ export async function analyticsWorkbook(
       `${report.filter.from} ~ ${report.filter.to}`,
     ]);
     ws.addRow([
-      `직원: ${report.filter.ownerId || "전체"} / 구분: ${report.filter.book || "전체"} / 금액 열람: ${report.financial ? "가능" : "제한"}`,
+      `직원: ${report.filter.ownerId || "전체"} / 구분: ${report.filter.book ? catalogBookLabel(report.filter.book) : "전체"} / 금액 열람: ${report.financial ? "가능" : "제한"}`,
     ]);
     ws.addRow(headers);
     ws.views = [{ state: "frozen", ySplit: 3, xSplit: 1 }];
@@ -114,7 +115,7 @@ export async function analyticsWorkbook(
       ["직원", "구분", "분야", ...headers.slice(1)],
       report.strengths.map((r) => [
         report.employees.find((e) => e.id === r.ownerId)?.name || r.ownerId,
-        r.book,
+        catalogBookLabel(r.book),
         r.area,
         ...performance([r])[0].slice(1),
       ]),
@@ -126,7 +127,7 @@ export async function analyticsWorkbook(
         ["직원·분야", "구분", "기준금액", "지급률(%)", "예상액"],
         incentiveRows(report, settings).map((r) => [
           r.employee,
-          r.book,
+          catalogBookLabel(r.book),
           r.basis,
           r.rate,
           r.amount,
@@ -218,7 +219,7 @@ export async function analyticsWorkbook(
       ],
       report.products.map((r) => [
         r.name,
-        r.book,
+        catalogBookLabel(r.book),
         r.consultations,
         r.success,
         r.units,

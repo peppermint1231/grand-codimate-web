@@ -1,3 +1,4 @@
+import { catalogBookLabel } from "../core/model";
 import { catalogRegularPrice } from "../core/quotePrices";
 import { useState } from "react";
 import { PhotoModal } from "./PhotoBoard";
@@ -36,7 +37,7 @@ export function CatalogPublishReview({
           </button>
         </div>
         <p>
-          {catalogBook(catalog)} · 활성 상품{" "}
+          {catalogBookLabel(catalogBook(catalog))} · 활성 상품{" "}
           {catalog.products.filter((p) => p.active).length}개
         </p>
         <details open>

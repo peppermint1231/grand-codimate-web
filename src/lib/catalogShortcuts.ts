@@ -112,6 +112,13 @@ export const catalogCommands = {
     code: "KeyA",
     mod: true,
   },
+  selectUnreviewed: {
+    label: "현재 목록의 미검토 상품만 선택",
+    keys: "Alt+U",
+    scope: "상품 목록",
+    code: "KeyU",
+    alt: true,
+  },
   selectNone: {
     label: "상품 선택 해제",
     keys: "Ctrl/Cmd+Shift+A",

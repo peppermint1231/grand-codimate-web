@@ -5197,3 +5197,7 @@ html.custom-pull-refresh {
 
 .consent-delete-actions { margin-top: 1rem; padding-top: .75rem; border-top: 1px solid var(--border, #dbe5e1); }
 .consent-delete-button { color: #a32935; border-color: #d9abb0; }
+
+.catalog-bulk-skipped { margin-top: .75rem; padding: .75rem; border: 1px solid #dbb87c; border-radius: .6rem; background: #fffaf0; }
+.catalog-bulk-skipped ul { max-height: 15rem; overflow: auto; padding-left: 1.25rem; }
+.catalog-bulk-skipped li { margin: .4rem 0; overflow-wrap: anywhere; }

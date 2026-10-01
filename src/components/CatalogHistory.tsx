@@ -1,3 +1,4 @@
+import { catalogBookLabel } from "../core/model";
 import { api } from "../lib/api";
 import { catalogTime } from "../core/catalogStatus";
 import { useEffect, useRef, useState } from "react";
@@ -122,9 +123,9 @@ export function CatalogHistory({
               <button onClick={() => setOpen(false)}>닫기</button>
             </div>
             <p className="small">
-              {catalogBook(catalog)} SSOT · 목록에서 저장 시점을 선택하세요.
-              게시 이력은 추천기에 반영하고, 초안 이력은 새 초안으로 복원합니다.
-              기존 상담 견적은 유지됩니다.
+              {catalogBookLabel(catalogBook(catalog))} SSOT · 목록에서 저장
+              시점을 선택하세요. 게시 이력은 추천기에 반영하고, 초안 이력은 새
+              초안으로 복원합니다. 기존 상담 견적은 유지됩니다.
             </p>
             {disabled && (
               <p className="catalog-history-warning">

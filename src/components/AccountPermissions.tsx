@@ -46,7 +46,7 @@ const descriptions: Record<Permission, { name: string; text: string }> = {
   },
   "catalog.edit": {
     name: "단가표 관리",
-    text: "미용·보험·이벤트 단가표의 상품·옵션·가격·폴더를 편집합니다. 초안 저장, 게시, 수정 이력 복원까지 포함합니다.",
+    text: "홈페이지·미용·보험 단가표의 상품·옵션·가격·폴더를 편집합니다. 초안 저장, 게시, 수정 이력 복원까지 포함합니다.",
   },
   "stats.read": {
     name: "통계",

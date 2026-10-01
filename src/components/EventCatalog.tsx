@@ -8,7 +8,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, ExternalLink, Image as ImageIcon } from "lucide-react";
 import { api } from "../lib/api";
-import { scanWebsiteCatalog } from "../lib/eventSync";
+import {
+  scanWebsiteCatalog,
+  createWebsiteScanCheckpoint,
+} from "../lib/eventSync";
 import { money, type Catalog, type Product } from "../core/model";
 import {
   EVENT_LIST_URL,
@@ -186,9 +189,11 @@ export function EventCatalogRefresh({
   const [unknownTax, setUnknownTax] =
     useState<HomepageSyncOptions["unknownTax"]>("exclusive");
   const request = useRef<AbortController | null>(null);
+  const checkpoint = useRef(createWebsiteScanCheckpoint());
   useEffect(() => () => request.current?.abort(), []);
-  const refresh = async () => {
-    if (!beauty) return;
+  const refresh = async (resume = false) => {
+    if (!beauty || request.current) return;
+    if (!resume) checkpoint.current = createWebsiteScanCheckpoint();
     setBusy(true);
     setError("");
     setScan(undefined);
@@ -200,6 +205,7 @@ export function EventCatalogRefresh({
           api("/catalog/event-source" + query, { signal: controller.signal }),
         setProgress,
         controller.signal,
+        checkpoint.current,
       );
       setScan({ pages, beauty, event: catalog, bases });
       setProgress(
@@ -209,6 +215,7 @@ export function EventCatalogRefresh({
       if (!controller.signal.aborted)
         setError((e as Error).message + " 기존 SSOT는 변경하지 않았습니다.");
     } finally {
+      if (request.current === controller) request.current = null;
       if (!controller.signal.aborted) setBusy(false);
     }
   };
@@ -282,6 +289,22 @@ export function EventCatalogRefresh({
         <p className="error" role="alert">
           {error || previewError}
         </p>
+      )}
+      {error && checkpoint.current.pages.size > 0 && (
+        <div className="event-refresh-retry">
+          <p>
+            확인 완료 {checkpoint.current.pages.size}개를 이 화면에서 10분간
+            보관합니다. 실패한 항목부터 이어서 확인하거나, 위의 ‘홈페이지
+            갱신’으로 처음부터 다시 확인할 수 있습니다.
+          </p>
+          <button
+            type="button"
+            disabled={disabled || busy || !beauty}
+            onClick={() => void refresh(true)}
+          >
+            {busy ? "다시 확인 중…" : "실패 항목 다시 확인"}
+          </button>
+        </div>
       )}
       {preview && scan && (
         <>

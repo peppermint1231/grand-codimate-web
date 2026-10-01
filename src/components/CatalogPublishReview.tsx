@@ -91,7 +91,13 @@ export function CatalogPublishReview({
                       ])
                     }
                   >
-                    {o.label} · {o.price === null ? "미확정" : money(o.price)} ·{" "}
+                    {o.label} ·{" "}
+                    {o.priceKind === "quote"
+                      ? "상담 시 가격 입력"
+                      : o.price === null
+                        ? "미확정"
+                        : money(o.price)}{" "}
+                    ·{" "}
                     {o.tax === "exclusive"
                       ? "VAT 별도"
                       : o.tax === "inclusive"

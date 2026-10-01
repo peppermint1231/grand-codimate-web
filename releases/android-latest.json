@@ -1,7 +1,7 @@
 {
-  "version": "0.13.6",
-  "versionCode": 59,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.6.apk",
-  "sha256": "05f2b000663be745e9e5557779889384b4c44ed585163dc9d07f7e8c2757b821",
-  "notes": "상담 이탈 시 보류·성공·실패 저장 확인, 상담이력 미수납 강조. 홈페이지 갱신 자동 재시도 및 새 상품·변경 상품 비활성 등록. 별도 검토완료 체크 제거."
+  "version": "0.13.7",
+  "versionCode": 60,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.7.apk",
+  "sha256": "0551abe2c41372143e84b5af72ab1410c3cf2be1f40a1a4318bf5732577cf55c",
+  "notes": "홈페이지 갱신 실패 항목 이어서 확인, 상담 시 가격 입력 상품 및 일괄 변경, 멤버십 빈 구성 행 저장 오류 수정, 옵션별 혜택·삭제, 장바구니 맞춤 동의서 추천."
 }

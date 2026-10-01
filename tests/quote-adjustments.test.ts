@@ -321,3 +321,110 @@ it("allows direct medical opinions on finalized consultations without changing t
     expect(after.opinions[0].answer).toBe("경과 의견");
   }
 });
+
+it("consultation-priced options require an explicit amount and reason, derived on the server", async () => {
+  const s = fixture();
+  Object.assign(s.catalogs[0].products[0].options[0], {
+    price: null,
+    priceKind: "quote",
+  });
+  const payload = {
+    lines: [
+      { ...line, quantity: 1, discount: zero, requiresCustomPrice: false },
+    ],
+    discount: zero,
+    vat: "separate",
+    photos: [],
+    reason: "진료 후 결정",
+  };
+  const command = (p: any, rev = 1) => ({
+    id: crypto.randomUUID(),
+    type: "consultation.save",
+    entityId: "consult",
+    baseRev: rev,
+    payload: p,
+  });
+  await expect(applyCommand(s, catalogAdmin, command(payload))).rejects.toThrow(
+    "상담 가격을 입력하세요",
+  );
+  const priced = {
+    ...payload,
+    lines: [{ ...payload.lines[0], customPrice: 70000 }],
+  };
+  await expect(
+    applyCommand(s, catalogAdmin, command({ ...priced, reason: "" })),
+  ).rejects.toThrow("임의 가격");
+  const saved = await applyCommand(s, catalogAdmin, command(priced));
+  expect(saved.consultations[0].quote).toMatchObject({
+    subtotal: 70000,
+    total: 77000,
+    discountTotal: 0,
+  });
+  expect(saved.consultations[0].quote.lines[0]).toMatchObject({
+    requiresCustomPrice: true,
+    price: 0,
+    customPrice: 70000,
+  });
+  await expect(
+    applyCommand(saved, catalogAdmin, command(payload, 2)),
+  ).rejects.toThrow("상담 가격을 입력하세요");
+  expect(() =>
+    renewalQuote(saved.consultations[0], s.catalogs, "renewal"),
+  ).toThrow("새 상담에서 선택");
+});
+
+it("snapshots only the selected membership tier benefits and preserves them after catalog edits", async () => {
+  const s = fixture();
+  const p = s.catalogs[0].products[0];
+  p.offering = {
+    kind: "membership",
+    items: [],
+    terms: "공통 조건",
+    creditAmount: 500000,
+  };
+  p.options[0].offering = {
+    kind: "membership",
+    items: [{ name: "GOLD 관리", quantity: 3, unit: "회" }],
+    terms: "GOLD 조건",
+    creditAmount: 1000000,
+    bonusAmount: 100000,
+    validityDays: 365,
+  };
+  p.options.push({
+    ...p.options[0],
+    id: "option-platinum",
+    label: "PLATINUM",
+    offering: {
+      kind: "membership",
+      items: [],
+      terms: "PLATINUM 전용",
+      creditAmount: 2000000,
+    },
+  });
+  const payload = {
+    lines: [{ ...line, quantity: 1, discount: zero }],
+    discount: zero,
+    vat: "separate",
+    photos: [],
+    reason: "",
+  };
+  const cmd = (rev = 1) => ({
+    id: crypto.randomUUID(),
+    type: "consultation.save",
+    entityId: "consult",
+    baseRev: rev,
+    payload,
+  });
+  const saved = await applyCommand(s, catalogAdmin, cmd());
+  const composition = saved.consultations[0].quote.lines[0].composition!;
+  expect(composition).toContain("GOLD 관리 3회");
+  expect(composition).toContain("기본 이용금액 1,000,000원");
+  expect(composition).not.toContain("PLATINUM");
+  expect(composition).not.toContain("500,000");
+  saved.catalogs[0] = structuredClone(saved.catalogs[0]);
+  saved.catalogs[0].products[0].options = [
+    saved.catalogs[0].products[0].options[1],
+  ];
+  const resaved = await applyCommand(saved, catalogAdmin, cmd(2));
+  expect(resaved.consultations[0].quote.lines[0].composition).toBe(composition);
+});

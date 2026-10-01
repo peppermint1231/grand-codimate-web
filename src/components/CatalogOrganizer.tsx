@@ -1,3 +1,4 @@
+import { offeringSummary } from "../core/offerings";
 import { CatalogBulkEdit } from "./CatalogBulkEdit";
 import { PhotoModal } from "./PhotoBoard";
 import { InsuranceBadges, InsuranceClaimHint } from "./InsuranceInfo";
@@ -445,49 +446,56 @@ export function CatalogProductRows({
                       <span>
                         <b>{o.label}</b>
                         <InsuranceClaimHint option={o} />
+                        {o.offering && (
+                          <small style={{ whiteSpace: "pre-line" }}>
+                            {offeringSummary(o.offering)}
+                          </small>
+                        )}
                         <small>
                           {o.unit}
-                          {o.price === null || o.tax === "unknown"
+                          {(o.price === null && o.priceKind !== "quote") ||
+                          o.tax === "unknown"
                             ? " · 입력 확인 필요"
                             : ""}
                         </small>
                       </span>
                       {editable ? (
                         <>
-                          {(catalogBook(catalog) === "이벤트" ||
-                            p.webEvent ||
-                            o.priceKind === "event" ||
-                            o.regularPrice !== undefined) && (
-                            <label className="event-regular-input">
-                              정가 (원)
-                              <input
-                                type="number"
-                                min={0}
-                                step={1}
-                                aria-label={`${p.name} ${o.label} 정가`}
-                                value={
-                                  eventOptionPrices(p, o).regularPrice ?? ""
-                                }
-                                placeholder="정가 미확정"
-                                onChange={(e) =>
-                                  change({
-                                    ...p,
-                                    options: p.options.map((x) =>
-                                      x.id === o.id
-                                        ? {
-                                            ...x,
-                                            regularPrice:
-                                              e.target.value === ""
-                                                ? null
-                                                : Number(e.target.value),
-                                          }
-                                        : x,
-                                    ),
-                                  })
-                                }
-                              />
-                            </label>
-                          )}
+                          {o.priceKind !== "quote" &&
+                            (catalogBook(catalog) === "이벤트" ||
+                              p.webEvent ||
+                              o.priceKind === "event" ||
+                              o.regularPrice !== undefined) && (
+                              <label className="event-regular-input">
+                                정가 (원)
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1}
+                                  aria-label={`${p.name} ${o.label} 정가`}
+                                  value={
+                                    eventOptionPrices(p, o).regularPrice ?? ""
+                                  }
+                                  placeholder="정가 미확정"
+                                  onChange={(e) =>
+                                    change({
+                                      ...p,
+                                      options: p.options.map((x) =>
+                                        x.id === o.id
+                                          ? {
+                                              ...x,
+                                              regularPrice:
+                                                e.target.value === ""
+                                                  ? null
+                                                  : Number(e.target.value),
+                                            }
+                                          : x,
+                                      ),
+                                    })
+                                  }
+                                />
+                              </label>
+                            )}
                           <label className="catalog-price-input">
                             {p.insurance?.coverage === "covered"
                               ? "환자 본인부담금 (원)"
@@ -502,7 +510,12 @@ export function CatalogProductRows({
                               min={0}
                               aria-label={`${p.name} ${o.label} 가격`}
                               value={o.price ?? ""}
-                              placeholder="가격 미확정"
+                              disabled={o.priceKind === "quote"}
+                              placeholder={
+                                o.priceKind === "quote"
+                                  ? "상담 시 가격 입력"
+                                  : "가격 미확정"
+                              }
                               onChange={(e) =>
                                 change({
                                   ...p,
@@ -547,7 +560,11 @@ export function CatalogProductRows({
                       ) : (
                         <>
                           <strong>
-                            {o.price === null ? "가격 미확정" : money(o.price)}
+                            {o.priceKind === "quote"
+                              ? "상담 시 가격 입력"
+                              : o.price === null
+                                ? "가격 미확정"
+                                : money(o.price)}
                           </strong>
                           <span>
                             {

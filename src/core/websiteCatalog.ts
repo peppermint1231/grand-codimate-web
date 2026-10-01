@@ -365,6 +365,9 @@ export function mergeHomepageCatalog(
     if (same) {
       result.summary.unchanged++;
       option.review = prior.review;
+      // An explicit consultation-price decision survives an unchanged source.
+      if (prior.priceKind === "quote" && option.price === null)
+        option.priceKind = "quote";
       product.active = old.active && eventAvailability(info, now) === "current";
     } else result.summary.changed++;
   }

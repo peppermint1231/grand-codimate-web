@@ -157,6 +157,7 @@ it("scans all banner details to find offer-level events, follows pages and dedup
         ? {
             ...event(),
             id: "102",
+            categoryId: "30",
             name: "일반 가격표",
             categoryName: "미용",
             offers: [{ ...event().offers[0], name: "일반 시술" }],
@@ -406,6 +407,7 @@ it("includes event-category banners even when their individual title does not co
   const ordinary = {
     ...event(),
     id: "104",
+    categoryId: "30",
     name: "일반 피부관리",
     categoryName: "미용 단가표",
   };
@@ -454,4 +456,89 @@ it("reports a retryable source timeout without leaking raw runtime errors", asyn
     status: 504,
     message: expect.stringContaining("연결"),
   });
+});
+
+it("classifies temporary upstream blocking and CDN errors as retryable while preserving real 404s", async () => {
+  for (const status of [403, 406, 429, 500, 520, 521, 522, 524]) {
+    await expect(
+      fetchEventSource(
+        new URLSearchParams(),
+        vi.fn(
+          async () => new Response("temporary", { status }),
+        ) as typeof fetch,
+      ),
+    ).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringContaining(`HTTP ${status}`),
+    });
+  }
+  await expect(
+    fetchEventSource(
+      new URLSearchParams(),
+      vi.fn(async () => new Response("gone", { status: 404 })) as typeof fetch,
+    ),
+  ).rejects.toMatchObject({
+    status: 422,
+    message: expect.stringContaining("HTTP 404"),
+  });
+  await expect(
+    fetchEventSource(
+      new URLSearchParams(),
+      vi.fn(
+        async () =>
+          new Response("unexpected", {
+            headers: { "Content-Type": "text/plain" },
+          }),
+      ) as typeof fetch,
+    ),
+  ).rejects.toMatchObject({ status: 503 });
+});
+it("follows bounded same-source redirects without allowing external hosts or a different product", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(
+      new Response(null, {
+        status: 302,
+        headers: { Location: "?i=101&cate=20" },
+      }),
+    )
+    .mockResolvedValue(
+      new Response(eventDetail(), {
+        headers: { "Content-Type": "Text/HTML; charset=UTF-8" },
+      }),
+    );
+  expect(
+    (
+      (await fetchEventSource(
+        new URLSearchParams("item=101&category=20"),
+        fetcher,
+      )) as WebsiteEvent
+    ).id,
+  ).toBe("101");
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  for (const location of [
+    "https://evil.example/clinicPrice/clinicView.php?i=101&cate=20",
+    "?i=102&cate=20",
+    "/login.php",
+  ]) {
+    const loader = vi.fn(
+      async () =>
+        new Response(null, { status: 302, headers: { Location: location } }),
+    );
+    await expect(
+      fetchEventSource(new URLSearchParams("item=101&category=20"), loader),
+    ).rejects.toMatchObject({ status: 422 });
+    expect(loader).toHaveBeenCalledTimes(1);
+  }
+  const loop = vi.fn(
+    async () =>
+      new Response(null, {
+        status: 302,
+        headers: { Location: "?i=101&cate=20" },
+      }),
+  );
+  await expect(
+    fetchEventSource(new URLSearchParams("item=101&category=20"), loop),
+  ).rejects.toMatchObject({ status: 503 });
+  expect(loop).toHaveBeenCalledTimes(3);
 });

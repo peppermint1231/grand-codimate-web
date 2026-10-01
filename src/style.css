@@ -5281,3 +5281,13 @@ html.custom-pull-refresh {
 .consultation-exit-dialog .button-row { gap: 10px; flex-wrap: wrap; }
 .consultation-payment { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .unpaid-badge { display: inline-block; padding: 5px 8px; border: 1px solid #ed9c88; border-radius: 7px; color: #a32b19; background: #fff0e9; font-size: .85em; white-space: normal; }
+
+.consent-recommendations { border: 1px solid var(--border, #dce5df); border-radius: 12px; padding: 12px; margin-bottom: 12px; background: #f2f8f5; }
+.consent-recommendations .section-title { flex-wrap: wrap; gap: 8px; }
+.consent-recommendation-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 8px; max-height: 340px; overflow-y: auto; }
+.consent-recommendation-list article { min-width: 0; display: grid; gap: 4px; padding: 10px; background: white; border: 1px solid #dce5df; border-radius: 8px; overflow-wrap: anywhere; }
+.consent-recommendation-list button { text-align: left; white-space: normal; }
+.consent-recommendation-list button[aria-pressed="true"] { border-color: #155e59; background: #e8f3ef; }
+.consent-recommendation-list small { display: block; }
+.option-edit > .offering-editor { grid-column: 1 / -1; }
+.option-edit > .section-title { grid-column: 1 / -1; gap: 8px; flex-wrap: wrap; }

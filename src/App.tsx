@@ -1,3 +1,4 @@
+import { ConsentRecommendations } from "./components/ConsentRecommendations";
 import {
   catalogCategoryView,
   type CatalogCategoryMode,
@@ -27,7 +28,7 @@ import { RestoreJobPanel } from "./components/RestoreJobPanel";
 import { IntakePatientImport } from "./components/IntakePatientImport";
 import { AdministrationReview } from "./components/AdministrationReview";
 import { OfferingEditor } from "./components/OfferingEditor";
-import { productComposition } from "./core/offerings";
+import { productComposition, offeringSummary } from "./core/offerings";
 import {
   patientIndex,
   searchPatients,
@@ -2950,11 +2951,26 @@ function ConsultationView({
     [ratio, setRatio] = useState(50),
     [sig, setSig] = useState(""),
     [template, setTemplate] = useState(""),
+    [consentQueue, setConsentQueue] = useState<string[]>([]),
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
   useEffect(() => {
     setDraft((d) => (d.rev === c.rev ? { ...d, updatedAt: c.updatedAt } : d));
   }, [c.updatedAt, c.rev]);
+  const chooseConsents = (ids: string[]) => {
+    if (
+      (sig || checks.length) &&
+      ids[0] !== template &&
+      !window.confirm("작성 중인 동의서 체크·서명을 지우고 다른 양식을 열까요?")
+    )
+      return;
+    setConsentQueue(ids);
+    if (ids[0] !== template) {
+      setTemplate(ids[0] || "");
+      setChecks([]);
+      setSig("");
+    }
+  };
   const [book, setBook] = useState<CatalogBook>("이벤트");
   const viewport = useViewport();
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -3868,7 +3884,7 @@ function ConsultationView({
                       <details>
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
-                        <p>{p.composition}</p>
+                        <p>{productComposition(p)}</p>
                         {p.insurance?.note && <p>{p.insurance.note}</p>}
                       </details>
                       {p.options.map((o) => (
@@ -3877,7 +3893,7 @@ function ConsultationView({
                           disabled={
                             readonly ||
                             o.tax === "unknown" ||
-                            o.price === null ||
+                            (o.price === null && o.priceKind !== "quote") ||
                             eventAvailability(p.webEvent) !== "current"
                           }
                           key={o.id}
@@ -3890,12 +3906,17 @@ function ConsultationView({
                               book,
                               name: p.name,
                               description: p.description,
-                              composition: productComposition(p),
+                              composition: productComposition(p, o),
                               label: o.label,
                               quantity: 1,
                               unit: o.unit,
-                              price: o.price!,
-                              regularPrice: catalogRegularPrice(p, o),
+                              price: o.priceKind === "quote" ? 0 : o.price!,
+                              requiresCustomPrice:
+                                o.priceKind === "quote" || undefined,
+                              regularPrice:
+                                o.priceKind === "quote"
+                                  ? undefined
+                                  : catalogRegularPrice(p, o),
                               tax: o.tax,
                               discount: { kind: "amount" as const, value: 0 },
                             };
@@ -3914,11 +3935,17 @@ function ConsultationView({
                                 lines: [...draft.quote.lines, line],
                               },
                             });
+                            if (o.priceKind === "quote") setCartOpen(true);
                           }}
                         >
                           <span>
                             {o.label}
                             <InsuranceClaimHint option={o} />
+                            {o.offering && (
+                              <small style={{ whiteSpace: "pre-line" }}>
+                                {offeringSummary(o.offering)}
+                              </small>
+                            )}
                             <small>
                               {o.unit} ·{" "}
                               {o.tax === "inclusive"
@@ -3931,7 +3958,11 @@ function ConsultationView({
                             </small>
                           </span>
                           <b>
-                            {o.price === null ? "별도 견적" : money(o.price)}
+                            {o.priceKind === "quote"
+                              ? "상담 시 가격 입력"
+                              : o.price === null
+                                ? "가격 미확정"
+                                : money(o.price)}
                           </b>
                           <Plus size={16} />
                         </button>
@@ -4261,8 +4292,10 @@ function ConsultationView({
                         <input
                           type="checkbox"
                           aria-label={`${l.name} ${l.label} 임의 가격 사용`}
-                          checked={l.customPrice !== undefined}
-                          disabled={readonly}
+                          checked={
+                            l.requiresCustomPrice || l.customPrice !== undefined
+                          }
+                          disabled={readonly || l.requiresCustomPrice}
                           onChange={(e) => {
                             const lines = [...draft.quote.lines];
                             lines[i] = {
@@ -4274,7 +4307,7 @@ function ConsultationView({
                             updateQuote({ lines });
                           }}
                         />
-                        임의 가격
+                        {l.requiresCustomPrice ? "상담 가격 입력" : "임의 가격"}
                       </label>
                       <label>
                         단가 (원 / {l.unit || "개"})
@@ -4284,10 +4317,16 @@ function ConsultationView({
                           min={0}
                           max={1000000000}
                           step={1}
-                          disabled={readonly || l.customPrice === undefined}
+                          disabled={
+                            readonly ||
+                            (!l.requiresCustomPrice &&
+                              l.customPrice === undefined)
+                          }
                           value={
                             l.customPrice === undefined
-                              ? l.price
+                              ? l.requiresCustomPrice
+                                ? ""
+                                : l.price
                               : Number.isFinite(l.customPrice)
                                 ? l.customPrice
                                 : ""
@@ -4298,7 +4337,9 @@ function ConsultationView({
                               ...l,
                               customPrice:
                                 e.target.value === ""
-                                  ? NaN
+                                  ? l.requiresCustomPrice
+                                    ? undefined
+                                    : NaN
                                   : Number(e.target.value),
                             };
                             updateQuote({ lines });
@@ -4736,12 +4777,18 @@ function ConsultationView({
           </div>
           <div className="card treatment-consent-signing">
             <h3>시술동의서</h3>
+            <ConsentRecommendations
+              consents={s.consents}
+              lines={draft.quote.lines}
+              queue={consentQueue}
+              current={template}
+              choose={chooseConsents}
+            />
             <select
+              aria-label="전체 시술동의서 양식"
               value={template}
               onChange={(e) => {
-                setTemplate(e.target.value);
-                setChecks([]);
-                setSig("");
+                chooseConsents(e.target.value ? [e.target.value] : []);
               }}
             >
               <option value="">게시된 양식 선택</option>
@@ -4781,7 +4828,7 @@ function ConsultationView({
                         onChange={(e) => setSigner(e.target.value)}
                       />
                     </Field>
-                    <SignaturePad onChange={setSig} />
+                    <SignaturePad key={template} onChange={setSig} />
                     <button
                       className="primary"
                       disabled={!sig || readonly}
@@ -4800,6 +4847,18 @@ function ConsultationView({
                               consentContent(c) + JSON.stringify(t),
                             ),
                           });
+                          const next = consentQueue.filter(
+                            (id) =>
+                              id !== t.id &&
+                              s.consents.some(
+                                (item) =>
+                                  item.id === id && item.status === "published",
+                              ),
+                          );
+                          setConsentQueue(next);
+                          setTemplate(next[0] || "");
+                          setChecks([]);
+                          setSig("");
                         })
                       }
                     >
@@ -4815,7 +4874,13 @@ function ConsultationView({
               .filter((x) => x.consultationId === c.id)
               .map((x) => (
                 <p key={x.id}>
-                  서명 기록 · {x.signer} · {x.createdAt.slice(0, 16)}
+                  서명 기록 ·{" "}
+                  {s.consents.find((t) => t.id === x.templateId)?.name ||
+                    "보관된 양식"}{" "}
+                  v{x.templateVersion} · {x.signer} ·{" "}
+                  {new Date(x.createdAt).toLocaleString("ko-KR", {
+                    timeZone: "Asia/Seoul",
+                  })}
                 </p>
               ))}
           </div>
@@ -6029,9 +6094,9 @@ function CatalogView({
               />
             </Field>
             <OfferingEditor
-              product={product}
+              offering={product.offering}
               disabled={!editable}
-              onChange={change}
+              onChange={(offering) => change({ ...product, offering })}
             />
             <Field label="패키지·회차별 구성">
               <textarea
@@ -6068,8 +6133,50 @@ function CatalogView({
                 <option>보험</option>
               </select>
             </Field>
+            {!product.options.length && (
+              <p className="error" role="status">
+                판매 활성화에는 옵션이 최소 1개 필요합니다. 아래 ‘옵션 추가’를
+                눌러 기본 또는 GOLD·PLATINUM 같은 등급 이름, 판매 가격, 부가세를
+                입력하세요. 멤버십 혜택 금액과 판매 가격은 별개입니다.
+              </p>
+            )}
             {product.options.map((o, i) => (
-              <div className="option-edit" key={o.id}>
+              <div
+                className="option-edit"
+                key={o.id}
+                role="region"
+                aria-label={`${o.label} 옵션`}
+              >
+                <div className="section-title">
+                  <b>
+                    옵션 {i + 1} · {o.label}
+                  </b>
+                  {editable && (
+                    <button
+                      type="button"
+                      className="catalog-delete-button"
+                      aria-label={`${o.label} 옵션 삭제`}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `${o.label} 옵션을 삭제할까요?${product.options.length === 1 ? " 마지막 옵션을 삭제하면 상품이 비활성화됩니다." : ""} 기존 상담·견적 기록은 유지됩니다. 저장하고 적용을 눌러야 반영됩니다.`,
+                          )
+                        )
+                          return;
+                        const options = product.options.filter(
+                          (x) => x.id !== o.id,
+                        );
+                        change({
+                          ...product,
+                          options,
+                          active: options.length ? product.active : false,
+                        });
+                      }}
+                    >
+                      <Trash2 size={16} /> 옵션 삭제
+                    </button>
+                  )}
+                </div>
                 <Field label="옵션">
                   <input
                     disabled={!editable}
@@ -6081,38 +6188,39 @@ function CatalogView({
                     }}
                   />
                 </Field>
-                {(book === "이벤트" ||
-                  product.webEvent ||
-                  o.priceKind === "event" ||
-                  o.regularPrice !== undefined) && (
-                  <Field label="정가 (원)">
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      disabled={!editable}
-                      aria-label={`${o.label} 정가 (원)`}
-                      value={eventOptionPrices(product, o).regularPrice ?? ""}
-                      placeholder="정가 미확정"
-                      onChange={(e) =>
-                        change({
-                          ...product,
-                          options: product.options.map((x) =>
-                            x.id === o.id
-                              ? {
-                                  ...x,
-                                  regularPrice:
-                                    e.target.value === ""
-                                      ? null
-                                      : Number(e.target.value),
-                                }
-                              : x,
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                )}
+                {o.priceKind !== "quote" &&
+                  (book === "이벤트" ||
+                    product.webEvent ||
+                    o.priceKind === "event" ||
+                    o.regularPrice !== undefined) && (
+                    <Field label="정가 (원)">
+                      <input
+                        type="number"
+                        min={0}
+                        step={1}
+                        disabled={!editable}
+                        aria-label={`${o.label} 정가 (원)`}
+                        value={eventOptionPrices(product, o).regularPrice ?? ""}
+                        placeholder="정가 미확정"
+                        onChange={(e) =>
+                          change({
+                            ...product,
+                            options: product.options.map((x) =>
+                              x.id === o.id
+                                ? {
+                                    ...x,
+                                    regularPrice:
+                                      e.target.value === ""
+                                        ? null
+                                        : Number(e.target.value),
+                                  }
+                                : x,
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                  )}
                 <Field
                   label={
                     product.insurance?.coverage === "covered"
@@ -6125,7 +6233,12 @@ function CatalogView({
                   }
                 >
                   <input
-                    disabled={!editable}
+                    disabled={!editable || o.priceKind === "quote"}
+                    placeholder={
+                      o.priceKind === "quote"
+                        ? "장바구니에서 입력"
+                        : "가격 미확정"
+                    }
                     type="number"
                     value={o.price ?? ""}
                     min={0}
@@ -6140,21 +6253,23 @@ function CatalogView({
                     }}
                   />
                 </Field>
-                {(book === "이벤트" ||
-                  product.webEvent ||
-                  o.priceKind === "event" ||
-                  o.regularPrice !== undefined) && (
-                  <div className="event-price-preview">
-                    <EventPrice {...eventOptionPrices(product, o)} />
-                    {eventOptionPrices(product, o).regularPrice !== null &&
-                      o.price !== null &&
-                      o.price > eventOptionPrices(product, o).regularPrice! && (
-                        <small>
-                          판매가가 정가보다 높아 할인율을 표시하지 않습니다.
-                        </small>
-                      )}
-                  </div>
-                )}
+                {o.priceKind !== "quote" &&
+                  (book === "이벤트" ||
+                    product.webEvent ||
+                    o.priceKind === "event" ||
+                    o.regularPrice !== undefined) && (
+                    <div className="event-price-preview">
+                      <EventPrice {...eventOptionPrices(product, o)} />
+                      {eventOptionPrices(product, o).regularPrice !== null &&
+                        o.price !== null &&
+                        o.price >
+                          eventOptionPrices(product, o).regularPrice! && (
+                          <small>
+                            판매가가 정가보다 높아 할인율을 표시하지 않습니다.
+                          </small>
+                        )}
+                    </div>
+                  )}
                 {(product.insurance?.coverage === "covered" ||
                   o.healthInsuranceAmount !== undefined) && (
                   <Field label="공단 청구액 (원, 참고)">
@@ -6185,7 +6300,7 @@ function CatalogView({
                     <small>환자 장바구니·견적 금액에 더하지 않습니다.</small>
                   </Field>
                 )}
-                <Field label="가격 구분">
+                <Field label="가격 방식">
                   <select
                     disabled={!editable}
                     value={o.priceKind}
@@ -6197,6 +6312,9 @@ function CatalogView({
                             ? {
                                 ...x,
                                 priceKind: e.target.value as typeof o.priceKind,
+                                ...(e.target.value === "quote"
+                                  ? { price: null, regularPrice: undefined }
+                                  : {}),
                               }
                             : x,
                         ),
@@ -6206,9 +6324,15 @@ function CatalogView({
                     <option value="regular">정가</option>
                     <option value="clinic">원내 적용가</option>
                     <option value="event">이벤트가</option>
-                    <option value="quote">별도 견적</option>
+                    <option value="quote">상담 시 가격 입력</option>
                   </select>
                 </Field>
+                {o.priceKind === "quote" && (
+                  <p className="small">
+                    장바구니에서 가격과 책정 사유를 입력합니다. 견적서에는
+                    입력한 금액만 표시됩니다. 부가세는 별도로 지정하세요.
+                  </p>
+                )}
                 <Field label="부가세">
                   <select
                     aria-label="부가세"
@@ -6226,6 +6350,24 @@ function CatalogView({
                     <option value="exempt">면세</option>
                   </select>
                 </Field>
+                <OfferingEditor
+                  offering={o.offering}
+                  option
+                  disabled={!editable}
+                  onChange={(offering) =>
+                    change({
+                      ...product,
+                      options: product.options.map((x) =>
+                        x.id === o.id ? { ...x, offering } : x,
+                      ),
+                    })
+                  }
+                />
+                <p className="small">
+                  등급별 혜택은 옵션별 구성에 입력하세요. 옵션별 구성을 지정하면
+                  상품의 공통 멤버십 구성 대신 사용됩니다. 설명·회차별 구성
+                  문구는 공통으로 표시됩니다.
+                </p>
                 {!!o.issues.length && (
                   <p className="small">
                     원본 안내:{" "}
@@ -6281,6 +6423,16 @@ function CatalogView({
                         {
                           id: crypto.randomUUID(),
                           label: "새 옵션",
+                          ...(product.offering?.kind === "membership"
+                            ? {
+                                offering: {
+                                  ...structuredClone(product.offering),
+                                  items: structuredClone(
+                                    product.offering.items,
+                                  ),
+                                },
+                              }
+                            : {}),
                           price: null,
                           tax: "unknown",
                           review: true,

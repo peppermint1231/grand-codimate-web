@@ -87,6 +87,7 @@ export interface Source {
   text: string;
 }
 export interface Option {
+  offering?: import("./offerings").Offering;
   /** Health-insurance claim amount for reference, never part of patient payment. */
   healthInsuranceAmount?: number;
   id: string;
@@ -174,6 +175,8 @@ export interface Discount {
 export interface Line {
   /** Explicit negotiated unit price. Catalog snapshots remain unchanged. */
   customPrice?: number;
+  /** Server-derived snapshot: this option requires a consultation price. */
+  requiresCustomPrice?: boolean;
   categorySnapshot?: string;
   /** Unit list price at selection; price remains the actual sale price. */
   regularPrice?: number;

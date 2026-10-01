@@ -9,7 +9,11 @@ import {
   consentPublishIssues,
 } from "./treatmentConsents";
 import type { Opinion } from "./model";
-import { offeringSchema, productComposition } from "./offerings";
+import {
+  offeringSchema,
+  offeringErrors,
+  productComposition,
+} from "./offerings";
 import {
   QUOTE_CONSENT_TEXT,
   QUOTE_CONSENT_VERSION,
@@ -126,6 +130,10 @@ export function calculate(
       Number.isFinite(l.quantity) && l.quantity > 0 && l.quantity <= 1000,
       "수량을 확인하세요",
     );
+    ensure(
+      !l.requiresCustomPrice || l.customPrice !== undefined,
+      `${l.name}: 상담 가격을 입력하세요`,
+    );
     amount.parse(l.price);
     if (l.regularPrice !== undefined) {
       amount.parse(l.regularPrice);
@@ -193,6 +201,12 @@ export function renewalQuote(
     const product = matchedCatalog?.products.find(
       (x) => x.id === old.productId && x.active,
     );
+    ensure(
+      !product?.options.some(
+        (x) => x.id === old.optionId && x.priceKind === "quote",
+      ),
+      `${old.name}: 상담 시 가격 입력 상품은 새 상담에서 선택한 뒤 가격을 입력하세요`,
+    );
     const option = product?.options.find(
       (x) => x.id === old.optionId && x.price !== null,
     );
@@ -207,6 +221,7 @@ export function renewalQuote(
     return {
       ...old,
       customPrice: undefined,
+      requiresCustomPrice: undefined,
       id: `${id}-${index}`,
       catalogVersion: matchedCatalog!.version,
       book: catalogBook(matchedCatalog!),
@@ -217,7 +232,7 @@ export function renewalQuote(
       tax: option.tax,
       unit: option.unit,
       description: product.description,
-      composition: productComposition(product),
+      composition: productComposition(product, option),
       discount: { kind: "amount" as const, value: 0 },
     };
   });
@@ -464,7 +479,11 @@ export function validateCatalog(c: Catalog, posting = false) {
   const ids = new Set<string>();
   for (const p of c.products) {
     if (p.insurance) insuranceInfoSchema.parse(p.insurance);
-    if (p.offering) offeringSchema.parse(p.offering);
+    if (p.offering) {
+      const errors = offeringErrors(p.offering);
+      ensure(!errors.length, `${p.name}: ${errors.join(" / ")}`);
+      p.offering = offeringSchema.parse(p.offering);
+    }
     ensure(
       !p.careCategory || ["미용", "보험"].includes(p.careCategory),
       "상담 구분을 확인하세요",
@@ -553,6 +572,11 @@ export function validateCatalog(c: Catalog, posting = false) {
     }
     ensure(Array.isArray(p.options), "옵션이 필요합니다");
     for (const o of p.options) {
+      if (o.offering) {
+        const errors = offeringErrors(o.offering);
+        ensure(!errors.length, `${p.name} · ${o.label}: ${errors.join(" / ")}`);
+        o.offering = offeringSchema.parse(o.offering);
+      }
       ensure(
         Array.isArray(o.sources) &&
           Array.isArray(o.issues) &&
@@ -567,6 +591,10 @@ export function validateCatalog(c: Catalog, posting = false) {
       ids.add(o.id);
       if (o.healthInsuranceAmount !== undefined)
         amount.parse(o.healthInsuranceAmount);
+      ensure(
+        ["regular", "clinic", "event", "quote"].includes(o.priceKind),
+        "가격 방식을 확인하세요",
+      );
       if (o.price !== null) amount.parse(o.price);
       if (o.regularPrice !== undefined && o.regularPrice !== null)
         amount.parse(o.regularPrice);
@@ -576,7 +604,7 @@ export function validateCatalog(c: Catalog, posting = false) {
       );
       if (posting && p.active)
         ensure(
-          o.price !== null && o.tax !== "unknown",
+          (o.price !== null || o.priceKind === "quote") && o.tax !== "unknown",
           "판매 중 상품의 확인 필요 가격·부가세를 해결하세요",
         );
     }
@@ -1010,7 +1038,10 @@ export async function applyCommand(
           ),
           o = product?.options.find((x) => x.id === l.optionId);
         ensure(
-          product && o && o.price !== null && o.tax !== "unknown",
+          product &&
+            o &&
+            (o.price !== null || o.priceKind === "quote") &&
+            o.tax !== "unknown",
           "검증·게시된 상품만 담을 수 있습니다",
         );
         ensure(
@@ -1026,11 +1057,15 @@ export async function applyCommand(
             productFolderPaths(lineCatalog!, product)[0]?.[0]?.name ||
             product.category,
           description: product.description,
-          composition: productComposition(product),
+          composition: productComposition(product, o),
           label: o.label,
           unit: o.unit,
-          price: o.price,
-          regularPrice: catalogRegularPrice(product, o),
+          price: o.priceKind === "quote" ? 0 : o.price!,
+          requiresCustomPrice: o.priceKind === "quote" || undefined,
+          regularPrice:
+            o.priceKind === "quote"
+              ? undefined
+              : catalogRegularPrice(product, o),
           tax: o.tax,
         };
       });

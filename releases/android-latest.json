@@ -1,7 +1,7 @@
 {
-  "version": "0.13.4",
-  "versionCode": 57,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.4.apk",
-  "sha256": "8d8e2403b3a57f26f622384e4815b7bef0c7dd82502b4b9ba84f5e2e103d126b",
-  "notes": "메뉴 판매 활성·비활성 및 저장·적용 통합, 미검토·활성·비활성 필터와 선택 옆 일괄수정. 보험 수액 패키지·초음파·MD·한발 레이저 추가."
+  "version": "0.13.5",
+  "versionCode": 58,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.5.apk",
+  "sha256": "2c52fd5f164e37e3a853dd57dff7383dd201e2ac96959a2e45f18ccfd03e3ba6",
+  "notes": "홈페이지 SSOT 고민별·홈페이지 원본 분류 전환. 단가표 관리와 상담 시술 선택에서 전환하며 홈페이지 갱신 시 자동 반영."
 }

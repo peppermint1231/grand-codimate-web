@@ -1,3 +1,8 @@
+import {
+  catalogCategoryView,
+  type CatalogCategoryMode,
+} from "./core/catalogCategoryView";
+import { CatalogCategorySwitch } from "./components/CatalogCategorySwitch";
 import { catalogApplyGuard, type CatalogApplyGuard } from "./core/catalogApply";
 import {
   matchesCatalogProductFilter,
@@ -3003,14 +3008,31 @@ function ConsultationView({
     isAdministrator(user) ||
     (c.status === "H" && !c.cancelled && c.ownerId === user.id)
   );
+  const [categoryMode, setCategoryMode] =
+    useState<CatalogCategoryMode>("concern");
+  const categoryCatalog = catalog && catalogCategoryView(catalog, categoryMode);
+  const categoryProducts = new Map(
+    categoryCatalog?.products.map((p) => [p.id, p]),
+  );
   const availableProducts = (catalog?.products || []).filter((p) => p.active);
   const query = search.trim().toLocaleLowerCase();
   const products = availableProducts.filter(
     (p) =>
-      (!category || (catalog && inFolder(catalog, p, category))) &&
+      (!category ||
+        (categoryCatalog &&
+          inFolder(
+            categoryCatalog,
+            categoryProducts.get(p.id) || p,
+            category,
+          ))) &&
       [
         p.name,
         p.category,
+        query && categoryCatalog
+          ? folderPath(categoryCatalog, categoryProducts.get(p.id)?.folderId)
+              .map((f) => f.name)
+              .join(" ")
+          : "",
         p.description,
         p.composition,
         ...p.options.map((o) => o.label),
@@ -3676,13 +3698,13 @@ function ConsultationView({
                       onChange={(e) => setCategory(e.target.value)}
                     >
                       <option value="">전체 분류</option>
-                      {(catalog
-                        ? displayFolderNodes(catalog)
+                      {(categoryCatalog
+                        ? displayFolderNodes(categoryCatalog)
                         : rootFolders
                       ).map((folder) => (
                         <option key={folder.id} value={folder.id}>
-                          {catalog
-                            ? folderPath(catalog, folder.id)
+                          {categoryCatalog
+                            ? folderPath(categoryCatalog, folder.id)
                                 .map((x) => x.name)
                                 .join(" / ")
                             : folder.name}
@@ -3690,6 +3712,15 @@ function ConsultationView({
                       ))}
                     </select>
                   </div>
+                  {book === "이벤트" && (
+                    <CatalogCategorySwitch
+                      value={categoryMode}
+                      onChange={(mode) => {
+                        setCategoryMode(mode);
+                        setCategory("");
+                      }}
+                    />
+                  )}
                   <div className="procedure-picker-meta">
                     <span role="status">
                       검색 {products.length}개 ·{" "}
@@ -3740,7 +3771,18 @@ function ConsultationView({
                   {products.slice(0, productLimit).map((p) => (
                     <div className="product" key={p.id}>
                       <b>{p.name}</b>
-                      <small>{p.category}</small>
+                      <small>
+                        {book === "이벤트" &&
+                        categoryMode === "website" &&
+                        categoryCatalog
+                          ? folderPath(
+                              categoryCatalog,
+                              categoryProducts.get(p.id)?.folderId,
+                            )
+                              .map((f) => f.name)
+                              .join(" / ")
+                          : p.category}
+                      </small>
                       <InsuranceBadges
                         info={p.insurance}
                         showUnknown={book === "보험"}
@@ -4781,6 +4823,8 @@ function CatalogView({
   };
 
   const [book, setBook] = useState<CatalogBook>("이벤트");
+  const [categoryMode, setCategoryMode] =
+    useState<CatalogCategoryMode>("concern");
   const [drafts, setDrafts] = useState<Partial<Record<CatalogBook, Catalog>>>(
     {},
   );
@@ -4874,11 +4918,26 @@ function CatalogView({
       active = false;
     };
   }, [current?.id, current?.rev, current?.workspaceOnly]);
+  const categoryCatalog = current && catalogCategoryView(current, categoryMode);
+  const categoryProducts = new Map(
+    categoryCatalog?.products.map((p) => [p.id, p]),
+  );
+  const websiteView = book === "이벤트" && categoryMode === "website";
   const products =
     current?.products.filter(
       (p) =>
-        (!category || inFolder(current, p, category)) &&
-        matchesCatalogSearch(current, p, search, searchScope) &&
+        (!category ||
+          inFolder(
+            categoryCatalog!,
+            categoryProducts.get(p.id) || p,
+            category,
+          )) &&
+        matchesCatalogSearch(
+          categoryCatalog!,
+          categoryProducts.get(p.id) || p,
+          search,
+          searchScope,
+        ) &&
         matchesCatalogProductFilter(p, reviewFilter),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
@@ -5143,7 +5202,13 @@ function CatalogView({
                       {
                         ...current,
                         products: current.products.filter(
-                          (p) => !category || inFolder(current, p, category),
+                          (p) =>
+                            !category ||
+                            inFolder(
+                              categoryCatalog!,
+                              categoryProducts.get(p.id) || p,
+                              category,
+                            ),
                         ),
                       },
                       undefined,
@@ -5337,12 +5402,25 @@ function CatalogView({
       >
         {current && (
           <FolderWorkspace
-            key={book}
-            catalog={current}
+            key={book + categoryMode}
+            catalog={categoryCatalog!}
+            heading={websiteView ? "홈페이지 폴더" : "고민별 폴더"}
+            categorySwitch={
+              book === "이벤트" ? (
+                <CatalogCategorySwitch
+                  value={categoryMode}
+                  disabled={!!folderDraft}
+                  onChange={(mode) => {
+                    setCategoryMode(mode);
+                    setCategory("");
+                  }}
+                />
+              ) : undefined
+            }
             selected={category}
             onSelect={setCategory}
             editing={!!folderDraft}
-            canEdit={can}
+            canEdit={can && !websiteView}
             start={() => {
               if (unsaved) {
                 work(async () => {
@@ -5723,6 +5801,8 @@ function CatalogView({
             <CatalogProductRows
               key={book}
               catalog={current}
+              groupingCatalog={categoryCatalog}
+              allowMove={!websiteView}
               products={products}
               selectedFolder={category}
               editable={!!editable}

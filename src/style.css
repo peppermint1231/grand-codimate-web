@@ -5271,3 +5271,7 @@ html.custom-pull-refresh {
 .catalog-advanced > summary small {font-weight:400;color:#657b79;margin-left:8px}
 .catalog-advanced > .card {margin:12px 0 0;box-shadow:none}
 @media(max-width:600px){.catalog-advanced > summary small{display:block;margin:6px 0 0 18px;font-size:12px}}
+.catalog-category-switch {display:flex;gap:3px;background:#edf2ef;border-radius:9px;padding:3px;align-self:start;width:fit-content;max-width:100%;margin:6px 0}
+.catalog-category-switch button {border:0;background:transparent;box-shadow:none;min-height:34px;padding:5px 12px;white-space:nowrap;font-size:13px}
+.catalog-category-switch button.active {background:#175e55;color:white}
+.procedure-picker-controls > .catalog-category-switch {margin:4px 0 2px}

@@ -49,6 +49,8 @@ const colorPresets = [
 ];
 export function FolderWorkspace({
   catalog,
+  heading = "고민별 폴더",
+  categorySwitch,
   selected,
   onSelect,
   editing,
@@ -63,6 +65,8 @@ export function FolderWorkspace({
   work,
 }: {
   catalog: Catalog;
+  heading?: string;
+  categorySwitch?: React.ReactNode;
   selected: string;
   onSelect: (id: string) => void;
   editing: boolean;
@@ -419,7 +423,7 @@ export function FolderWorkspace({
   return (
     <aside
       className="card catalog-folders"
-      aria-label="고민별 폴더 목록"
+      aria-label={heading + " 목록"}
       data-catalog-scope="folders"
       onKeyDown={(e) => {
         const target = e.target as HTMLElement;
@@ -519,7 +523,7 @@ export function FolderWorkspace({
       }}
     >
       <div className="folder-list-heading">
-        <h3>고민별 폴더</h3>
+        <h3>{heading}</h3>
         {canEdit && !editing && (
           <button onClick={start}>
             <Pencil size={15} />
@@ -527,6 +531,7 @@ export function FolderWorkspace({
           </button>
         )}
       </div>
+      {categorySwitch}
       {catalog.book === "이벤트" && (
         <div
           className="website-presence-legend"

@@ -18,6 +18,8 @@ import { needsProductReview as needsReview } from "../core/catalogProducts";
 type Work = (fn: () => Promise<unknown>) => unknown;
 export function CatalogProductRows({
   catalog,
+  groupingCatalog = catalog,
+  allowMove = true,
   products,
   selectedFolder = "",
   editable,
@@ -31,6 +33,8 @@ export function CatalogProductRows({
   work,
 }: {
   catalog: Catalog;
+  groupingCatalog?: Catalog;
+  allowMove?: boolean;
   products: Product[];
   selectedFolder?: string;
   editable: boolean;
@@ -61,14 +65,19 @@ export function CatalogProductRows({
     setExceptions((ids) =>
       ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
     );
+  const groupedProducts = new Map(
+    groupingCatalog.products.map((p) => [p.id, p]),
+  );
   const groups = new Map<string, Product[]>();
   products.forEach((p) => {
     const path =
       selectedFolder &&
-      productFolderPaths(catalog, p).find((path) =>
-        path.some((f) => f.id === selectedFolder),
+      productFolderPaths(groupingCatalog, groupedProducts.get(p.id) || p).find(
+        (path) => path.some((f) => f.id === selectedFolder),
       );
-    const id = path ? path.at(-1)!.id : productFolder(catalog, p);
+    const id = path
+      ? path.at(-1)!.id
+      : productFolder(groupingCatalog, groupedProducts.get(p.id) || p);
     groups.set(id, [...(groups.get(id) || []), p]);
   });
   const change = (next: Product) =>
@@ -229,15 +238,15 @@ export function CatalogProductRows({
       {[...groups].map(([folderId, items]) => (
         <section className="catalog-product-group" key={folderId}>
           <div className="catalog-group-path">
-            {folderPath(catalog, folderId).map((f, i) => (
+            {folderPath(groupingCatalog, folderId).map((f, i) => (
               <span
                 key={f.id}
                 className={i === 0 ? "group-root" : "group-child"}
-                title={websiteFolderPresence(catalog, f.id)?.label}
+                title={websiteFolderPresence(groupingCatalog, f.id)?.label}
                 style={{
                   color:
                     i > 0
-                      ? websiteFolderPresence(catalog, f.id)?.color ||
+                      ? websiteFolderPresence(groupingCatalog, f.id)?.color ||
                         f.color ||
                         "#155e59"
                       : f.color || "#155e59",
@@ -247,7 +256,7 @@ export function CatalogProductRows({
                 {f.name}
               </span>
             ))}
-            {!folderPath(catalog, folderId).length && (
+            {!folderPath(groupingCatalog, folderId).length && (
               <span className="group-root">미분류</span>
             )}
             <small>{items.length}개 상품</small>
@@ -285,60 +294,62 @@ export function CatalogProductRows({
                         )
                       }
                     />
-                    <button
-                      type="button"
-                      className="catalog-move-handle"
-                      aria-label={p.name + " 이동"}
-                      onPointerDown={(e) => {
-                        if (e.button !== 0) return;
-                        const ids = selectedIds.includes(p.id)
-                          ? selectedIds
-                          : [p.id];
-                        onSelection(ids);
-                        drag.current = {
-                          ids,
-                          x: e.clientX,
-                          y: e.clientY,
-                          moved: false,
-                        };
-                        e.currentTarget.setPointerCapture(e.pointerId);
-                      }}
-                      onPointerMove={(e) => {
-                        const d = drag.current;
-                        if (!d) return;
-                        d.moved ||=
-                          Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7;
-                        if (d.moved) {
+                    {allowMove && (
+                      <button
+                        type="button"
+                        className="catalog-move-handle"
+                        aria-label={p.name + " 이동"}
+                        onPointerDown={(e) => {
+                          if (e.button !== 0) return;
+                          const ids = selectedIds.includes(p.id)
+                            ? selectedIds
+                            : [p.id];
+                          onSelection(ids);
+                          drag.current = {
+                            ids,
+                            x: e.clientX,
+                            y: e.clientY,
+                            moved: false,
+                          };
+                          e.currentTarget.setPointerCapture(e.pointerId);
+                        }}
+                        onPointerMove={(e) => {
+                          const d = drag.current;
+                          if (!d) return;
+                          d.moved ||=
+                            Math.hypot(e.clientX - d.x, e.clientY - d.y) > 7;
+                          if (d.moved) {
+                            const target = document
+                              .elementFromPoint(e.clientX, e.clientY)
+                              ?.closest<HTMLElement>("[data-folder-target]");
+                            setDragLabel(
+                              `${d.ids.length}개 상품 → ${target?.innerText || "이동할 폴더 위에 놓으세요"}`,
+                            );
+                          }
+                        }}
+                        onPointerUp={(e) => {
+                          const d = drag.current;
+                          drag.current = null;
+                          setDragLabel("");
+                          if (!d?.moved) return;
                           const target = document
                             .elementFromPoint(e.clientX, e.clientY)
-                            ?.closest<HTMLElement>("[data-folder-target]");
-                          setDragLabel(
-                            `${d.ids.length}개 상품 → ${target?.innerText || "이동할 폴더 위에 놓으세요"}`,
-                          );
-                        }
-                      }}
-                      onPointerUp={(e) => {
-                        const d = drag.current;
-                        drag.current = null;
-                        setDragLabel("");
-                        if (!d?.moved) return;
-                        const target = document
-                          .elementFromPoint(e.clientX, e.clientY)
-                          ?.closest<HTMLElement>("[data-folder-target]")
-                          ?.dataset.folderTarget;
-                        if (target)
-                          work(async () => {
-                            onChange(moveProducts(catalog, d.ids, target));
-                            onSelection([]);
-                          });
-                      }}
-                      onPointerCancel={() => {
-                        drag.current = null;
-                        setDragLabel("");
-                      }}
-                    >
-                      <GripVertical size={18} />
-                    </button>
+                            ?.closest<HTMLElement>("[data-folder-target]")
+                            ?.dataset.folderTarget;
+                          if (target)
+                            work(async () => {
+                              onChange(moveProducts(catalog, d.ids, target));
+                              onSelection([]);
+                            });
+                        }}
+                        onPointerCancel={() => {
+                          drag.current = null;
+                          setDragLabel("");
+                        }}
+                      >
+                        <GripVertical size={18} />
+                      </button>
+                    )}
                   </>
                 )}
                 <button

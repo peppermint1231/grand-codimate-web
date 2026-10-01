@@ -1,3 +1,9 @@
+import {
+  InsuranceBadges,
+  InsuranceClaimHint,
+  InsuranceEditor,
+} from "./components/InsuranceInfo";
+import { insuranceDisclaimer } from "./core/insuranceCatalog";
 import { useViewport } from "./lib/useViewport";
 import {
   photoColumnCount,
@@ -3725,11 +3731,18 @@ function ConsultationView({
                     )}
                   </div>
                 )}
+                {book === "보험" && (
+                  <p className="small">{insuranceDisclaimer}</p>
+                )}
                 <div className="product-list">
                   {products.slice(0, productLimit).map((p) => (
                     <div className="product" key={p.id}>
                       <b>{p.name}</b>
                       <small>{p.category}</small>
+                      <InsuranceBadges
+                        info={p.insurance}
+                        showUnknown={book === "보험"}
+                      />
                       <EventSourceInfo
                         info={p.webEvent}
                         salePrice={p.options[0]?.price}
@@ -3744,6 +3757,7 @@ function ConsultationView({
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
                         <p>{p.composition}</p>
+                        {p.insurance?.note && <p>{p.insurance.note}</p>}
                       </details>
                       {p.options.map((o) => (
                         <button
@@ -3792,6 +3806,7 @@ function ConsultationView({
                         >
                           <span>
                             {o.label}
+                            <InsuranceClaimHint option={o} />
                             <small>
                               {o.unit} ·{" "}
                               {o.tax === "inclusive"
@@ -5875,6 +5890,13 @@ function CatalogView({
                 <small>원본 분류: {product.category}</small>
               </Field>
             </div>
+            {(book === "보험" || product.insurance) && (
+              <InsuranceEditor
+                product={product}
+                disabled={!editable}
+                onChange={change}
+              />
+            )}
             <Field label="설명">
               <textarea
                 disabled={!editable}
@@ -5939,7 +5961,8 @@ function CatalogView({
                 </Field>
                 {(book === "이벤트" ||
                   product.webEvent ||
-                  o.priceKind === "event") && (
+                  o.priceKind === "event" ||
+                  o.regularPrice !== undefined) && (
                   <Field label="정가 (원)">
                     <input
                       type="number"
@@ -5970,11 +5993,13 @@ function CatalogView({
                 )}
                 <Field
                   label={
-                    book === "이벤트" ||
-                    product.webEvent ||
-                    o.priceKind === "event"
-                      ? "판매가 (원)"
-                      : "가격 (원)"
+                    product.insurance?.coverage === "covered"
+                      ? "환자 본인부담금 (원)"
+                      : book === "이벤트" ||
+                          product.webEvent ||
+                          o.priceKind === "event"
+                        ? "판매가 (원)"
+                        : "가격 (원)"
                   }
                 >
                   <input
@@ -5995,7 +6020,8 @@ function CatalogView({
                 </Field>
                 {(book === "이벤트" ||
                   product.webEvent ||
-                  o.priceKind === "event") && (
+                  o.priceKind === "event" ||
+                  o.regularPrice !== undefined) && (
                   <div className="event-price-preview">
                     <EventPrice {...eventOptionPrices(product, o)} />
                     {eventOptionPrices(product, o).regularPrice !== null &&
@@ -6006,6 +6032,36 @@ function CatalogView({
                         </small>
                       )}
                   </div>
+                )}
+                {(product.insurance?.coverage === "covered" ||
+                  o.healthInsuranceAmount !== undefined) && (
+                  <Field label="공단 청구액 (원, 참고)">
+                    <input
+                      aria-label={`${o.label} 공단 청구액`}
+                      type="number"
+                      min={0}
+                      step={1}
+                      disabled={!editable}
+                      value={o.healthInsuranceAmount ?? ""}
+                      onChange={(e) =>
+                        change({
+                          ...product,
+                          options: product.options.map((x) =>
+                            x.id === o.id
+                              ? {
+                                  ...x,
+                                  healthInsuranceAmount:
+                                    e.target.value === ""
+                                      ? undefined
+                                      : Number(e.target.value),
+                                }
+                              : x,
+                          ),
+                        })
+                      }
+                    />
+                    <small>환자 장바구니·견적 금액에 더하지 않습니다.</small>
+                  </Field>
                 )}
                 <Field label="가격 구분">
                   <select

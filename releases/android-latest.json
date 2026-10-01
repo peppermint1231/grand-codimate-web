@@ -1,7 +1,7 @@
 {
-  "version": "0.13.2",
-  "versionCode": 55,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.2.apk",
-  "sha256": "7bcdc603ebfef84933ad30e0ecbc65e8f0a7251aaa0f049c414db436631102e7",
-  "notes": "홈페이지 SSOT 완전 동기화: 이전 상품 제거, 원문 가격 반영, 전체 활성화·게시 바로가기."
+  "version": "0.13.3",
+  "versionCode": 56,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.3.apk",
+  "sha256": "65da8c8ce9c33f52a69619b76182c0df28534301e7e9baca7ad016a88ec037eb",
+  "notes": "보험 SSOT 급여·비급여 및 실비 청구 안내. 조갑백선 단가표 추가, 환자 본인부담금·공단 청구액 분리."
 }

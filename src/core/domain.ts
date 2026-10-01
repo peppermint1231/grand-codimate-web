@@ -1,3 +1,4 @@
+import { insuranceInfoSchema } from "./insuranceCatalog";
 import { supplementDetailedConsentBody } from "./consentDetailedPrecautions";
 import { supplementConsentChecks } from "./consentPrecautions";
 import {
@@ -460,6 +461,7 @@ export function validateCatalog(c: Catalog, posting = false) {
   ensure(!error, error || "폴더를 확인하세요");
   const ids = new Set<string>();
   for (const p of c.products) {
+    if (p.insurance) insuranceInfoSchema.parse(p.insurance);
     if (p.offering) offeringSchema.parse(p.offering);
     ensure(
       !p.careCategory || ["미용", "보험"].includes(p.careCategory),
@@ -561,6 +563,8 @@ export function validateCatalog(c: Catalog, posting = false) {
         "옵션 ID·이름이 중복되거나 없습니다",
       );
       ids.add(o.id);
+      if (o.healthInsuranceAmount !== undefined)
+        amount.parse(o.healthInsuranceAmount);
       if (o.price !== null) amount.parse(o.price);
       if (o.regularPrice !== undefined && o.regularPrice !== null)
         amount.parse(o.regularPrice);

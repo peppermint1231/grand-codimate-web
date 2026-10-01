@@ -1,3 +1,4 @@
+import { InsuranceBadges, InsuranceClaimHint } from "./InsuranceInfo";
 import { eventOptionPrices } from "../core/eventPrices";
 import { EventSourceInfo, WebsiteSourceInfo, EventPrice } from "./EventCatalog";
 import { websiteFolderPresence } from "../core/websitePresence";
@@ -311,6 +312,10 @@ export function CatalogProductRows({
                   </button>
                 )}
               </div>
+              <InsuranceBadges
+                info={p.insurance}
+                showUnknown={catalogBook(catalog) === "보험"}
+              />
               <WebsiteSourceInfo product={p} />
               {p.webEvent && (
                 <EventSourceInfo
@@ -332,7 +337,8 @@ export function CatalogProductRows({
                         "catalog-option-visible" +
                         (catalogBook(catalog) === "이벤트" ||
                         p.webEvent ||
-                        o.priceKind === "event"
+                        o.priceKind === "event" ||
+                        o.regularPrice !== undefined
                           ? " event-option"
                           : "")
                       }
@@ -340,6 +346,7 @@ export function CatalogProductRows({
                     >
                       <span>
                         <b>{o.label}</b>
+                        <InsuranceClaimHint option={o} />
                         <small>
                           {o.unit}
                           {o.review ? " · 검토 필요" : ""}
@@ -349,7 +356,8 @@ export function CatalogProductRows({
                         <>
                           {(catalogBook(catalog) === "이벤트" ||
                             p.webEvent ||
-                            o.priceKind === "event") && (
+                            o.priceKind === "event" ||
+                            o.regularPrice !== undefined) && (
                             <label className="event-regular-input">
                               정가 (원)
                               <input
@@ -381,11 +389,14 @@ export function CatalogProductRows({
                             </label>
                           )}
                           <label className="catalog-price-input">
-                            {catalogBook(catalog) === "이벤트" ||
-                            p.webEvent ||
-                            o.priceKind === "event"
-                              ? "판매가 (원)"
-                              : "가격 (원)"}
+                            {p.insurance?.coverage === "covered"
+                              ? "환자 본인부담금 (원)"
+                              : catalogBook(catalog) === "이벤트" ||
+                                  p.webEvent ||
+                                  o.priceKind === "event" ||
+                                  o.regularPrice !== undefined
+                                ? "판매가 (원)"
+                                : "가격 (원)"}
                             <input
                               type="number"
                               min={0}
@@ -452,7 +463,8 @@ export function CatalogProductRows({
                       )}
                       {(catalogBook(catalog) === "이벤트" ||
                         p.webEvent ||
-                        o.priceKind === "event") && (
+                        o.priceKind === "event" ||
+                        o.regularPrice !== undefined) && (
                         <div className="event-price-preview">
                           <EventPrice {...eventOptionPrices(p, o)} />
                         </div>

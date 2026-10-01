@@ -1,3 +1,4 @@
+import { insuranceSummary } from "./insuranceCatalog";
 import type { Catalog } from "./model";
 import { catalogNodes, folderPath, productFolder } from "./catalogFolders";
 export function catalogChanges(
@@ -55,6 +56,10 @@ export function catalogChanges(
       changes.push(`상품 추가: ${p.name}`);
       continue;
     }
+    if (JSON.stringify(old.insurance) !== JSON.stringify(p.insurance))
+      changes.push(
+        `급여·실비 구분 변경: ${p.name} (${insuranceSummary(old.insurance) || "미지정"} → ${insuranceSummary(p.insurance) || "미지정"})`,
+      );
     if (JSON.stringify(old.offering) !== JSON.stringify(p.offering))
       changes.push(`패키지·멤버십 구성 변경: ${p.name}`);
     if (old.name !== p.name) changes.push(`상품 이름: ${old.name} → ${p.name}`);
@@ -95,6 +100,10 @@ export function catalogChanges(
         changes.push(`옵션 추가: ${p.name} / ${o.label}`);
         continue;
       }
+      if (prev.healthInsuranceAmount !== o.healthInsuranceAmount)
+        changes.push(
+          `공단 청구액: ${p.name} / ${o.label} (${prev.healthInsuranceAmount ?? "미지정"} → ${o.healthInsuranceAmount ?? "미지정"}원)`,
+        );
       if (prev.price !== o.price)
         changes.push(
           `가격: ${p.name} / ${o.label} (${prev.price ?? "미확정"} → ${o.price ?? "미확정"}원)`,

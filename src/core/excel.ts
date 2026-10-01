@@ -1,3 +1,4 @@
+import { insuranceSummary, insuranceDisclaimer } from "./insuranceCatalog";
 import ExcelJS from "exceljs";
 import type { Catalog, State } from "./model";
 import { gradeFor, metrics } from "./domain";
@@ -102,7 +103,20 @@ export async function catalogWorkbook(
       "안내",
     ]);
     for (const p of ps) {
-      const note = p.active ? "" : "비활성";
+      const note = [
+        p.active ? "" : "비활성",
+        insuranceSummary(p.insurance),
+        p.insurance?.note,
+        p.insurance ? insuranceDisclaimer : "",
+        ...p.options
+          .filter((o) => o.healthInsuranceAmount !== undefined)
+          .map(
+            (o) =>
+              `${o.label}: 공단 청구액 ${o.healthInsuranceAmount?.toLocaleString("ko-KR")}원 별도(참고) · 환자 가격에 미합산`,
+          ),
+      ]
+        .filter(Boolean)
+        .join("\n");
       if (priceLabels.length) {
         ws.addRow([
           p.name,

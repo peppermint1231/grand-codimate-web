@@ -87,6 +87,8 @@ export interface Source {
   text: string;
 }
 export interface Option {
+  /** Health-insurance claim amount for reference, never part of patient payment. */
+  healthInsuranceAmount?: number;
   id: string;
   label: string;
   price: number | null;
@@ -99,6 +101,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  insurance?: import("./insuranceCatalog").InsuranceInfo;
   offering?: import("./offerings").Offering;
   websiteListings?: WebsiteListing[];
   webEvent?: EventOriginInfo;

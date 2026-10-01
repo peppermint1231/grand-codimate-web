@@ -7,8 +7,8 @@ android {
         applicationId "kr.co.grand.codimate"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode = (System.getenv('VERSION_CODE') ?: '55').toInteger()
-        versionName = (System.getenv('VERSION_NAME') ?: '0.13.2')
+        versionCode = (System.getenv('VERSION_CODE') ?: '56').toInteger()
+        versionName = (System.getenv('VERSION_NAME') ?: '0.13.3')
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

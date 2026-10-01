@@ -126,12 +126,12 @@ export function CatalogProductRows({
           <button
             type="button"
             {...catalogCommand("selectUnreviewed")}
-            disabled={!products.some(needsReview)}
+            disabled={!products.some((p) => !p.active)}
             onClick={() =>
-              onSelection(products.filter(needsReview).map((p) => p.id))
+              onSelection(products.filter((p) => !p.active).map((p) => p.id))
             }
           >
-            미검토 항목만 선택 ({products.filter(needsReview).length}개)
+            비활성 항목만 선택 ({products.filter((p) => !p.active).length}개)
           </button>
           <button
             {...catalogCommand("selectNone")}
@@ -380,11 +380,11 @@ export function CatalogProductRows({
                     "badge catalog-review-button " + (p.active ? "P" : "H")
                   }
                   aria-label={
-                    p.name + " " + (needsReview(p) ? "검토하기" : "상세 편집")
+                    p.name + " " + (needsReview(p) ? "입력 확인" : "상세 편집")
                   }
                   onClick={() => onEdit(p.id)}
                 >
-                  {needsReview(p) ? "검토 중 · 검토하기" : "상세 편집"}
+                  {needsReview(p) ? "입력 확인 필요" : "상세 편집"}
                 </button>
                 {editable && (
                   <label className="check">
@@ -447,7 +447,9 @@ export function CatalogProductRows({
                         <InsuranceClaimHint option={o} />
                         <small>
                           {o.unit}
-                          {o.review ? " · 검토 필요" : ""}
+                          {o.price === null || o.tax === "unknown"
+                            ? " · 입력 확인 필요"
+                            : ""}
                         </small>
                       </span>
                       {editable ? (

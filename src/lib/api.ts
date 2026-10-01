@@ -89,7 +89,12 @@ export async function api<T = any>(
       },
     );
   const r = await fetch(base + "/api" + path, request);
-  const d = (await r.json()) as any;
+  const d = (await r.json().catch(() => {
+    throw Object.assign(
+      new Error("서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."),
+      { status: r.ok ? 422 : r.status },
+    );
+  })) as any;
   if (!r.ok)
     throw Object.assign(new Error(d.error || "요청 실패"), {
       status: r.status,
@@ -613,7 +618,27 @@ export function lockVault() {
   stagedMedia.clear();
   notifyUploads();
 }
-export async function vaultWrite(name: string, value: unknown) {
+const vaultWrites = new Map<string, Promise<void>>();
+export function vaultWrite(name: string, value: unknown): Promise<void> {
+  const owner = userId,
+    currentKey = key,
+    id = owner + ":" + name;
+  // Freeze the snapshot at call time, before waiting for earlier encryption.
+  const snapshot = structuredClone(value);
+  const write = () =>
+    currentKey === key && owner === userId
+      ? writeVaultValue(name, snapshot)
+      : Promise.resolve();
+  const result = (vaultWrites.get(id) || Promise.resolve()).then(write, write);
+  vaultWrites.set(id, result);
+  void result
+    .finally(() => {
+      if (vaultWrites.get(id) === result) vaultWrites.delete(id);
+    })
+    .catch(() => {});
+  return result;
+}
+async function writeVaultValue(name: string, value: unknown) {
   if (!key) return;
   const vaultKey = key,
     vaultUser = userId;

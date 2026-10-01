@@ -365,3 +365,30 @@ it("restricts website event reads to catalog editors and never writes SSOT while
   const after = (await (await f.request(f.admin, "/state")).json()) as any;
   expect(after.state).toEqual(before.state);
 });
+
+it("keeps source scanning authenticated and out of the clinic write queue", async () => {
+  const { request, admin, standard } = await fixture();
+  let release!: (response: Response) => void;
+  const source = vi.spyOn(globalThis, "fetch").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const denied = await request(standard, "/catalog/event-source");
+  expect(denied.status).toBe(403);
+  expect(source).not.toHaveBeenCalled();
+  const pending = request(admin, "/catalog/event-source");
+  await vi.waitFor(() => expect(source).toHaveBeenCalledTimes(1));
+  try {
+    const health = await request(admin, "/health");
+    expect(health.status).toBe(200);
+  } finally {
+    release(
+      new Response("<html>invalid source</html>", {
+        headers: { "Content-Type": "text/html" },
+      }),
+    );
+  }
+  expect((await pending).status).toBe(422);
+});

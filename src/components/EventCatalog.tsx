@@ -203,7 +203,7 @@ export function EventCatalogRefresh({
       );
       setScan({ pages, beauty, event: catalog, bases });
       setProgress(
-        "전체 홈페이지 확인 완료 · 홈페이지 SSOT 변경 내용을 확인한 뒤 초안을 저장하세요.",
+        "전체 홈페이지 확인 완료 · 변경 내용을 확인한 뒤 동기화하고 적용하세요.",
       );
     } catch (e) {
       if (!controller.signal.aborted)
@@ -226,7 +226,7 @@ export function EventCatalogRefresh({
     () =>
       preview &&
       activateHomepageCatalog(preview.catalog, {
-        activate: true,
+        activate: false,
         publish: false,
         unknownTax,
       }),
@@ -295,8 +295,9 @@ export function EventCatalogRefresh({
           </div>
           <p>
             현재 홈페이지 상품 {preview.catalog.products.length}개로 교체합니다.
-            가져온 가격을 확인한 뒤 판매 상태를 확인하고 저장하면 상담에 바로
-            적용됩니다.
+            기존 활성 상품은 내용이 같으면 유지합니다. 새 상품이나 가격·구성이
+            바뀐 상품은 비활성으로 등록됩니다. 확인한 뒤 메뉴 판매를
+            활성화하세요.
           </p>
           <label>
             홈페이지 부가세 미표기 상품
@@ -317,14 +318,14 @@ export function EventCatalogRefresh({
             </select>
           </label>
           <p role="status">
-            활성화 가능 {activation?.activated}개 · 확인 필요{" "}
+            판매 활성 유지 {activation?.activated}개 · 입력 확인 필요{" "}
             {activation?.skipped.length}개. 홈페이지에 명시된 부가세는 유지하고,
             미표기는 선택한 정책을 적용합니다.
           </p>
           {!!activation?.skipped.length && (
             <details className="event-sync-preview" open>
               <summary>
-                활성화되지 않는 상품과 이유 ({activation.skipped.length}개)
+                입력을 보완해야 하는 상품과 이유 ({activation.skipped.length}개)
               </summary>
               <div style={{ maxHeight: 240, overflowY: "auto" }}>
                 {activation.skipped.map((p) => (
@@ -346,19 +347,14 @@ export function EventCatalogRefresh({
                 key={String(publish)}
                 className={publish ? "primary" : ""}
                 type="button"
-                disabled={
-                  busy ||
-                  disabled ||
-                  stale ||
-                  (publish && !activation?.activated)
-                }
+                disabled={busy || disabled || stale}
                 onClick={async () => {
                   setBusy(true);
                   setError("");
                   try {
                     if (
                       await onImport(scan.pages, scan.bases, {
-                        activate: true,
+                        activate: false,
                         publish,
                         unknownTax,
                       })
@@ -366,7 +362,7 @@ export function EventCatalogRefresh({
                       const skipped = activation?.skipped.length || 0;
                       setScan(undefined);
                       setProgress(
-                        `홈페이지 상품 ${preview.catalog.products.length}개 동기화 · ${activation?.activated}개 활성화 · ${skipped}개 확인 필요. 저장 완료: 상담에 반영했습니다.`,
+                        `홈페이지 상품 ${preview.catalog.products.length}개 동기화 · ${activation?.activated}개 활성 유지 · ${skipped}개 입력 확인 필요. 저장 완료: 상담에 반영했습니다.`,
                       );
                     } else
                       setError(

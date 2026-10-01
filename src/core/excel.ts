@@ -123,13 +123,13 @@ export async function catalogWorkbook(
           [p.description, p.composition].filter(Boolean).join("\n"),
           ...priceLabels.map((label) => {
             const os = p.options.filter((o) => o.label === label);
-            return os.length === 1 && !os[0].review && os[0].price !== null
+            return os.length === 1 && os[0].price !== null
               ? os[0].price
               : os.length
                 ? os
                     .map(
                       (o) =>
-                        `${o.price ?? "별도견적"}${o.review ? " (확인 필요)" : ""}`,
+                        `${o.price ?? "별도견적"}${o.tax === "unknown" ? " (부가세 확인 필요)" : ""}`,
                     )
                     .join("\n")
                 : "";

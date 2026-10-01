@@ -120,7 +120,7 @@ export const catalogCommands = {
     alt: true,
   },
   selectUnreviewed: {
-    label: "현재 목록의 미검토 상품만 선택",
+    label: "현재 목록의 비활성 상품만 선택",
     keys: "Alt+U",
     scope: "상품 목록",
     code: "KeyU",
@@ -168,7 +168,7 @@ export const catalogCommands = {
     alt: true,
   },
   bulkApply: {
-    label: "선택 상품 판매·부가세·추천기 표시·검토완료 일괄 적용",
+    label: "선택 상품 판매·부가세·추천기 표시 일괄 적용",
     keys: "Alt+Shift+B",
     shift: true,
     scope: "상품 목록",

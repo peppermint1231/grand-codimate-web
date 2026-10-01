@@ -194,7 +194,7 @@ export function renewalQuote(
       (x) => x.id === old.productId && x.active,
     );
     const option = product?.options.find(
-      (x) => x.id === old.optionId && !x.review && x.price !== null,
+      (x) => x.id === old.optionId && x.price !== null,
     );
     ensure(
       product && option,
@@ -576,7 +576,7 @@ export function validateCatalog(c: Catalog, posting = false) {
       );
       if (posting && p.active)
         ensure(
-          !o.review && o.price !== null && o.tax !== "unknown",
+          o.price !== null && o.tax !== "unknown",
           "판매 중 상품의 확인 필요 가격·부가세를 해결하세요",
         );
     }
@@ -1010,7 +1010,7 @@ export async function applyCommand(
           ),
           o = product?.options.find((x) => x.id === l.optionId);
         ensure(
-          product && o && o.price !== null && !o.review,
+          product && o && o.price !== null && o.tax !== "unknown",
           "검증·게시된 상품만 담을 수 있습니다",
         );
         ensure(
@@ -1503,14 +1503,13 @@ export async function applyCommand(
       ensure(beauty, "기준 미용 SSOT가 필요합니다");
       const result = mergeHomepageCatalog(beauty, event, pages, now);
       const options = homepageSyncOptionsSchema.parse(p.options || {});
-      ensure(
-        !options.publish || options.activate,
-        "게시하려면 전체 활성화를 선택하세요",
+      // Source refresh never silently activates new or changed products.
+      const activation = activateHomepageCatalog(
+        result.catalog,
+        { ...options, activate: false },
+        now,
       );
-      const activation = options.activate
-        ? activateHomepageCatalog(result.catalog, options, now)
-        : undefined;
-      const candidate = activation?.catalog || result.catalog;
+      const candidate = activation.catalog;
       Object.assign(candidate, base, {
         id: cmd.id + "-homepage",
         authorId: user.id,
@@ -1522,10 +1521,6 @@ export async function applyCommand(
       );
       validateCatalog(candidate, options.publish);
       if (options.publish) {
-        ensure(
-          (activation?.activated || 0) > 0,
-          "활성화할 수 있는 상품이 없습니다. 미확정 항목을 확인하세요",
-        );
         candidate.status = "published";
         candidate.version = now + "-" + cmd.id.slice(0, 8);
         candidate.publishedAt = now;
@@ -1538,7 +1533,7 @@ export async function applyCommand(
         "-homepage",
       );
       text = options.publish
-        ? "홈페이지 동기화·활성화·게시"
+        ? "홈페이지 동기화·판매 상태 반영"
         : "홈페이지 SSOT 동기화 초안 저장";
       break;
     }
@@ -1643,8 +1638,6 @@ export async function applyCommand(
         .filter((product) => product.active)
         .flatMap((product) => {
           const reasons = productReviewIssues(product);
-          if (product.options.some((o) => o.review))
-            reasons.push("옵션 검토완료 필요");
           return reasons.length
             ? [`${product.name}: ${reasons.join(" · ")}`]
             : [];
@@ -1653,6 +1646,9 @@ export async function applyCommand(
         !problems.length,
         `판매 활성 상품 ${problems.length}개의 입력을 확인하거나 비활성으로 변경하세요.\n${problems.slice(0, 10).join("\n")}`,
       );
+      for (const product of candidate.products)
+        if (product.active)
+          for (const option of product.options) option.review = false;
       validateCatalog(candidate, true);
       ensure(
         !s.catalogs.some((c) => c.id === cmd.id),

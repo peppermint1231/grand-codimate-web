@@ -64,14 +64,14 @@ it("blocks incomplete active items without saving anything; permits keeping them
   const next = await applyCommand(s, catalogAdmin, cmd);
   expect(latestCatalog(next, c.book!)?.products[0].options[0].price).toBeNull();
 });
-it("keeps review state independent from activation and finds missing options and tax", () => {
+it("ignores the obsolete review flag and still finds missing options and tax", () => {
   const p = threeCatalogs()[0].products[0];
   expect(matchesCatalogProductFilter(p, "active")).toBe(true);
   expect(matchesCatalogProductFilter(p, "unreviewed")).toBe(false);
   p.active = false;
   p.options[0].review = true;
   expect(matchesCatalogProductFilter(p, "inactive")).toBe(true);
-  expect(matchesCatalogProductFilter(p, "unreviewed")).toBe(true);
+  expect(matchesCatalogProductFilter(p, "unreviewed")).toBe(false);
   p.options[0].review = false;
   p.options[0].tax = "unknown";
   expect(matchesCatalogProductFilter(p, "tax")).toBe(true);
@@ -79,4 +79,14 @@ it("keeps review state independent from activation and finds missing options and
   p.options = [];
   expect(matchesCatalogProductFilter(p, "missing")).toBe(true);
   expect(matchesCatalogProductFilter(p, "unreviewed")).toBe(true);
+});
+
+it("activation is the review decision even with legacy option review flags", async () => {
+  const { s, c, cmd } = setup();
+  c.products[0].options[0].review = true;
+  const after = await applyCommand(s, catalogAdmin, cmd);
+  expect(latestCatalog(after, c.book!)!.products[0].active).toBe(true);
+  expect(latestCatalog(after, c.book!)!.products[0].options[0].review).toBe(
+    false,
+  );
 });

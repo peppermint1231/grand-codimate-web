@@ -19,7 +19,6 @@ export function CatalogBulkEdit({
   const [tax, setTax] = useState<Option["tax"] | "">("");
   const [visibility, setVisibility] = useState("");
   const [sale, setSale] = useState("");
-  const [review, setReview] = useState(false);
   const [message, setMessage] = useState("");
   const [skipped, setSkipped] = useState<
     ReturnType<typeof bulkEditCatalogProductsResult>["skipped"]
@@ -27,8 +26,8 @@ export function CatalogBulkEdit({
   const [error, setError] = useState("");
   const selected = catalog.products.filter((p) => ids.includes(p.id));
   useEffect(() => {
-    onPendingChange?.(!!(tax || visibility || sale || review));
-  }, [tax, visibility, sale, review, onPendingChange]);
+    onPendingChange?.(!!(tax || visibility || sale));
+  }, [tax, visibility, sale, onPendingChange]);
   const clearMessage = () => {
     setMessage("");
     setError("");
@@ -91,24 +90,11 @@ export function CatalogBulkEdit({
             <option value="hide">숨김</option>
           </select>
         </label>
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={review}
-            onChange={(e) => {
-              setReview(e.target.checked);
-              clearMessage();
-            }}
-          />
-          선택 상품 일괄 검토완료
-        </label>
         <button
           type="button"
           className="primary"
           {...catalogCommand("bulkApply")}
-          disabled={
-            !selected.length || (!tax && !visibility && !review && !sale)
-          }
+          disabled={!selected.length || (!tax && !visibility && !sale)}
           onClick={() => {
             clearMessage();
             try {
@@ -116,17 +102,15 @@ export function CatalogBulkEdit({
                 ...(tax ? { tax } : {}),
                 ...(sale ? { active: sale === "active" } : {}),
                 ...(visibility ? { publicVisible: visibility === "show" } : {}),
-                completeReview: review,
               });
               if (result.appliedIds.length) onChange(result.catalog);
               setSkipped(result.skipped);
               setMessage(
-                `${result.appliedIds.length}개 상품 적용${review ? "·검토완료" : ""} · ${result.skipped.length}개 미적용. ${result.appliedIds.length ? "완료된 변경은 유지됩니다. ‘저장하고 적용’을 누르세요." : "아래 항목을 보완한 뒤 다시 적용하세요."}`,
+                `${result.appliedIds.length}개 상품 적용 · ${result.skipped.length}개 미적용. ${result.appliedIds.length ? "완료된 변경은 유지됩니다. ‘저장하고 적용’을 누르세요." : "아래 항목을 보완한 뒤 다시 적용하세요."}`,
               );
               setTax("");
               setVisibility("");
               setSale("");
-              setReview(false);
             } catch (e) {
               setError((e as Error).message);
             }
@@ -136,7 +120,7 @@ export function CatalogBulkEdit({
         </button>
       </div>
       <p className="small">
-        검색·폴더 밖의 선택 상품도 포함됩니다. 부가세와 검토완료는 모든 옵션에
+        검색·폴더 밖의 선택 상품도 포함됩니다. 부가세 정책은 모든 옵션에
         적용됩니다. 부가세 정책 변경 시 입력 가격은 유지됩니다. 상담에
         표시하려면 메뉴 판매를 활성화하세요. ‘저장하고 적용’을 누르면 상담·맞춤
         시술 찾기에 반영됩니다.

@@ -123,10 +123,6 @@ export function catalogChanges(
           `부가세: ${p.name} / ${o.label} (${names[prev.tax]} → ${names[o.tax]})`,
         );
       }
-      if (prev.review !== o.review)
-        changes.push(
-          `검토 상태: ${p.name} / ${o.label} → ${o.review ? "검토 필요" : "검토완료"}`,
-        );
       if (
         prev.label !== o.label ||
         prev.unit !== o.unit ||

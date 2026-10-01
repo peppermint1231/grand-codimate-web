@@ -430,15 +430,15 @@ export function activateHomepageCatalog(
           i !== "부가세 미표기 · 항목별 확인 필요",
       ),
     );
-    reasons.push(...sourceIssues);
-    product.active = !reasons.length;
+    if (options.activate) reasons.push(...sourceIssues);
+    product.active = !reasons.length && (options.activate || product.active);
     if (reasons.length)
       skipped.push({
         id: product.id,
         name: product.name,
         reasons: [...new Set(reasons)],
       });
-    else {
+    else if (product.active) {
       activated++;
       for (const option of product.options) {
         option.review = false;

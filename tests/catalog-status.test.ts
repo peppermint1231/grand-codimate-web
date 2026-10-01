@@ -37,7 +37,7 @@ it("shows actual draft save time rather than inherited version time and uses exp
   expect(catalogVersionLabel(c)).toContain("2026. 09. 23. 00:30:00");
   expect(catalogTime("invalid")).toBe("시간 정보 없음");
 });
-it("requires reviewed prices for bulk activation and keeps activation distinct from discovery visibility", () => {
+it("requires valid prices but no separate review step for activation and keeps activation distinct from discovery visibility", () => {
   const c = threeCatalogs()[2];
   c.status = "draft";
   c.products[0].active = false;
@@ -45,11 +45,10 @@ it("requires reviewed prices for bulk activation and keeps activation distinct f
   c.products[0].options[0].review = true;
   expect(
     bulkEditCatalogProductsResult(c, [c.products[0].id], { active: true })
-      .skipped[0].reasons,
-  ).toContain("옵션 검토완료 필요");
+      .skipped,
+  ).toEqual([]);
   const next = bulkEditCatalogProducts(c, [c.products[0].id], {
     active: true,
-    completeReview: true,
   });
   expect(next.products[0].active).toBe(true);
   expect(next.products[0].publicVisible).toBe(false);

@@ -438,3 +438,20 @@ it("includes event-category banners even when their individual title does not co
   );
   validateCatalog(merged.catalog);
 });
+
+it("reports a retryable source timeout without leaking raw runtime errors", async () => {
+  await expect(
+    fetchEventSource(
+      new URLSearchParams(),
+      vi.fn(async () => {
+        throw new DOMException(
+          "The operation was aborted due to timeout",
+          "TimeoutError",
+        );
+      }) as typeof fetch,
+    ),
+  ).rejects.toMatchObject({
+    status: 504,
+    message: expect.stringContaining("연결"),
+  });
+});

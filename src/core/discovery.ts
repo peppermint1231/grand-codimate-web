@@ -80,7 +80,6 @@ export function publicProducts(state: State): PublicProduct[] {
           ...((p.webEvent || catalogBook(c) === "이벤트") &&
           p.active &&
           p.options.length === 1 &&
-          !p.options[0].review &&
           p.options[0].tax !== "unknown" &&
           p.options[0].price !== null
             ? {
@@ -103,7 +102,6 @@ export function publicProducts(state: State): PublicProduct[] {
           options: p.options.map((o) => ({
             ...((p.webEvent || catalogBook(c) === "이벤트") &&
             p.active &&
-            !o.review &&
             o.tax !== "unknown" &&
             o.price !== null
               ? { event: eventOptionPrices(p, o) }
@@ -111,10 +109,8 @@ export function publicProducts(state: State): PublicProduct[] {
             id: o.id,
             label: o.label,
             unit: o.unit,
-            price:
-              p.active && !o.review && o.tax !== "unknown" ? o.price : null,
-            tax:
-              p.active && !o.review && o.tax !== "unknown" ? o.tax : "unknown",
+            price: p.active && o.tax !== "unknown" ? o.price : null,
+            tax: p.active && o.tax !== "unknown" ? o.tax : "unknown",
           })),
         })),
     );

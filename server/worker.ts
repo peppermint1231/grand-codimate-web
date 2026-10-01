@@ -502,9 +502,23 @@ export class Clinic extends DurableObject<Env> {
     }
   }
   async fetch(req: Request): Promise<Response> {
-    // Serialize across network awaits as well as SQLite writes.
-    const run = this.queue.then(() => this.route(req));
-    this.queue = run.catch(() => undefined);
+    // Source HTML is read-only and must not hold the clinic's write queue
+    // while a third-party website is slow. Authentication still runs per request.
+    const sourceRequest =
+      req.method === "GET" &&
+      new URL(req.url).pathname === "/api/catalog/event-source";
+    const run = sourceRequest
+      ? (async () => {
+          const user = await this.user(req);
+          ensure(
+            allowed(user, "catalog.edit"),
+            "단가표 관리 권한이 필요합니다",
+            403,
+          );
+          return json(await fetchEventSource(new URL(req.url).searchParams));
+        })()
+      : this.queue.then(() => this.route(req));
+    if (!sourceRequest) this.queue = run.catch(() => undefined);
     try {
       return await run;
     } catch (e) {
@@ -548,7 +562,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.13.5",
+        version: "0.13.6",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"

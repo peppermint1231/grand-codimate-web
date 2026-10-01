@@ -19,3 +19,24 @@ export function useAppBack(enabled: boolean, run: () => void, priority = 10) {
     };
   }, [enabled, priority]);
 }
+
+export function requestNavigation(go: () => void) {
+  if (
+    !window.dispatchEvent(
+      new CustomEvent("codimate:before-consult-leave", {
+        cancelable: true,
+        detail: go,
+      }),
+    )
+  )
+    return;
+  if (
+    !window.dispatchEvent(
+      new Event("codimate:before-photo-leave", {
+        cancelable: true,
+      }),
+    )
+  )
+    return;
+  go();
+}

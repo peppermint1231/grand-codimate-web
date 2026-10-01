@@ -25,7 +25,7 @@ export function productReviewIssues(p: Product): string[] {
   return issues;
 }
 export const needsProductReview = (p: Product) =>
-  p.options.some((o) => o.review) || productReviewIssues(p).length > 0;
+  productReviewIssues(p).length > 0;
 
 export function bulkEditCatalogProductsResult(
   catalog: Catalog,
@@ -48,13 +48,13 @@ export function bulkEditCatalogProductsResult(
       options: p.options.map((o) => ({
         ...o,
         ...(changes.tax === undefined ? {} : { tax: changes.tax }),
-        ...(changes.completeReview ? { review: false } : {}),
+        ...(changes.completeReview || changes.active === true
+          ? { review: false }
+          : {}),
       })),
     };
     if (changes.completeReview || changes.active === true) {
       const reasons = productReviewIssues(next);
-      if (changes.active === true && next.options.some((o) => o.review))
-        reasons.push("옵션 검토완료 필요");
       if (reasons.length) {
         skipped.push({ id: p.id, name: p.name, reasons });
         return p;
@@ -131,8 +131,8 @@ export function matchesCatalogProductFilter(
         )
       );
     case "details":
-      return p.options.some(
-        (o) => o.review && o.issues.some((i) => !i.startsWith("부가세 미표기")),
+      return p.options.some((o) =>
+        o.issues.some((i) => !/검토|부가세 미표기/.test(i)),
       );
     default:
       return true;

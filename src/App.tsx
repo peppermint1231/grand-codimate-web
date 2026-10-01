@@ -66,7 +66,7 @@ import { ConsultationOpinions } from "./components/ConsultationOpinions";
 import { OpinionInbox } from "./components/OpinionInbox";
 import { CatalogDeleteConfirm } from "./components/CatalogDeleteConfirm";
 import {
-  needsProductReview,
+  productReviewIssues,
   matchesCatalogSearch,
   deleteCatalogProducts,
   type CatalogSearchScope,
@@ -107,7 +107,8 @@ import {
   sourceFolderId,
   editableTree,
 } from "./core/catalogFolders";
-import { appBack, useAppBack } from "./lib/navigation";
+import { ConsultationExit } from "./components/ConsultationExit";
+import { appBack, useAppBack, requestNavigation } from "./lib/navigation";
 import { QuoteTotals } from "./components/QuoteTotals";
 import { AddressSearch } from "./components/AddressSearch";
 import {
@@ -174,6 +175,7 @@ import {
   calculate,
   renewalQuote,
   metrics,
+  ledgerAvailable,
   gradeFor,
   duplicates,
   activeLedger,
@@ -336,22 +338,18 @@ export function App() {
         setGuest(false);
         return;
       }
-      if (
-        !window.dispatchEvent(
-          new Event("codimate:before-photo-leave", { cancelable: true }),
-        )
-      )
-        return;
-      const previous = routes.current.pop();
-      if (previous) {
-        returning.current = true;
-        setPage(previous.page);
-        setPatientId(previous.patientId);
-        setConsultId(previous.consultId);
-        setTab(previous.tab);
-      } else {
-        setNotice("첫 화면입니다.");
-      }
+      requestNavigation(() => {
+        const previous = routes.current.pop();
+        if (previous) {
+          returning.current = true;
+          setPage(previous.page);
+          setPatientId(previous.patientId);
+          setConsultId(previous.consultId);
+          setTab(previous.tab);
+        } else {
+          setNotice("첫 화면입니다.");
+        }
+      });
     },
     0,
   );
@@ -385,6 +383,17 @@ export function App() {
       { operation: null },
     ).catch(() => {});
   }, [user?.id, page, patientId, consultId]);
+  useEffect(() => {
+    if (page !== "consult" || native) return;
+    if (!window.history.state?.codimateConsult)
+      window.history.pushState({ codimateConsult: true }, "");
+    const pop = () => {
+      window.history.pushState({ codimateConsult: true }, "");
+      appBack();
+    };
+    window.addEventListener("popstate", pop);
+    return () => window.removeEventListener("popstate", pop);
+  }, [page]);
   const restoreNeeded = useRef(true);
   const workInFlight = useRef(false);
   useEffect(() => {
@@ -1206,17 +1215,11 @@ export function App() {
             title={label}
             className={"nav-item " + (page === key ? "active" : "")}
             onClick={() => {
-              if (
-                !window.dispatchEvent(
-                  new Event("codimate:before-photo-leave", {
-                    cancelable: true,
-                  }),
-                )
-              )
-                return;
-              setPage(key);
-              setConsultId("");
-              setPatientId("");
+              requestNavigation(() => {
+                setPage(key);
+                setConsultId("");
+                setPatientId("");
+              });
             }}
           >
             <Icon size={20} />
@@ -1246,7 +1249,10 @@ export function App() {
               {permissionLevelLabels[permissionLevelOf(user)]}
             </small>
           </div>
-          <button aria-label="로그아웃" onClick={logout}>
+          <button
+            aria-label="로그아웃"
+            onClick={() => requestNavigation(logout)}
+          >
             <LogOut size={18} />
           </button>
         </div>
@@ -1285,7 +1291,7 @@ export function App() {
             <button
               className="mobile-logout"
               aria-label="로그아웃"
-              onClick={logout}
+              onClick={() => requestNavigation(logout)}
             >
               <LogOut size={18} />
             </button>
@@ -1446,7 +1452,11 @@ export function App() {
                           </small>
                         </span>
                         <span className={"badge " + c.status}>{status(c)}</span>
-                        <span>{money(c.quote.total)}</span>
+                        <ConsultationPayment
+                          state={state}
+                          consult={c}
+                          user={user}
+                        />
                         <ChevronRight />
                       </button>
                     ))
@@ -1595,19 +1605,13 @@ export function App() {
             user={user}
             send={send}
             onOpen={(c) => {
-              if (
-                !window.dispatchEvent(
-                  new Event("codimate:before-photo-leave", {
-                    cancelable: true,
-                  }),
-                )
-              )
-                return;
-              setModal("");
-              setPatientId(c.patientId);
-              setConsultId(c.id);
-              setPage("consult");
-              setTab("consult");
+              requestNavigation(() => {
+                setModal("");
+                setPatientId(c.patientId);
+                setConsultId(c.id);
+                setPage("consult");
+                setTab("consult");
+              });
             }}
           />
         </Modal>
@@ -2639,7 +2643,7 @@ function PatientDetail({
                       </span>
                       <ConsultationCover photos={c.photos} />
                       <span className={"badge " + c.status}>{status(c)}</span>
-                      <span>{money(c.quote.total)}</span>
+                      <ConsultationPayment state={s} consult={c} user={user} />
                       <ChevronRight size={18} />
                     </button>
                   </article>
@@ -2886,6 +2890,28 @@ function PatientDetail({
     </>
   );
 }
+function ConsultationPayment({
+  state,
+  consult,
+  user,
+}: {
+  state: State;
+  consult: Consultation;
+  user: User;
+}) {
+  if (!allowed(user, "money.read")) return <span>—</span>;
+  const outstanding = ledgerAvailable(state, consult.id, "receipt");
+  return (
+    <span className="consultation-payment">
+      <span>{money(consult.quote.total)}</span>
+      {outstanding > 0 && (
+        <strong className="unpaid-badge">
+          미수납 {money(outstanding)} · 수납 확인
+        </strong>
+      )}
+    </span>
+  );
+}
 function ConsultationView({
   consult: c,
   state: s,
@@ -3094,21 +3120,18 @@ function ConsultationView({
   useEffect(() => {
     if (!draftReady || !vaultEnabled()) return;
     setLocalSaved(false);
-    const t = setTimeout(() => {
-      vaultWrite("draft:" + c.id, draft).then(() => setLocalSaved(true));
-    }, 350);
-    return () => clearTimeout(t);
-  }, [draft, draftReady]);
-  useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (!localSaved && JSON.stringify(draft) !== JSON.stringify(c)) {
-        e.preventDefault();
-        e.returnValue = "";
-      }
+    let active = true;
+    vaultWrite("draft:" + c.id, draft)
+      .then(() => {
+        if (active) setLocalSaved(true);
+      })
+      .catch(() => {
+        if (active) setLocalSaved(false);
+      });
+    return () => {
+      active = false;
     };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [draft, localSaved]);
+  }, [draft, draftReady]);
 
   const updateQuote = (patch: Partial<typeof draft.quote>) =>
     setDraft({ ...draft, quote: { ...draft.quote, ...patch } });
@@ -3211,6 +3234,51 @@ function ConsultationView({
   };
   return (
     <>
+      <ConsultationExit
+        enabled={!readonly && !c.cancelled && (c.status === "H" || dirty)}
+        pending={c.status === "H"}
+        canSucceed={
+          !sourceInvalid && (c.kind === "interim" || quote.lines.length > 0)
+        }
+        finish={async (status) => {
+          let done = false;
+          await work(async () => {
+            if (adding) throw new Error("사진 추가가 끝난 뒤 저장해주세요.");
+            if (
+              !window.dispatchEvent(
+                new Event("codimate:before-consult-save", { cancelable: true }),
+              )
+            )
+              throw new Error(
+                "사진 편집기에서 ‘사진 편집 저장’을 먼저 눌러주세요.",
+              );
+            if (validationError) throw new Error(validationError);
+            if (dirty && !(await save()))
+              throw new Error(
+                "상담 저장이 전송 대기 중입니다. 동기화 후 다시 시도해주세요.",
+              );
+            if (status) {
+              if (
+                !(await send(
+                  "consultation.finalize",
+                  {
+                    status,
+                    documents: [],
+                    ...(c.kind === "renewal" ? { sourceRev: source?.rev } : {}),
+                  },
+                  c.id,
+                  dirty ? draft.rev + 1 : draft.rev,
+                ))
+              )
+                throw new Error(
+                  "상담 완료 처리가 전송 대기 중입니다. 동기화 후 확인해주세요.",
+                );
+            }
+            done = true;
+          });
+          return done;
+        }}
+      />
       {validationError && (
         <div className="error" role="alert">
           {validationError}
@@ -3227,7 +3295,7 @@ function ConsultationView({
           className="back"
           aria-label="환자 상세로 돌아가기"
           title="환자 상세"
-          onClick={back}
+          onClick={() => requestNavigation(back)}
         >
           <ArrowLeft size={18} />
         </button>
@@ -3808,7 +3876,7 @@ function ConsultationView({
                           className="option-row"
                           disabled={
                             readonly ||
-                            o.review ||
+                            o.tax === "unknown" ||
                             o.price === null ||
                             eventAvailability(p.webEvent) !== "current"
                           }
@@ -3863,11 +3931,7 @@ function ConsultationView({
                             </small>
                           </span>
                           <b>
-                            {o.review
-                              ? "확인 필요"
-                              : o.price === null
-                                ? "별도 견적"
-                                : money(o.price)}
+                            {o.price === null ? "별도 견적" : money(o.price)}
                           </b>
                           <Plus size={16} />
                         </button>
@@ -3889,7 +3953,7 @@ function ConsultationView({
                         : catalog.products.length &&
                             !catalog.products.some((p) => p.active)
                           ? `${catalogBookLabel(book)} 게시본의 상품 ${catalog.products.length}개가 모두 판매 비활성입니다. 단가표 관리에서 메뉴 판매를 활성화하고 저장하고 적용하세요.`
-                          : "게시된 판매상품이 없습니다. 관리자 단가표에서 검토 후 게시하세요."}
+                          : "게시된 판매상품이 없습니다. 관리자 단가표에서 메뉴 판매를 활성화하고 저장하세요."}
                   </Empty>
                 )}
               </div>
@@ -4961,6 +5025,17 @@ function CatalogView({
     },
   );
   const change = (p: Product) => {
+    const prior = current?.products.find((x) => x.id === p.id);
+    if (p.active && prior && !prior.active) {
+      const issues = productReviewIssues(p);
+      if (issues.length) {
+        window.alert(
+          "판매 활성화 전에 입력을 확인하세요.\n" + issues.join("\n"),
+        );
+        return;
+      }
+      p = { ...p, options: p.options.map((o) => ({ ...o, review: false })) };
+    }
     if (current)
       setDraft({
         ...current,
@@ -5360,7 +5435,7 @@ function CatalogView({
               <span>{current.products.length}개 상품 후보</span>
               <span>
                 {current.products.reduce(
-                  (n, p) => n + p.options.filter((o) => o.review).length,
+                  (n, p) => n + productReviewIssues(p).length,
                   0,
                 )}
                 개 가격 확인 필요
@@ -5564,7 +5639,7 @@ function CatalogView({
               <option value="product">상품명만</option>
             </select>
             <select
-              aria-label="검토 항목"
+              aria-label="상품 필터"
               value={reviewFilter}
               onChange={(e) => {
                 setReviewFilter(e.target.value as CatalogProductFilter);
@@ -5572,7 +5647,6 @@ function CatalogView({
               }}
             >
               <option value="all">전체 항목</option>
-              <option value="unreviewed">미검토 항목</option>
               <option value="active">판매 활성</option>
               <option value="inactive">판매 비활성</option>
               <option value="details">가격·구성·판매 조건</option>
@@ -5717,7 +5791,8 @@ function CatalogView({
               </div>
               <p>
                 카테고리 / 상품명 / 옵션명 / 가격 / 부가세(별도·포함·면세) 열을
-                엑셀에서 복사하세요. 새 후보로 추가되며 검토 후 판매를 켭니다.
+                엑셀에서 복사하세요. 비활성으로 추가되며 내용을 확인한 뒤 판매를
+                켭니다.
               </p>
               <textarea
                 value={paste}
@@ -6151,20 +6226,14 @@ function CatalogView({
                     <option value="exempt">면세</option>
                   </select>
                 </Field>
-                <label className="check">
-                  <input
-                    disabled={!editable}
-                    type="checkbox"
-                    checked={!o.review}
-                    onChange={(e) => {
-                      const options = [...product.options];
-                      options[i] = { ...o, review: !e.target.checked };
-                      change({ ...product, options });
-                    }}
-                  />
-                  가격·옵션 검토 완료
-                </label>
-                {o.review && <p className="small">{o.issues.join(" · ")}</p>}
+                {!!o.issues.length && (
+                  <p className="small">
+                    원본 안내:{" "}
+                    {o.issues
+                      .filter((issue) => !/검토|항목별 확인/.test(issue))
+                      .join(" · ")}
+                  </p>
+                )}
                 <Field label="계산 단위">
                   <input
                     disabled={!editable}

@@ -1,7 +1,7 @@
 {
-  "version": "0.13.5",
-  "versionCode": 58,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.5.apk",
-  "sha256": "2c52fd5f164e37e3a853dd57dff7383dd201e2ac96959a2e45f18ccfd03e3ba6",
-  "notes": "홈페이지 SSOT 고민별·홈페이지 원본 분류 전환. 단가표 관리와 상담 시술 선택에서 전환하며 홈페이지 갱신 시 자동 반영."
+  "version": "0.13.6",
+  "versionCode": 59,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.6.apk",
+  "sha256": "05f2b000663be745e9e5557779889384b4c44ed585163dc9d07f7e8c2757b821",
+  "notes": "상담 이탈 시 보류·성공·실패 저장 확인, 상담이력 미수납 강조. 홈페이지 갱신 자동 재시도 및 새 상품·변경 상품 비활성 등록. 별도 검토완료 체크 제거."
 }

@@ -1,3 +1,4 @@
+import { DomainError } from "../src/core/domain";
 import { load } from "cheerio/slim";
 import {
   EVENT_ORIGIN,
@@ -10,7 +11,7 @@ import {
 const clean = (s: string) => s.replace(/\s+/g, " ").trim();
 const validId = (s: string) => /^\d{1,10}$/.test(s);
 const fail = (message: string): never => {
-  throw new Error("이벤트 홈페이지: " + message);
+  throw new DomainError("홈페이지: " + message, 422);
 };
 function pageDOM(html: string) {
   const $ = load(html);
@@ -236,39 +237,52 @@ export async function fetchEventSource(
   if (category) u.searchParams.set("cate", category);
   if (item) u.searchParams.set("i", item);
   if (page) u.searchParams.set("page", page);
-  const response = await fetcher(u.href, {
-    redirect: "manual",
-    signal: AbortSignal.timeout(15000),
-    headers: { Accept: "text/html", "User-Agent": "Codimate-Event-Sync/1.0" },
-  });
-  if (
-    !response.ok ||
-    !response.headers.get("content-type")?.includes("text/html")
-  )
-    fail("홈페이지 응답을 읽을 수 없습니다. 잠시 후 다시 시도하세요.");
-  const reader = response.body?.getReader();
-  if (!reader) fail("본문이 없습니다.");
-  const chunks: Uint8Array[] = [];
-  let bytes = 0;
   try {
-    while (true) {
-      const { done, value } = await reader!.read();
-      if (done) break;
-      bytes += value.length;
-      if (bytes > 2_000_000) fail("페이지 크기가 제한을 넘었습니다.");
-      chunks.push(value);
+    const response = await fetcher(u.href, {
+      redirect: "manual",
+      signal: AbortSignal.timeout(45000),
+      headers: { Accept: "text/html", "User-Agent": "Codimate-Event-Sync/1.0" },
+    });
+    if ([408, 429, 500, 502, 503, 504].includes(response.status))
+      throw new DomainError(
+        "홈페이지 응답이 지연되고 있습니다. 잠시 후 재시도합니다.",
+        503,
+      );
+    if (
+      !response.ok ||
+      !response.headers.get("content-type")?.includes("text/html")
+    )
+      fail("홈페이지 응답을 읽을 수 없습니다. 잠시 후 다시 시도하세요.");
+    const reader = response.body?.getReader();
+    if (!reader) fail("본문이 없습니다.");
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader!.read();
+        if (done) break;
+        bytes += value.length;
+        if (bytes > 2_000_000) fail("페이지 크기가 제한을 넘었습니다.");
+        chunks.push(value);
+      }
+    } finally {
+      await reader!.cancel();
     }
-  } finally {
-    await reader!.cancel();
+    const data = new Uint8Array(bytes);
+    let offset = 0;
+    for (const c of chunks) {
+      data.set(c, offset);
+      offset += c.length;
+    }
+    const html = new TextDecoder("utf-8", { fatal: true }).decode(data);
+    return item
+      ? parseWebsiteEvent(html, item, category)
+      : parseEventPage(html, category || undefined);
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    throw new DomainError(
+      "홈페이지 연결 시간이 초과되었거나 연결이 끊겼습니다.",
+      504,
+    );
   }
-  const data = new Uint8Array(bytes);
-  let offset = 0;
-  for (const c of chunks) {
-    data.set(c, offset);
-    offset += c.length;
-  }
-  const html = new TextDecoder("utf-8", { fatal: true }).decode(data);
-  return item
-    ? parseWebsiteEvent(html, item, category)
-    : parseEventPage(html, category || undefined);
 }

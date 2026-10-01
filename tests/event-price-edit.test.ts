@@ -47,7 +47,7 @@ it("retains manually edited regular prices across website refreshes while keepin
   expect(c.products[0].options[0].regularPrice).toBe(222000);
   expect(c.products[0].webEvent!.regularPrice).toBe(999000);
 });
-it("validates regular prices and saves, histories and publishes them for discovery without exposing unreviewed prices", async () => {
+it("validates regular prices and saves, histories and publishes them for discovery without exposing inactive prices", async () => {
   let s = emptyState();
   const c = threeCatalogs()[2];
   c.status = "draft";
@@ -89,7 +89,7 @@ it("validates regular prices and saves, histories and publishes them for discove
     salePrice: 5000,
     discountRate: 75,
   });
-  s.catalogs[0].products[0].options[0].review = true;
+  s.catalogs[0].products[0].active = false;
   expect(publicProducts(s)[0].event).toBeUndefined();
   expect(publicProducts(s)[0].options[0].event).toBeUndefined();
 });

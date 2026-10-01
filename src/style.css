@@ -5275,3 +5275,9 @@ html.custom-pull-refresh {
 .catalog-category-switch button {border:0;background:transparent;box-shadow:none;min-height:34px;padding:5px 12px;white-space:nowrap;font-size:13px}
 .catalog-category-switch button.active {background:#175e55;color:white}
 .procedure-picker-controls > .catalog-category-switch {margin:4px 0 2px}
+
+.consultation-exit-overlay { z-index: 220; }
+.consultation-exit-dialog { width: min(580px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; }
+.consultation-exit-dialog .button-row { gap: 10px; flex-wrap: wrap; }
+.consultation-payment { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.unpaid-badge { display: inline-block; padding: 5px 8px; border: 1px solid #ed9c88; border-radius: 7px; color: #a32b19; background: #fff0e9; font-size: .85em; white-space: normal; }

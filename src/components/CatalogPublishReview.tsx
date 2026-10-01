@@ -71,9 +71,7 @@ export function CatalogPublishReview({
                 {p.options.map((o) => (
                   <button
                     key={o.id}
-                    disabled={
-                      o.price === null || o.review || o.tax === "unknown"
-                    }
+                    disabled={o.price === null || o.tax === "unknown"}
                     onClick={() =>
                       setLines((v) => [
                         ...v,
@@ -101,7 +99,6 @@ export function CatalogPublishReview({
                         : o.tax === "exempt"
                           ? "면세"
                           : "VAT 확인 필요"}
-                    {o.review ? " · 검토 필요" : ""}
                   </button>
                 ))}
               </article>
@@ -131,7 +128,7 @@ export function CatalogPublishReview({
             }
           }}
         >
-          {busy ? "게시 중…" : "검토 완료 · 게시"}
+          {busy ? "게시 중…" : "저장하고 적용"}
         </button>
       </section>
     </PhotoModal>

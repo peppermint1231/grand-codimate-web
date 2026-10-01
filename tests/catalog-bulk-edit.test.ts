@@ -37,7 +37,7 @@ it("applies all options in selected products only, preserving prices, sale statu
   ).toEqual(c.products[0].options.map((o) => [o.price, o.issues, o.sources]));
   expect(next.products[0].active).toBe(false);
   expect(next.products[0].publicVisible).toBe(false);
-  expect(catalogChanges(c, next).join("\n")).toContain("검토완료");
+  expect(catalogChanges(c, next).join("\n")).not.toContain("검토완료");
   expect(catalogChanges(c, next).join("\n")).toContain("부가세:");
   expect(catalogChanges(c, next).join("\n")).toContain("추천기 공개:");
 });
@@ -179,7 +179,7 @@ it("selects only unresolved products, including unknown tax, missing options and
     [reviewed, waiting, unknown, empty]
       .filter(needsProductReview)
       .map((p) => p.id),
-  ).toEqual(["waiting", "unknown", "empty"]);
+  ).toEqual(["unknown", "empty"]);
 });
 it("retains completed products on a second failed batch and allows remaining items to be completed after correction", () => {
   const c = threeCatalogs()[0];

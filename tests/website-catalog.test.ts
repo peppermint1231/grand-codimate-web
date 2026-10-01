@@ -418,7 +418,7 @@ it("activates confirmed website prices and explicitly chosen VAT without hiding 
     "게시 기간 종료",
   );
 });
-it("atomically synchronizes, activates and publishes with permission/revision guards and preserved history", async () => {
+it("atomically synchronizes new products as inactive and publishes with permission/revision guards and preserved history", async () => {
   const { state, command, event, beauty } = fixture();
   command.payload.options = {
     activate: true,
@@ -429,9 +429,7 @@ it("atomically synchronizes, activates and publishes with permission/revision gu
   const c = latestCatalog(after, "이벤트")!;
   expect(c.status).toBe("published");
   expect(c.products).toHaveLength(3);
-  expect(
-    c.products.every((p) => p.active && p.options.every((o) => !o.review)),
-  ).toBe(true);
+  expect(c.products.every((p) => !p.active)).toBe(true);
   expect(after.catalogs.find((c) => c.id === event.id)).toEqual(event);
   expect(latestCatalog(after, "미용")).toEqual(beauty);
   validateCatalog(c, true);
@@ -440,9 +438,11 @@ it("atomically synchronizes, activates and publishes with permission/revision gu
     publish: true,
     unknownTax: "unknown",
   };
-  await expect(applyCommand(state, catalogAdmin, command, now)).rejects.toThrow(
-    "활성화할 수 있는 상품",
-  );
+  const inactive = latestCatalog(
+    await applyCommand(state, catalogAdmin, command, now),
+    "이벤트",
+  )!;
+  expect(inactive.products.every((p) => !p.active)).toBe(true);
 });
 
 it("defaults omitted website VAT to the hospital-approved exclusive policy, preserving explicit website VAT", () => {
@@ -462,4 +462,41 @@ it("defaults omitted website VAT to the hospital-approved exclusive policy, pres
     "exclusive",
     "exclusive",
   ]);
+});
+
+it("preserves active unchanged homepage items but leaves new, changed and manually inactive items off", () => {
+  const { beauty, page } = fixture();
+  const first = activateHomepageCatalog(
+    mergeHomepageCatalog(beauty, undefined, [page], now).catalog,
+    { activate: true, publish: false, unknownTax: "exclusive" },
+    now,
+  ).catalog;
+  first.products[1].active = false;
+  const changed = structuredClone(page);
+  changed.offers[0].price = (changed.offers[0].price || 10000) + 100;
+  const same = activateHomepageCatalog(
+    mergeHomepageCatalog(beauty, first, [page], now).catalog,
+    { activate: false, publish: true, unknownTax: "exclusive" },
+    now,
+  ).catalog;
+  expect(same.products[0].active).toBe(true);
+  expect(same.products[1].active).toBe(false);
+  const updated = activateHomepageCatalog(
+    mergeHomepageCatalog(beauty, first, [changed], now).catalog,
+    { activate: false, publish: true, unknownTax: "exclusive" },
+    now,
+  ).catalog;
+  expect(updated.products[0].active).toBe(false);
+  const added = structuredClone(page);
+  added.id = "987654";
+  const newItems = activateHomepageCatalog(
+    mergeHomepageCatalog(beauty, first, [page, added], now).catalog,
+    { activate: false, publish: true, unknownTax: "exclusive" },
+    now,
+  ).catalog;
+  expect(
+    newItems.products
+      .filter((p) => p.webEvent?.eventId === added.id)
+      .every((p) => !p.active),
+  ).toBe(true);
 });

@@ -1,3 +1,5 @@
+import { catalogApplyGuard, catalogApplyGuardSchema } from "./catalogApply";
+import { productReviewIssues } from "./catalogProducts";
 import { insuranceInfoSchema } from "./insuranceCatalog";
 import { supplementDetailedConsentBody } from "./consentDetailedPrecautions";
 import { supplementConsentChecks } from "./consentPrecautions";
@@ -1624,6 +1626,50 @@ export async function applyCommand(
         cmd.type === "catalog.events.import"
           ? "홈페이지 이벤트 갱신 초안 저장"
           : "단가표 초안 저장";
+      break;
+    }
+    case "catalog.apply": {
+      need("catalog.edit");
+      const candidate = structuredClone(p.catalog as Catalog);
+      validateCatalog(candidate);
+      const guard = catalogApplyGuardSchema.parse(p.guard);
+      ensure(
+        JSON.stringify(guard) ===
+          JSON.stringify(catalogApplyGuard(s, catalogBook(candidate))),
+        "다른 기기에서 단가표가 변경되었습니다. 최신 내용을 확인한 뒤 다시 저장하세요",
+        409,
+      );
+      const problems = candidate.products
+        .filter((product) => product.active)
+        .flatMap((product) => {
+          const reasons = productReviewIssues(product);
+          if (product.options.some((o) => o.review))
+            reasons.push("옵션 검토완료 필요");
+          return reasons.length
+            ? [`${product.name}: ${reasons.join(" · ")}`]
+            : [];
+        });
+      ensure(
+        !problems.length,
+        `판매 활성 상품 ${problems.length}개의 입력을 확인하거나 비활성으로 변경하세요.\n${problems.slice(0, 10).join("\n")}`,
+      );
+      validateCatalog(candidate, true);
+      ensure(
+        !s.catalogs.some((c) => c.id === cmd.id),
+        "이미 저장된 작업입니다",
+        409,
+      );
+      const previous = s.catalogs.find((c) => c.id === guard.workingId);
+      Object.assign(candidate, base, {
+        id: cmd.id,
+        authorId: user.id,
+        status: "published",
+        version: now + "-" + cmd.id.slice(0, 8),
+        publishedAt: now,
+      });
+      s.catalogs.push(candidate);
+      recordCatalog(previous, candidate, "메뉴 저장·상담 적용");
+      text = "단가표 저장·상담 적용";
       break;
     }
     case "catalog.publish": {

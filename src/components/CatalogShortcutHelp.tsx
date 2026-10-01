@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAppBack } from "../lib/navigation";
 import { catalogCommand, catalogCommands } from "../lib/catalogShortcuts";
 const manual = [
-  { scope: "공통", label: "저장", keys: "Ctrl/Cmd+S" },
+  { scope: "공통", label: "저장하고 적용", keys: "Ctrl/Cmd+S" },
   { scope: "공통", label: "되돌리기", keys: "Ctrl/Cmd+Z" },
   { scope: "공통", label: "다시 실행", keys: "Ctrl/Cmd+Shift+Z / Ctrl+Y" },
   { scope: "폴더 목록", label: "이름·색상 편집", keys: "F2" },

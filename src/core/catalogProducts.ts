@@ -103,3 +103,38 @@ export function deleteCatalogProducts(
     products: catalog.products.filter((p) => !selected.has(p.id)),
   };
 }
+
+export type CatalogProductFilter =
+  "all" | "unreviewed" | "active" | "inactive" | "details" | "tax" | "missing";
+export function matchesCatalogProductFilter(
+  p: Product,
+  filter: CatalogProductFilter,
+) {
+  switch (filter) {
+    case "unreviewed":
+      return needsProductReview(p);
+    case "active":
+      return p.active;
+    case "inactive":
+      return !p.active;
+    case "tax":
+      return p.options.some((o) => o.tax === "unknown");
+    case "missing":
+      return (
+        !p.options.length ||
+        p.options.some(
+          (o) =>
+            o.price === null ||
+            !Number.isSafeInteger(o.price) ||
+            o.price < 0 ||
+            o.price > 1_000_000_000,
+        )
+      );
+    case "details":
+      return p.options.some(
+        (o) => o.review && o.issues.some((i) => !i.startsWith("부가세 미표기")),
+      );
+    default:
+      return true;
+  }
+}

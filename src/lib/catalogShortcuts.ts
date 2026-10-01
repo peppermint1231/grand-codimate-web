@@ -112,6 +112,13 @@ export const catalogCommands = {
     code: "KeyA",
     mod: true,
   },
+  bulkOpen: {
+    label: "선택 상품 일괄 수정 열기",
+    keys: "Alt+B",
+    scope: "상품 목록",
+    code: "KeyB",
+    alt: true,
+  },
   selectUnreviewed: {
     label: "현재 목록의 미검토 상품만 선택",
     keys: "Alt+U",
@@ -162,7 +169,8 @@ export const catalogCommands = {
   },
   bulkApply: {
     label: "선택 상품 판매·부가세·추천기 표시·검토완료 일괄 적용",
-    keys: "Alt+B",
+    keys: "Alt+Shift+B",
+    shift: true,
     scope: "상품 목록",
     code: "KeyB",
     alt: true,
@@ -182,7 +190,7 @@ export const catalogCommands = {
     alt: true,
   },
   publish: {
-    label: "검증 후 게시 (기존 확인 절차 유지)",
+    label: "저장하고 적용",
     keys: "Ctrl/Cmd+Shift+Enter",
     scope: "상품 목록",
     code: "Enter",
@@ -253,11 +261,14 @@ export function dispatchCatalogCommand(e: KeyboardEvent) {
   )
     return;
   const editor = document.querySelector<HTMLElement>("[data-catalog-editor]");
-  if (!editor?.contains(target)) return;
-  // A product modal is its own scope; never execute a command behind it.
-  const product = editor.querySelector<HTMLElement>(
-    "[data-catalog-product-editor]",
+  const bulk = document.querySelector<HTMLElement>(
+    "[data-catalog-bulk-editor]",
   );
+  if (!editor?.contains(target) && !bulk?.contains(target)) return;
+  if (!editor) return;
+  // A product modal is its own scope; never execute a command behind it.
+  const product =
+    bulk || editor.querySelector<HTMLElement>("[data-catalog-product-editor]");
   const scope =
     product || target.closest<HTMLElement>("[data-catalog-scope]") || editor;
   for (const id of Object.keys(catalogCommands) as CatalogCommand[]) {

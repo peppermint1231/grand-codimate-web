@@ -50,5 +50,5 @@ export function catalogTime(at: string) {
   );
 }
 export function catalogVersionLabel(catalog: Catalog) {
-  return `${catalog.status === "published" ? "게시본 · 게시" : "초안 · 저장"} ${catalogTime(catalog.status === "published" ? catalog.publishedAt || catalog.updatedAt : catalog.updatedAt)} · ${catalog.id.slice(0, 8)}`;
+  return `${catalog.status === "published" ? "적용 기록" : "이전 편집본 · 적용 필요"} ${catalogTime(catalog.status === "published" ? catalog.publishedAt || catalog.updatedAt : catalog.updatedAt)} · ${catalog.id.slice(0, 8)}`;
 }

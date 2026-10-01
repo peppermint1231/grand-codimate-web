@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { emptyState, emptyQuote } from "../src/core/model";
 import { threeCatalogs, catalogAdmin } from "../tests/fixtures/catalogs";
+import { expandHospitalInsurancePrices } from "../src/core/insuranceCatalogExpansion";
 import { addHospitalInsurancePrices } from "../src/core/insuranceCatalog";
 import { applyCommand } from "../src/core/domain";
 import { diffStateChanges } from "../src/core/stateChanges";
@@ -17,7 +18,13 @@ try {
     let state = emptyState();
     state.users = [catalogAdmin];
     state.catalogs = threeCatalogs();
-    const insurance = addHospitalInsurancePrices(state.catalogs[1]);
+    const insurance = expandHospitalInsurancePrices(
+      addHospitalInsurancePrices(state.catalogs[1]),
+      { tax: "inclusive", zosterPerVisit: true },
+    );
+    insurance.products[0].active = false;
+    insurance.products[0].options[0].review = true;
+    const commands: string[] = [];
     insurance.status = "published";
     insurance.publishedAt = new Date().toISOString();
     state.catalogs[1] = insurance;
@@ -82,6 +89,7 @@ try {
         };
       else if (path === "/api/commands") {
         try {
+          commands.push(route.request().postDataJSON().type);
           const after = await applyCommand(
             state,
             catalogAdmin,
@@ -105,74 +113,80 @@ try {
       page.getByRole("button", { name: "홈페이지 갱신", exact: true }),
     ).toHaveCount(0);
     const rows = page.getByRole("region", { name: "상품 목록", exact: true });
-    await expect(rows.getByText("실비 불가", { exact: true })).toHaveCount(1);
-    await expect(rows.getByText("실비 청구 가능", { exact: true })).toHaveCount(
-      3,
-    );
-    await expect(rows.getByText(/공단 청구액 7,770원 별도/)).toBeVisible();
+    const filter = page.getByLabel("검토 항목", { exact: true });
+    await expect(rows.locator("article.catalog-product-row")).toHaveCount(11);
+    await filter.selectOption("unreviewed");
+    await expect(rows.locator("article.catalog-product-row")).toHaveCount(1);
+    await filter.selectOption("active");
+    await expect(rows.locator("article.catalog-product-row")).toHaveCount(10);
+    await filter.selectOption("inactive");
+    await expect(rows.locator("article.catalog-product-row")).toHaveCount(1);
+    await filter.selectOption("all");
     await page
       .getByRole("button", { name: "단가표 수정", exact: true })
       .click();
+    await rows.getByLabel("대상포진 수액 선택", { exact: true }).check();
+    await rows.getByLabel("덱세릴MD크림 선택", { exact: true }).check();
+    await rows
+      .getByRole("button", { name: "일괄 수정 (2개)", exact: true })
+      .click();
+    const modal = page.getByRole("dialog", {
+      name: "선택 상품 일괄 수정",
+      exact: true,
+    });
+    await modal
+      .getByLabel("일괄 메뉴 판매", { exact: true })
+      .selectOption("inactive");
+    await expect(
+      modal.getByRole("button", { name: "저장하고 적용", exact: true }),
+    ).toBeDisabled();
+    await modal.getByRole("button", {name:"닫기",exact:true}).focus();
+    await page.keyboard.press("Control+s");
+    assert.equal(commands.length, 0);
+    await page.keyboard.press("Alt+Shift+b");
+    await expect(
+      modal.getByRole("button", { name: "저장하고 적용", exact: true }),
+    ).toBeEnabled();
+    assert.equal(commands.length, 0);
+    await page.screenshot({
+      path: `artifacts/catalog-bulk-${viewport.width}.png`,
+    });
+    await modal
+      .getByRole("button", { name: "저장하고 적용", exact: true })
+      .click();
+    await expect(modal).toHaveCount(0);
+    await expect(page.locator(".catalog-save-status")).toContainText("적용됨");
+    assert.deepEqual(commands, ["catalog.apply"]);
+    assert.equal(
+      state.catalogs.at(-1)!.products.filter((p) => p.active).length,
+      8,
+    );
+    assert.equal(state.catalogs[1].products.filter((p) => p.active).length, 10);
+    await filter.selectOption("inactive");
+    await expect(rows.locator("article.catalog-product-row")).toHaveCount(3);
+    await filter.selectOption("all");
     await page
+      .getByRole("button", { name: "단가표 수정", exact: true })
+      .click();
+    await rows
       .getByRole("button", {
-        name: "조갑백선 피부밀봉붕대요법 (Fu 프로그램) 상세 편집",
+        name: "대상포진 수액 메뉴 판매 비활성",
         exact: true,
       })
       .click();
-    const editor = page.locator("[data-catalog-product-editor]");
-    await expect(editor.getByLabel("급여 구분", { exact: true })).toHaveValue(
-      "covered",
-    );
-    await expect(
-      editor.getByLabel("실비 청구 가능 여부", { exact: true }),
-    ).toHaveValue("eligible");
-    await expect(
-      editor.getByLabel("1회 · 1지 본인부담금 공단 청구액", { exact: true }),
-    ).toHaveValue("7770");
-    await editor
-      .getByLabel("실비 청구 가능 여부", { exact: true })
-      .selectOption("check");
-    await editor
+    await page
+      .locator(".catalog-product-save")
       .getByRole("button", { name: "저장하고 적용", exact: true })
       .click();
-    await expect(rows.getByText("실비 확인 필요", { exact: true })).toHaveCount(
-      2,
+    await expect(page.locator(".catalog-save-status")).toContainText("적용됨");
+    assert.equal(
+      state.catalogs.at(-1)!.products.find((p) => p.name === "대상포진 수액")
+        ?.active,
+      true,
     );
     await rows.scrollIntoViewIfNeeded();
     await page.screenshot({
-      path: `artifacts/insurance-catalog-${viewport.width}.png`,
-    });
-    // Open a synthetic consultation and verify the patient-facing price, with no real patient writes.
-    await page.getByRole("button", { name: "환자목록", exact: true }).click();
-    await page.getByText("보험검증환자", { exact: true }).first().click();
-    await page
-      .locator(".card")
-      .filter({
-        has: page.getByRole("heading", { name: "상담이력", exact: true }),
-      })
-      .locator("button.list-row")
-      .first()
-      .click();
-    await page.getByRole("button", { name: /02.*상담/ }).click();
-    await page
-      .getByLabel("상담 단가표 구분")
-      .getByRole("button", { name: "보험", exact: true })
-      .click();
-    const treatment = page
-      .locator(".product")
-      .filter({
-        has: page.getByText("조갑백선 피부밀봉붕대요법 (Fu 프로그램)", {
-          exact: true,
-        }),
-      });
-    await expect(treatment.getByText("급여", { exact: true })).toBeVisible();
-    await expect(
-      treatment.getByText("실비 청구 가능", { exact: true }),
-    ).toBeVisible();
-    await expect(treatment.getByText(/공단 청구액 7,770원 별도/)).toBeVisible();
-    await treatment.scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: `artifacts/insurance-consultation-${viewport.width}.png`,
+      path: `artifacts/catalog-filters-${viewport.width}.png`,
     });
     assert(
       await page.evaluate(
@@ -182,12 +196,13 @@ try {
     assert.deepEqual(errors, []);
     results.push({
       viewport,
-      coverageBadges: true,
-      reimbursementEditable: true,
-      claimSeparate: true,
-      consultationBadges: true,
+      filters: true,
+      selectionBulkModal: true,
+      oneStepSave: true,
+      oldVersionsPreserved: true,
+      perItemToggle: true,
       noOverflow: true,
-      errors,
+      commands,
     });
     await page.close();
   }
@@ -195,7 +210,7 @@ try {
   await browser.close();
 }
 await writeFile(
-  "artifacts/insurance-browser-0133.json",
+  "artifacts/catalog-browser-0134.json",
   JSON.stringify(results, null, 2),
 );
 console.log(JSON.stringify(results));

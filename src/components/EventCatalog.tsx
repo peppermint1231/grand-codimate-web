@@ -295,7 +295,8 @@ export function EventCatalogRefresh({
           </div>
           <p>
             현재 홈페이지 상품 {preview.catalog.products.length}개로 교체합니다.
-            가져온 가격을 확인한 뒤 한 번에 활성화·게시할 수 있습니다.
+            가져온 가격을 확인한 뒤 판매 상태를 확인하고 저장하면 상담에 바로
+            적용됩니다.
           </p>
           <label>
             홈페이지 부가세 미표기 상품
@@ -317,7 +318,8 @@ export function EventCatalogRefresh({
           </label>
           <p role="status">
             활성화 가능 {activation?.activated}개 · 확인 필요{" "}
-            {activation?.skipped.length}개. 홈페이지에 명시된 부가세는 유지하고, 미표기는 선택한 정책을 적용합니다.
+            {activation?.skipped.length}개. 홈페이지에 명시된 부가세는 유지하고,
+            미표기는 선택한 정책을 적용합니다.
           </p>
           {!!activation?.skipped.length && (
             <details className="event-sync-preview" open>
@@ -339,7 +341,7 @@ export function EventCatalogRefresh({
             </p>
           )}
           <div className="actions">
-            {[false, true].map((publish) => (
+            {[true].map((publish) => (
               <button
                 key={String(publish)}
                 className={publish ? "primary" : ""}
@@ -364,7 +366,7 @@ export function EventCatalogRefresh({
                       const skipped = activation?.skipped.length || 0;
                       setScan(undefined);
                       setProgress(
-                        `홈페이지 상품 ${preview.catalog.products.length}개 동기화 · ${activation?.activated}개 활성화 · ${skipped}개 확인 필요. ${publish ? "게시 완료: 상담에 반영했습니다." : "초안 저장 완료: ‘검증 후 게시’하면 상담에 반영됩니다."}`,
+                        `홈페이지 상품 ${preview.catalog.products.length}개 동기화 · ${activation?.activated}개 활성화 · ${skipped}개 확인 필요. 저장 완료: 상담에 반영했습니다.`,
                       );
                     } else
                       setError(
@@ -380,7 +382,7 @@ export function EventCatalogRefresh({
                 {busy
                   ? "저장 중…"
                   : publish
-                    ? "동기화·활성화 후 게시"
+                    ? "동기화하고 적용"
                     : "동기화·활성화 초안 저장"}
               </button>
             ))}

@@ -1,7 +1,7 @@
 {
-  "version": "0.13.3",
-  "versionCode": 56,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.3.apk",
-  "sha256": "65da8c8ce9c33f52a69619b76182c0df28534301e7e9baca7ad016a88ec037eb",
-  "notes": "보험 SSOT 급여·비급여 및 실비 청구 안내. 조갑백선 단가표 추가, 환자 본인부담금·공단 청구액 분리."
+  "version": "0.13.4",
+  "versionCode": 57,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.4.apk",
+  "sha256": "edfe4f9d70aaa5c084f063f524e0158aeb9579fbfecddf65458fe98548a5bb90",
+  "notes": "메뉴 판매 활성·비활성 및 저장·적용 통합, 미검토·활성·비활성 필터와 선택 옆 일괄수정. 보험 수액 패키지·초음파·MD·한발 레이저 추가."
 }

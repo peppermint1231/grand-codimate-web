@@ -5258,3 +5258,11 @@ html.custom-pull-refresh {
   padding: 0 6px;
   font-weight: 650;
 }
+
+.catalog-selection-toolbar { position:sticky; top:8px; z-index:12; background:#fff; border:1px solid #cdded8; border-radius:10px; padding:10px; margin:10px 0 16px; box-shadow:0 4px 14px #143e3510; }
+.catalog-selection-toolbar > span { font-size:.8rem; color:#60766e; }
+.catalog-bulk-dialog { width:min(850px,94vw); max-height:88dvh; overflow:auto; background:white; border-radius:16px; padding:20px; }
+.catalog-bulk-dialog .catalog-bulk-settings { margin:12px 0; }
+.catalog-bulk-footer { position:sticky; bottom:-20px; display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; background:white; padding:14px 0; border-top:1px solid #dfe8e3; }
+@media(max-width:600px) { .catalog-selection-toolbar { top:0; padding:8px; gap:6px; } .catalog-selection-toolbar button { padding:7px 9px; font-size:.8rem; min-height:38px; } .catalog-bulk-dialog { padding:14px; } .catalog-bulk-footer { bottom:-14px; } }
+.catalog-bulk-fieldset {border:0;min-width:0;margin:0;padding:0}

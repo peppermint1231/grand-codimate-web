@@ -1,3 +1,5 @@
+import { CatalogBulkEdit } from "./CatalogBulkEdit";
+import { PhotoModal } from "./PhotoBoard";
 import { InsuranceBadges, InsuranceClaimHint } from "./InsuranceInfo";
 import { eventOptionPrices } from "../core/eventPrices";
 import { EventSourceInfo, WebsiteSourceInfo, EventPrice } from "./EventCatalog";
@@ -25,6 +27,7 @@ export function CatalogProductRows({
   onChange,
   onEdit,
   onDelete,
+  onSave,
   work,
 }: {
   catalog: Catalog;
@@ -37,6 +40,7 @@ export function CatalogProductRows({
   onChange: (catalog: Catalog) => void;
   onEdit: (id: string) => void;
   onDelete: (ids: string[]) => void;
+  onSave?: () => Promise<boolean>;
   work: Work;
 }) {
   const drag = useRef<{
@@ -45,6 +49,9 @@ export function CatalogProductRows({
     y: number;
     moved: boolean;
   } | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
   const [dragLabel, setDragLabel] = useState("");
   const [allClosed, setAllClosed] = useState(false);
   const [exceptions, setExceptions] = useState<string[]>([]);
@@ -99,7 +106,7 @@ export function CatalogProductRows({
         </div>
       </div>
       {(editable || folderEditing) && (
-        <div className="button-row">
+        <div className="button-row catalog-selection-toolbar">
           <button
             type="button"
             {...catalogCommand("selectAll")}
@@ -127,6 +134,20 @@ export function CatalogProductRows({
           {editable && (
             <button
               type="button"
+              className="primary"
+              disabled={!selectedIds.length}
+              {...catalogCommand("bulkOpen")}
+              onClick={() => {
+                setBulkPending(false);
+                setBulkOpen(true);
+              }}
+            >
+              일괄 수정 ({selectedIds.length}개)
+            </button>
+          )}
+          {editable && (
+            <button
+              type="button"
               className="catalog-delete-button"
               {...catalogCommand("productsDelete")}
               disabled={!selectedIds.length}
@@ -137,9 +158,68 @@ export function CatalogProductRows({
             </button>
           )}
           <span>
-            {selectedIds.length}개 선택 · 이동 손잡이를 폴더로 끌어놓으세요
+            {selectedIds.length}개 선택
+            {selectedIds.some((id) => !products.some((p) => p.id === id))
+              ? ` · 현재 목록 밖 ${selectedIds.filter((id) => !products.some((p) => p.id === id)).length}개 포함`
+              : ""}
           </span>
         </div>
+      )}
+      {bulkOpen && editable && (
+        <PhotoModal
+          label="선택 상품 일괄 수정"
+          close={() => {
+            if (!bulkBusy) setBulkOpen(false);
+          }}
+          className="overlay catalog-bulk-overlay"
+        >
+          <section className="catalog-bulk-dialog" data-catalog-bulk-editor>
+            <div className="section-title">
+              <h2>선택 상품 일괄 수정</h2>
+              <button disabled={bulkBusy} onClick={() => setBulkOpen(false)}>
+                닫기
+              </button>
+            </div>
+            <fieldset disabled={bulkBusy} className="catalog-bulk-fieldset">
+              <CatalogBulkEdit
+                catalog={catalog}
+                ids={selectedIds}
+                onChange={onChange}
+                onSelection={onSelection}
+                onPendingChange={setBulkPending}
+              />
+            </fieldset>
+            {onSave && (
+              <div className="catalog-bulk-footer">
+                <button disabled={bulkBusy} onClick={() => setBulkOpen(false)}>
+                  목록에서 계속 수정
+                </button>
+                <button
+                  className="primary"
+                  {...catalogCommand("publish")}
+                  disabled={bulkBusy || bulkPending}
+                  title={
+                    bulkPending
+                      ? "선택 상품 일괄 적용을 먼저 누르세요"
+                      : undefined
+                  }
+                  onClick={() =>
+                    work(async () => {
+                      setBulkBusy(true);
+                      try {
+                        if (await onSave()) setBulkOpen(false);
+                      } finally {
+                        setBulkBusy(false);
+                      }
+                    })
+                  }
+                >
+                  {bulkBusy ? "저장 중…" : "저장하고 적용"}
+                </button>
+              </div>
+            )}
+          </section>
+        </PhotoModal>
       )}
       {dragLabel && (
         <div className="catalog-drag-status" role="status">
@@ -269,13 +349,20 @@ export function CatalogProductRows({
                   <b>{p.name}</b>
                   <small>
                     옵션 {p.options.length}개 ·{" "}
-                    {p.active
-                      ? "판매 중"
-                      : needsReview(p)
-                        ? "검토 대기"
-                        : "판매 비활성"}
+                    {p.active ? "판매 활성" : "판매 비활성"}
                   </small>
                 </button>
+                {editable && (
+                  <button
+                    type="button"
+                    className={"badge " + (p.active ? "P" : "H")}
+                    aria-label={`${p.name} 메뉴 판매 ${p.active ? "활성" : "비활성"}`}
+                    aria-pressed={p.active}
+                    onClick={() => change({ ...p, active: !p.active })}
+                  >
+                    {p.active ? "판매 활성" : "판매 비활성"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className={

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Catalog, Option } from "../core/model";
 import { bulkEditCatalogProductsResult } from "../core/catalogProducts";
 import { catalogCommand } from "../lib/catalogShortcuts";
@@ -8,11 +8,13 @@ export function CatalogBulkEdit({
   ids,
   onChange,
   onSelection,
+  onPendingChange,
 }: {
   catalog: Catalog;
   ids: string[];
   onChange: (catalog: Catalog) => void;
   onSelection: (ids: string[]) => void;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [tax, setTax] = useState<Option["tax"] | "">("");
   const [visibility, setVisibility] = useState("");
@@ -24,6 +26,9 @@ export function CatalogBulkEdit({
   >([]);
   const [error, setError] = useState("");
   const selected = catalog.products.filter((p) => ids.includes(p.id));
+  useEffect(() => {
+    onPendingChange?.(!!(tax || visibility || sale || review));
+  }, [tax, visibility, sale, review, onPendingChange]);
   const clearMessage = () => {
     setMessage("");
     setError("");
@@ -40,9 +45,9 @@ export function CatalogBulkEdit({
       </h3>
       <div className="catalog-bulk-fields">
         <label>
-          상담 판매
+          메뉴 판매
           <select
-            aria-label="일괄 상담 판매"
+            aria-label="일괄 메뉴 판매"
             value={sale}
             onChange={(e) => {
               setSale(e.target.value);
@@ -116,7 +121,7 @@ export function CatalogBulkEdit({
               if (result.appliedIds.length) onChange(result.catalog);
               setSkipped(result.skipped);
               setMessage(
-                `${result.appliedIds.length}개 상품 적용${review ? "·검토완료" : ""} · ${result.skipped.length}개 미적용. ${result.appliedIds.length ? "완료된 변경은 유지됩니다. 초안을 저장하세요." : "아래 항목을 보완한 뒤 다시 적용하세요."}`,
+                `${result.appliedIds.length}개 상품 적용${review ? "·검토완료" : ""} · ${result.skipped.length}개 미적용. ${result.appliedIds.length ? "완료된 변경은 유지됩니다. ‘저장하고 적용’을 누르세요." : "아래 항목을 보완한 뒤 다시 적용하세요."}`,
               );
               setTax("");
               setVisibility("");
@@ -133,8 +138,8 @@ export function CatalogBulkEdit({
       <p className="small">
         검색·폴더 밖의 선택 상품도 포함됩니다. 부가세와 검토완료는 모든 옵션에
         적용됩니다. 부가세 정책 변경 시 입력 가격은 유지됩니다. 상담에
-        표시하려면 상담 판매를 활성화하세요. 초안 저장 후 ‘검증 후 게시’를
-        눌러야 상담·맞춤 시술 찾기에 반영됩니다.
+        표시하려면 메뉴 판매를 활성화하세요. ‘저장하고 적용’을 누르면 상담·맞춤
+        시술 찾기에 반영됩니다.
       </p>
       {message && <p role="status">{message}</p>}
       {skipped.length > 0 && (

@@ -2,6 +2,7 @@ import { productFolderPaths } from "./catalogFolders";
 import type { Catalog, Product, Option } from "./model";
 export interface CatalogBulkChanges {
   active?: boolean;
+  priceKind?: "clinic" | "quote";
   tax?: Option["tax"];
   publicVisible?: boolean;
   completeReview?: boolean;
@@ -14,10 +15,11 @@ export function productReviewIssues(p: Product): string[] {
     const label = o.label.trim() || "이름 없는 옵션";
     if (!o.label.trim()) issues.push("옵션명 미입력");
     if (
-      o.price === null ||
-      !Number.isSafeInteger(o.price) ||
-      o.price < 0 ||
-      o.price > 1_000_000_000
+      (o.price === null && o.priceKind !== "quote") ||
+      (o.price !== null &&
+        (!Number.isSafeInteger(o.price) ||
+          o.price < 0 ||
+          o.price > 1_000_000_000))
     )
       issues.push(`${label}: 가격 미확정 또는 범위 오류`);
     if (o.tax === "unknown") issues.push(`${label}: 부가세 확인 필요`);
@@ -48,12 +50,20 @@ export function bulkEditCatalogProductsResult(
       options: p.options.map((o) => ({
         ...o,
         ...(changes.tax === undefined ? {} : { tax: changes.tax }),
+        ...(changes.priceKind === undefined
+          ? {}
+          : {
+              priceKind: changes.priceKind,
+              ...(changes.priceKind === "quote"
+                ? { price: null, regularPrice: undefined }
+                : {}),
+            }),
         ...(changes.completeReview || changes.active === true
           ? { review: false }
           : {}),
       })),
     };
-    if (changes.completeReview || changes.active === true) {
+    if (changes.completeReview || next.active) {
       const reasons = productReviewIssues(next);
       if (reasons.length) {
         skipped.push({ id: p.id, name: p.name, reasons });
@@ -124,10 +134,11 @@ export function matchesCatalogProductFilter(
         !p.options.length ||
         p.options.some(
           (o) =>
-            o.price === null ||
-            !Number.isSafeInteger(o.price) ||
-            o.price < 0 ||
-            o.price > 1_000_000_000,
+            (o.price === null && o.priceKind !== "quote") ||
+            (o.price !== null &&
+              (!Number.isSafeInteger(o.price) ||
+                o.price < 0 ||
+                o.price > 1_000_000_000)),
         )
       );
     case "details":

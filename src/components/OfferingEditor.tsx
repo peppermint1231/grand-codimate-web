@@ -1,23 +1,25 @@
-import type { Product } from "../core/model";
-import { offeringSummary } from "../core/offerings";
+import type { Offering } from "../core/offerings";
+import { offeringSummary, offeringErrors } from "../core/offerings";
 export function OfferingEditor({
-  product,
+  offering,
+  option = false,
   disabled,
   onChange,
 }: {
-  product: Product;
+  offering?: Offering;
+  option?: boolean;
   disabled: boolean;
-  onChange: (p: Product) => void;
+  onChange: (value: Offering | undefined) => void;
 }) {
-  const v = product.offering;
-  const change = (patch: Partial<NonNullable<Product["offering"]>>) =>
-    onChange({
-      ...product,
-      offering: { kind: "package", items: [], terms: "", ...v, ...patch },
-    });
+  const v = offering;
+  const errors = v ? offeringErrors(v) : [];
+  const change = (patch: Partial<Offering>) =>
+    onChange({ kind: "package", items: [], terms: "", ...v, ...patch });
   return (
     <details className="offering-editor">
-      <summary>패키지·멤버십 구조화 안내</summary>
+      <summary>
+        {option ? "옵션별 패키지·멤버십 구성" : "패키지·멤버십 구조화 안내"}
+      </summary>
       <label className="field">
         상품 유형
         <select
@@ -25,11 +27,13 @@ export function OfferingEditor({
           value={v?.kind || "single"}
           onChange={(e) =>
             e.target.value === "single"
-              ? onChange({ ...product, offering: undefined })
+              ? onChange(undefined)
               : change({ kind: e.target.value as "package" | "membership" })
           }
         >
-          <option value="single">일반 상품</option>
+          <option value="single">
+            {option ? "상품 공통 구성 사용" : "일반 상품"}
+          </option>
           <option value="package">패키지</option>
           <option value="membership">멤버십</option>
         </select>
@@ -38,7 +42,8 @@ export function OfferingEditor({
         <>
           <p className="small">
             상담과 견적서에 구성 안내로 표시됩니다. 회차 차감이나 포인트 결제는
-            자동으로 처리하지 않습니다.
+            자동으로 처리하지 않습니다. 이름·수량·단위를 작성하지 않은 빈 구성
+            행은 저장 시 제외됩니다.
           </p>
           {v.items.map((item, i) => (
             <div className="inline-fields" key={i}>
@@ -149,6 +154,11 @@ export function OfferingEditor({
               onChange={(e) => change({ terms: e.target.value })}
             />
           </label>
+          {errors.length > 0 && (
+            <p className="error" role="alert">
+              {errors.join(" / ")}
+            </p>
+          )}
           <pre className="offering-preview">{offeringSummary(v)}</pre>
         </>
       )}

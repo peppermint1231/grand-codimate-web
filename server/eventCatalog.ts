@@ -238,21 +238,67 @@ export async function fetchEventSource(
   if (item) u.searchParams.set("i", item);
   if (page) u.searchParams.set("page", page);
   try {
-    const response = await fetcher(u.href, {
-      redirect: "manual",
-      signal: AbortSignal.timeout(45000),
-      headers: { Accept: "text/html", "User-Agent": "Codimate-Event-Sync/1.0" },
-    });
-    if ([408, 429, 500, 502, 503, 504].includes(response.status))
+    let current = u;
+    let response: Response;
+    const signal = AbortSignal.timeout(45000);
+    for (let redirects = 0; ; redirects++) {
+      response = await fetcher(current.href, {
+        redirect: "manual",
+        signal,
+        headers: {
+          Accept: "text/html",
+          "User-Agent": "Codimate-Event-Sync/1.0",
+        },
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      await response.body?.cancel();
+      const location = response.headers.get("location");
+      if (!location || redirects >= 2)
+        throw new DomainError(
+          "홈페이지 페이지 이동 응답이 반복됩니다. 다시 확인합니다.",
+          503,
+        );
+      const next = new URL(location, current);
+      // Never follow an external/challenge/login URL or fetch a different item.
+      if (
+        next.origin !== EVENT_ORIGIN ||
+        next.pathname !== u.pathname ||
+        next.username ||
+        next.password ||
+        ["cate", "i", "page"].some(
+          (key) => next.searchParams.get(key) !== u.searchParams.get(key),
+        )
+      )
+        fail(
+          "홈페이지 이동 주소가 변경되었습니다. 홈페이지 갱신을 처음부터 다시 실행하세요.",
+        );
+      current = next;
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      if ([400, 404, 410].includes(response.status))
+        fail(
+          `홈페이지 페이지를 찾을 수 없습니다 (HTTP ${response.status}). 홈페이지 갱신을 처음부터 다시 실행하세요.`,
+        );
+      // Upstream 403/406 and CDN 52x errors can be temporary. Authentication
+      // errors from Codimate itself remain 401/403 and are never retried.
       throw new DomainError(
-        "홈페이지 응답이 지연되고 있습니다. 잠시 후 재시도합니다.",
+        `홈페이지가 일시적인 오류를 반환했습니다 (HTTP ${response.status}). 다시 확인합니다.`,
         503,
       );
+    }
+    const contentType =
+      response.headers.get("content-type")?.toLowerCase() || "";
     if (
-      !response.ok ||
-      !response.headers.get("content-type")?.includes("text/html")
-    )
-      fail("홈페이지 응답을 읽을 수 없습니다. 잠시 후 다시 시도하세요.");
+      !contentType.includes("text/html") &&
+      !contentType.includes("application/xhtml+xml")
+    ) {
+      await response.body?.cancel();
+      throw new DomainError(
+        "홈페이지가 HTML 페이지 대신 다른 응답을 반환했습니다. 다시 확인합니다.",
+        503,
+      );
+    }
     const reader = response.body?.getReader();
     if (!reader) fail("본문이 없습니다.");
     const chunks: Uint8Array[] = [];

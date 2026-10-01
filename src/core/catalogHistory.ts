@@ -100,6 +100,12 @@ export function catalogChanges(
         changes.push(`옵션 추가: ${p.name} / ${o.label}`);
         continue;
       }
+      if (JSON.stringify(prev.offering) !== JSON.stringify(o.offering))
+        changes.push(`옵션 패키지·멤버십 구성 변경: ${p.name} / ${o.label}`);
+      if (prev.priceKind !== o.priceKind)
+        changes.push(
+          `가격 방식 변경: ${p.name} / ${o.label} → ${o.priceKind === "quote" ? "상담 시 가격 입력" : "고정 가격"}`,
+        );
       if (prev.healthInsuranceAmount !== o.healthInsuranceAmount)
         changes.push(
           `공단 청구액: ${p.name} / ${o.label} (${prev.healthInsuranceAmount ?? "미지정"} → ${o.healthInsuranceAmount ?? "미지정"}원)`,

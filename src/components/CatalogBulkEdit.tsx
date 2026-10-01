@@ -19,6 +19,7 @@ export function CatalogBulkEdit({
   const [tax, setTax] = useState<Option["tax"] | "">("");
   const [visibility, setVisibility] = useState("");
   const [sale, setSale] = useState("");
+  const [priceKind, setPriceKind] = useState<"" | "clinic" | "quote">("");
   const [message, setMessage] = useState("");
   const [skipped, setSkipped] = useState<
     ReturnType<typeof bulkEditCatalogProductsResult>["skipped"]
@@ -26,8 +27,8 @@ export function CatalogBulkEdit({
   const [error, setError] = useState("");
   const selected = catalog.products.filter((p) => ids.includes(p.id));
   useEffect(() => {
-    onPendingChange?.(!!(tax || visibility || sale));
-  }, [tax, visibility, sale, onPendingChange]);
+    onPendingChange?.(!!(tax || visibility || sale || priceKind));
+  }, [tax, visibility, sale, priceKind, onPendingChange]);
   const clearMessage = () => {
     setMessage("");
     setError("");
@@ -56,6 +57,21 @@ export function CatalogBulkEdit({
             <option value="">변경 안 함</option>
             <option value="active">활성화 (상담 목록에 표시)</option>
             <option value="inactive">비활성화 (상담 목록에서 숨김)</option>
+          </select>
+        </label>
+        <label>
+          가격 방식
+          <select
+            aria-label="일괄 가격 방식"
+            value={priceKind}
+            onChange={(e) => {
+              setPriceKind(e.target.value as typeof priceKind);
+              clearMessage();
+            }}
+          >
+            <option value="">변경 안 함</option>
+            <option value="quote">상담 시 가격 입력</option>
+            <option value="clinic">고정 가격</option>
           </select>
         </label>
         <label>
@@ -94,12 +110,15 @@ export function CatalogBulkEdit({
           type="button"
           className="primary"
           {...catalogCommand("bulkApply")}
-          disabled={!selected.length || (!tax && !visibility && !sale)}
+          disabled={
+            !selected.length || (!tax && !visibility && !sale && !priceKind)
+          }
           onClick={() => {
             clearMessage();
             try {
               const result = bulkEditCatalogProductsResult(catalog, ids, {
                 ...(tax ? { tax } : {}),
+                ...(priceKind ? { priceKind } : {}),
                 ...(sale ? { active: sale === "active" } : {}),
                 ...(visibility ? { publicVisible: visibility === "show" } : {}),
               });
@@ -111,6 +130,7 @@ export function CatalogBulkEdit({
               setTax("");
               setVisibility("");
               setSale("");
+              setPriceKind("");
             } catch (e) {
               setError((e as Error).message);
             }
@@ -125,6 +145,13 @@ export function CatalogBulkEdit({
         표시하려면 메뉴 판매를 활성화하세요. ‘저장하고 적용’을 누르면 상담·맞춤
         시술 찾기에 반영됩니다.
       </p>
+      {priceKind === "quote" && (
+        <p className="small">
+          선택 상품의 모든 옵션에 적용되며 기존 가격·정가는 지워집니다.
+          장바구니에서 금액과 책정 사유를 입력해야 저장할 수 있습니다. 부가세는
+          별도로 지정하세요. 옵션 없는 안내 상품에는 적용되지 않습니다.
+        </p>
+      )}
       {message && <p role="status">{message}</p>}
       {skipped.length > 0 && (
         <div

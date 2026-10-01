@@ -1,9 +1,21 @@
 import { selectWebsiteOffers } from "../core/eventCatalog";
 import type { EventPage, EventItem, WebsiteEvent } from "../core/eventCatalog";
+const checkpointLifetime = 10 * 60_000;
+export const createWebsiteScanCheckpoint = () => ({
+  startedAt: Date.now(),
+  pages: new Map<string, WebsiteEvent>(),
+});
+export type WebsiteScanCheckpoint = ReturnType<
+  typeof createWebsiteScanCheckpoint
+>;
+const itemKey = (item: EventItem) =>
+  JSON.stringify([item.id, item.categoryId, item.categoryName, item.name]);
+
 export async function scanWebsiteCatalog(
   sourceLoad: (query: string) => Promise<EventPage | WebsiteEvent>,
   progress: (message: string) => void,
   signal?: AbortSignal,
+  checkpoint = createWebsiteScanCheckpoint(),
 ): Promise<WebsiteEvent[]> {
   const check = () => {
     if (signal?.aborted) throw new DOMException("갱신 취소", "AbortError");
@@ -11,6 +23,10 @@ export async function scanWebsiteCatalog(
   const load = (query: string) =>
     retryWebsitePage(() => sourceLoad(query), progress, signal);
   check();
+  if (Date.now() - checkpoint.startedAt > checkpointLifetime) {
+    checkpoint.pages.clear();
+    checkpoint.startedAt = Date.now();
+  }
   progress("홈페이지 분류 확인 중…");
   const root = (await load("")) as EventPage;
   if (!root.categories.length || root.categories.length > 80)
@@ -47,6 +63,11 @@ export async function scanWebsiteCatalog(
     throw new Error("홈페이지 상품이 비어 있습니다. 기존 단가표를 유지합니다.");
   const ordered = [...items.values()],
     events = new Array<WebsiteEvent>(ordered.length);
+  // Lists are always re-read on resume. Removed or moved banners cannot linger.
+  const keys = new Set(ordered.map(itemKey));
+  for (const key of checkpoint.pages.keys())
+    if (!keys.has(key)) checkpoint.pages.delete(key);
+  const failures: string[] = [];
   let next = 0,
     completed = 0,
     stopped = false;
@@ -54,24 +75,35 @@ export async function scanWebsiteCatalog(
     while (!stopped && next < ordered.length) {
       check();
       const index = next++,
-        item = ordered[index];
-      let event: WebsiteEvent;
+        item = ordered[index],
+        key = itemKey(item);
       try {
-        event = (await load(
-          `?category=${item.categoryId}&item=${item.id}`,
-        )) as WebsiteEvent;
+        const event =
+          checkpoint.pages.get(key) ||
+          ((await load(
+            `?category=${item.categoryId}&item=${item.id}`,
+          )) as WebsiteEvent);
+        if (
+          event.id !== item.id ||
+          event.categoryId !== item.categoryId ||
+          !Array.isArray(event.offers) ||
+          !event.offers.length
+        )
+          throw new Error("홈페이지 상세를 확인할 수 없습니다.");
+        check();
+        checkpoint.pages.set(key, structuredClone(event));
+        events[index] = structuredClone(event);
+        completed++;
       } catch (error) {
         check();
-        throw new Error(
+        if ([401, 403].includes((error as { status?: number }).status || 0))
+          throw error;
+        failures.push(
           `${item.categoryName} · ${item.name}: ${(error as Error).message}`,
         );
       }
-      if (event.id !== item.id || !Array.isArray(event.offers))
-        throw new Error("홈페이지 상세를 확인할 수 없습니다.");
-      events[index] = event;
-      completed++;
       progress(
-        `가격·기간·포스터 주소 확인 중 (${completed}/${ordered.length})`,
+        `가격·기간·포스터 주소 확인 중 (${completed}/${ordered.length})${failures.length ? ` · 재확인 필요 ${failures.length}개` : ""}`,
       );
     }
   };
@@ -86,6 +118,10 @@ export async function scanWebsiteCatalog(
   );
   if (failed) throw failed.reason;
   check();
+  if (failures.length)
+    throw new Error(
+      `${failures.length}개 배너를 확인하지 못했습니다. 완료한 ${completed}개는 잠시 보관했습니다.\n${failures.slice(0, 5).join("\n")}`,
+    );
   return events;
 }
 export async function scanWebsiteEvents(
@@ -113,7 +149,8 @@ export async function retryWebsitePage<T>(
       signal?.throwIfAborted();
       const e = error as Error & { status?: number };
       const transient =
-        [408, 429, 500, 502, 503, 504].includes(e.status || 0) ||
+        [408, 429].includes(e.status || 0) ||
+        (e.status !== undefined && e.status >= 500 && e.status <= 599) ||
         e instanceof TypeError ||
         e.name === "TimeoutError" ||
         /timeout/i.test(e.message);

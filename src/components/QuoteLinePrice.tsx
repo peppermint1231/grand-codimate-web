@@ -2,6 +2,8 @@ import { quoteLinePrices } from "../core/quotePrices";
 import { money, type Line, type Quote } from "../core/model";
 
 export function QuoteLinePrice({ line, quote }: { line: Line; quote?: Quote }) {
+  if (line.requiresCustomPrice && line.customPrice === undefined)
+    return <div className="quote-line-price">상담 가격 입력 필요</div>;
   const prices = quoteLinePrices(
     quote?.lines || [line],
     quote?.discount || { kind: "amount", value: 0 },

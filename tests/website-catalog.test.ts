@@ -317,6 +317,12 @@ it("restores independent beauty with revision guards and preserves old catalogue
   expect(restored.products).toEqual(beauty.products);
   expect(restored.websiteImport).toBeUndefined();
   expect(restored.id).toBe("detach-001-beauty");
+  expect(restored.version).toBe("2026-10-01T01:00:00Z-detach-001");
+  const again = await applyCommand(after, catalogAdmin, {
+    ...command, id: "detach-002", entityId: restored.id, baseRev: restored.rev,
+    payload: { basePublishedId: restored.id, publish: true },
+  }, "2026-10-01T01:00:01Z");
+  expect(latestCatalog(again, "미용")?.version).not.toBe(restored.version);
   expect(restored.status).toBe("published");
   expect(after.catalogs.slice(0, state.catalogs.length)).toEqual(
     state.catalogs,

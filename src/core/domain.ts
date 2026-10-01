@@ -1432,7 +1432,7 @@ export async function applyCommand(
         id: cmd.id + "-beauty",
         authorId: user.id,
         status: p.publish === true ? "published" : "draft",
-        version: "미용 독립 구성 · " + now.slice(0, 10),
+        version: p.publish === true ? now + "-" + cmd.id : "미용 독립 구성 · " + now.slice(0, 10),
       });
       delete candidate.publishedAt;
       if (p.publish === true) candidate.publishedAt = now;

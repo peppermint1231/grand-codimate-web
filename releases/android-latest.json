@@ -1,7 +1,7 @@
 {
-  "version": "0.13.0",
-  "versionCode": 53,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.0.apk",
-  "sha256": "e2d864c993307e1d32f39760bf2815883a978661e29dbcb04b96a1c4adaa7cdf",
+  "version": "0.13.1",
+  "versionCode": 54,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.1.apk",
+  "sha256": "6b2b047372ebaf97e8c500830c9e7814569b56a2a96a56ab943a0d7885f4f417",
   "notes": "홈페이지 SSOT 전체 상품 연동·미용 독립 관리. 미검토 항목 선택, 일괄 검토 부분 적용과 미완료 사유 안내."
 }

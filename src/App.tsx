@@ -5216,115 +5216,120 @@ function CatalogView({
           }}
         />
       )}
-      <div className="card">
-        <div className="table-toolbar">
-          <select
-            aria-label="단가표 버전"
-            disabled={!!folderDraft}
-            value={current?.id || ""}
-            onChange={(e) => {
-              setDraft(s.catalogs.find((c) => c.id === e.target.value));
-              setSelected("");
-              setBulkIds([]);
-            }}
-          >
-            <option value="">단가표 선택</option>
-            {s.catalogs
-              .filter((c) => catalogBook(c) === book)
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {catalogVersionLabel(c)}
-                </option>
-              ))}
-            {draft && !s.catalogs.some((c) => c.id === draft.id) && (
-              <option value={draft.id}>저장 전 편집 내용</option>
-            )}
-          </select>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={includeInactive}
-              onChange={(e) => setIncludeInactive(e.target.checked)}
-            />
-            비활성 포함 내보내기
-          </label>
-          {can && !folderDraft && (
-            <button
-              onClick={() => {
-                const now = new Date().toISOString();
-                setDraft({
-                  id: crypto.randomUUID(),
-                  rev: 0,
-                  createdAt: now,
-                  updatedAt: now,
-                  schemaVersion: 1,
-                  book,
-                  version: `${catalogBookLabel(book)} 초안`,
-                  status: "draft",
-                  products: [],
-                  folders: [],
-                  references: [],
-                });
+      <details key={book} className="card catalog-advanced">
+        <summary>
+          추가 관리 <small>단가표 버전 · 새 메뉴 구성 · 수정 이력</small>
+        </summary>
+        <div className="card">
+          <div className="table-toolbar">
+            <select
+              aria-label="단가표 버전"
+              disabled={!!folderDraft}
+              value={current?.id || ""}
+              onChange={(e) => {
+                setDraft(s.catalogs.find((c) => c.id === e.target.value));
+                setSelected("");
+                setBulkIds([]);
               }}
             >
-              새 {catalogBookLabel(book)} 메뉴 구성
-            </button>
-          )}
-          {current && can && !folderDraft && (
-            <button
-              onClick={() =>
-                setDraft({
-                  ...structuredClone(current),
-                  id: crypto.randomUUID(),
-                  rev: 0,
-                  status: "draft",
-                  publishedAt: undefined,
-                })
-              }
-            >
-              복사해서 수정
-            </button>
+              <option value="">단가표 선택</option>
+              {s.catalogs
+                .filter((c) => catalogBook(c) === book)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {catalogVersionLabel(c)}
+                  </option>
+                ))}
+              {draft && !s.catalogs.some((c) => c.id === draft.id) && (
+                <option value={draft.id}>저장 전 편집 내용</option>
+              )}
+            </select>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={includeInactive}
+                onChange={(e) => setIncludeInactive(e.target.checked)}
+              />
+              비활성 포함 내보내기
+            </label>
+            {can && !folderDraft && (
+              <button
+                onClick={() => {
+                  const now = new Date().toISOString();
+                  setDraft({
+                    id: crypto.randomUUID(),
+                    rev: 0,
+                    createdAt: now,
+                    updatedAt: now,
+                    schemaVersion: 1,
+                    book,
+                    version: `${catalogBookLabel(book)} 초안`,
+                    status: "draft",
+                    products: [],
+                    folders: [],
+                    references: [],
+                  });
+                }}
+              >
+                새 {catalogBookLabel(book)} 메뉴 구성
+              </button>
+            )}
+            {current && can && !folderDraft && (
+              <button
+                onClick={() =>
+                  setDraft({
+                    ...structuredClone(current),
+                    id: crypto.randomUUID(),
+                    rev: 0,
+                    status: "draft",
+                    publishedAt: undefined,
+                  })
+                }
+              >
+                복사해서 수정
+              </button>
+            )}
+          </div>
+          {current && (
+            <div className="catalog-summary">
+              <span>{current.products.length}개 상품 후보</span>
+              <span>
+                {current.products.reduce(
+                  (n, p) => n + p.options.filter((o) => o.review).length,
+                  0,
+                )}
+                개 가격 확인 필요
+              </span>
+              <span>{current.references.length}개 원본 시트</span>
+            </div>
           )}
         </div>
         {current && (
-          <div className="catalog-summary">
-            <span>{current.products.length}개 상품 후보</span>
-            <span>
-              {current.products.reduce(
-                (n, p) => n + p.options.filter((o) => o.review).length,
-                0,
-              )}
-              개 가격 확인 필요
-            </span>
-            <span>{current.references.length}개 원본 시트</span>
-          </div>
+          <CatalogHistory
+            state={s}
+            catalog={current}
+            disabled={unsaved}
+            canEdit={can}
+            work={work}
+            restore={async (revisionId, base) => {
+              if (
+                await send(
+                  "catalog.restore",
+                  { revisionId, basePublishedId: latest?.id || "" },
+                  base.id,
+                  base.rev,
+                )
+              ) {
+                setDraft(undefined);
+                setCategory("");
+                setSelected("");
+                return true;
+              }
+              return false;
+            }}
+          />
         )}
-      </div>
-      {current && (
-        <CatalogHistory
-          state={s}
-          catalog={current}
-          disabled={unsaved}
-          canEdit={can}
-          work={work}
-          restore={async (revisionId, base) => {
-            if (
-              await send(
-                "catalog.restore",
-                { revisionId, basePublishedId: latest?.id || "" },
-                base.id,
-                base.rev,
-              )
-            ) {
-              setDraft(undefined);
-              setCategory("");
-              setSelected("");
-              return true;
-            }
-            return false;
-          }}
-        />
-      )}
+      </details>
       <div
         className="catalog-admin catalog-resizable"
         ref={splitRef}

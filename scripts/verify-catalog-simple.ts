@@ -113,6 +113,12 @@ try {
       page.getByRole("button", { name: "홈페이지 갱신", exact: true }),
     ).toHaveCount(0);
     const rows = page.getByRole("region", { name: "상품 목록", exact: true });
+    await expect(
+      page.getByLabel("단가표 버전", { exact: true }),
+    ).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "복사해서 수정", exact: true }),
+    ).not.toBeVisible();
     const filter = page.getByLabel("검토 항목", { exact: true });
     await expect(rows.locator("article.catalog-product-row")).toHaveCount(11);
     await filter.selectOption("unreviewed");
@@ -193,6 +199,7 @@ try {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     );
+    await page.locator(".catalog-advanced > summary").click();
     await page
       .getByLabel("단가표 버전", { exact: true })
       .selectOption(state.catalogs[1].id);
@@ -205,6 +212,7 @@ try {
     assert.deepEqual(errors, []);
     results.push({
       viewport,
+      advancedCollapsedByDefault: true,
       filters: true,
       selectionBulkModal: true,
       oneStepSave: true,

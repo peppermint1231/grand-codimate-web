@@ -140,7 +140,7 @@ try {
     await expect(
       modal.getByRole("button", { name: "저장하고 적용", exact: true }),
     ).toBeDisabled();
-    await modal.getByRole("button", {name:"닫기",exact:true}).focus();
+    await modal.getByRole("button", { name: "닫기", exact: true }).focus();
     await page.keyboard.press("Control+s");
     assert.equal(commands.length, 0);
     await page.keyboard.press("Alt+Shift+b");
@@ -192,6 +192,15 @@ try {
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
+    );
+    await page
+      .getByLabel("단가표 버전", { exact: true })
+      .selectOption(state.catalogs[1].id);
+    await expect(page.locator(".catalog-save-status")).toContainText(
+      "이전 기록",
+    );
+    await expect(page.locator(".catalog-save-status")).toContainText(
+      "현재 상담에 적용된 버전이 아닙니다",
     );
     assert.deepEqual(errors, []);
     results.push({

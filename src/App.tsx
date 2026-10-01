@@ -5408,7 +5408,9 @@ function CatalogView({
                   {editable
                     ? "수정 중"
                     : current.status === "published"
-                      ? "적용됨"
+                      ? current.id === latest?.id
+                        ? "적용됨"
+                        : "이전 기록"
                       : "저장·적용 필요"}
                 </strong>
                 <small>
@@ -5419,7 +5421,7 @@ function CatalogView({
                 <small>
                   {editable || current.status === "draft"
                     ? "저장하고 적용하면 상담의 메뉴 목록에 반영됩니다."
-                    : `${catalogTime(current.publishedAt || current.updatedAt)} · 저장 완료`}
+                    : `${catalogTime(current.publishedAt || current.updatedAt)} · ${current.id === latest?.id ? "저장 완료" : "현재 상담에 적용된 버전이 아닙니다"}`}
                 </small>
               </div>
               {editable ? (

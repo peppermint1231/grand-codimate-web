@@ -2,6 +2,6 @@
   "version": "0.13.4",
   "versionCode": 57,
   "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.4.apk",
-  "sha256": "edfe4f9d70aaa5c084f063f524e0158aeb9579fbfecddf65458fe98548a5bb90",
+  "sha256": "dd2e15760e5f26b97efd3073be5762c63740a7caab50910bb0ae5e4bd5dee2c8",
   "notes": "메뉴 판매 활성·비활성 및 저장·적용 통합, 미검토·활성·비활성 필터와 선택 옆 일괄수정. 보험 수액 패키지·초음파·MD·한발 레이저 추가."
 }

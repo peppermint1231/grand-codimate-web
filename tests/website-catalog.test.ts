@@ -5,6 +5,7 @@ import { emptyState, latestCatalog, type Command } from "../src/core/model";
 import {
   mergeWebsiteCatalogs,
   mergeHomepageCatalog,
+  activateHomepageCatalog,
   independentBeautyCatalog,
   workingCatalog,
   websitePagesSchema,
@@ -247,7 +248,7 @@ it("keeps the matched option when a multi-option product and labels are renamed"
   });
 });
 
-it("imports ordinary and event offers together, preserving manual placement and review on repeat scans", () => {
+it("mirrors current website offers and prices while preserving placement and confirmed VAT", () => {
   const { beauty, event, page } = fixture();
   const before = structuredClone(beauty);
   const first = mergeHomepageCatalog(beauty, event, [page], now);
@@ -261,12 +262,12 @@ it("imports ordinary and event offers together, preserving manual placement and 
   p.active = true;
   const again = mergeHomepageCatalog(beauty, first.catalog, [page], now);
   expect(again.summary.added).toBe(0);
-  expect(again.summary.unchanged).toBe(3);
+  expect(again.summary.unchanged).toBe(2);
   expect(again.catalog.products.find((x) => x.id === p.id)).toMatchObject({
-    name: "수동 이름",
-    active: true,
+    name: page.offers[0].name,
+    active: false,
     folderId: p.folderId,
-    options: [{ review: false, tax: "inclusive" }],
+    options: [{ review: true, tax: "inclusive" }],
   });
   const without = mergeHomepageCatalog(
     beauty,
@@ -274,10 +275,9 @@ it("imports ordinary and event offers together, preserving manual placement and 
     [{ ...page, offers: page.offers.slice(1) }],
     now,
   );
-  expect(without.catalog.products.find((x) => x.id === p.id)).toMatchObject({
-    active: false,
-    webEvent: { missing: true },
-  });
+  expect(without.catalog.products.find((x) => x.id === p.id)).toBeUndefined();
+  expect(without.summary.missing).toBe(1);
+  expect(without.catalog.products).toHaveLength(2);
   expect(beauty).toEqual(before);
 });
 it("separates website additions from beauty while keeping hospital folders, product IDs, options and prices", () => {
@@ -318,10 +318,18 @@ it("restores independent beauty with revision guards and preserves old catalogue
   expect(restored.websiteImport).toBeUndefined();
   expect(restored.id).toBe("detach-001-beauty");
   expect(restored.version).toBe("2026-10-01T01:00:00Z-detach-001");
-  const again = await applyCommand(after, catalogAdmin, {
-    ...command, id: "detach-002", entityId: restored.id, baseRev: restored.rev,
-    payload: { basePublishedId: restored.id, publish: true },
-  }, "2026-10-01T01:00:01Z");
+  const again = await applyCommand(
+    after,
+    catalogAdmin,
+    {
+      ...command,
+      id: "detach-002",
+      entityId: restored.id,
+      baseRev: restored.rev,
+      payload: { basePublishedId: restored.id, publish: true },
+    },
+    "2026-10-01T01:00:01Z",
+  );
   expect(latestCatalog(again, "미용")?.version).not.toBe(restored.version);
   expect(restored.status).toBe("published");
   expect(after.catalogs.slice(0, state.catalogs.length)).toEqual(
@@ -356,4 +364,102 @@ it("restores independent beauty with revision guards and preserves old catalogue
   );
   expect(workingCatalog(draft, "미용")?.products[0].name).toBe("미게시 수정");
   expect(latestCatalog(draft, "미용")?.id).toBe(mixed.id);
+});
+
+it("drops missing, manual and duplicate rows without mutating published history, and restores source prices", () => {
+  const { beauty, event, page } = fixture();
+  const first = mergeHomepageCatalog(beauty, event, [page], now).catalog;
+  first.products.push(
+    { ...first.products[0], id: "duplicate" },
+    { ...event.products[0], id: "manual" },
+  );
+  first.products[1].options[0].price = 999;
+  first.products[1].options[0].regularPrice = 1000;
+  const before = structuredClone(first);
+  const next = mergeHomepageCatalog(
+    beauty,
+    first,
+    [{ ...page, offers: page.offers.slice(1) }],
+    now,
+  );
+  expect(next.catalog.products).toHaveLength(2);
+  expect(next.summary.missing).toBe(3);
+  expect(next.catalog.products[0].options[0]).toMatchObject({ price: 12000 });
+  expect(next.catalog.products[0].options[0].regularPrice).toBeUndefined();
+  expect(first).toEqual(before);
+});
+it("activates confirmed website prices and explicitly chosen VAT without hiding unresolved prices or periods", () => {
+  const { beauty, page } = fixture();
+  page.offers[0].tax = "exclusive" as any;
+  page.offers[1].price = null as any;
+  const c = mergeHomepageCatalog(beauty, undefined, [page], now).catalog;
+  const before = structuredClone(c);
+  const options = {
+    activate: true,
+    publish: false,
+    unknownTax: "unknown" as const,
+  };
+  const first = activateHomepageCatalog(c, options, now);
+  expect(first.activated).toBe(1);
+  expect(first.skipped).toHaveLength(2);
+  expect(first.catalog.products[0].options[0].review).toBe(false);
+  const next = activateHomepageCatalog(
+    c,
+    { ...options, unknownTax: "inclusive" },
+    now,
+  );
+  expect(next.activated).toBe(2);
+  expect(next.skipped).toHaveLength(1);
+  expect(next.catalog.products[0].options[0].tax).toBe("exclusive");
+  expect(next.catalog.products[2].options[0].tax).toBe("inclusive");
+  expect(c).toEqual(before);
+  c.products[0].webEvent!.endsOn = "2025-01-01";
+  expect(activateHomepageCatalog(c, options, now).skipped[0].reasons).toContain(
+    "게시 기간 종료",
+  );
+});
+it("atomically synchronizes, activates and publishes with permission/revision guards and preserved history", async () => {
+  const { state, command, event, beauty } = fixture();
+  command.payload.options = {
+    activate: true,
+    publish: true,
+    unknownTax: "exclusive",
+  };
+  const after = await applyCommand(state, catalogAdmin, command, now);
+  const c = latestCatalog(after, "이벤트")!;
+  expect(c.status).toBe("published");
+  expect(c.products).toHaveLength(3);
+  expect(
+    c.products.every((p) => p.active && p.options.every((o) => !o.review)),
+  ).toBe(true);
+  expect(after.catalogs.find((c) => c.id === event.id)).toEqual(event);
+  expect(latestCatalog(after, "미용")).toEqual(beauty);
+  validateCatalog(c, true);
+  command.payload.options = {
+    activate: true,
+    publish: true,
+    unknownTax: "unknown",
+  };
+  await expect(applyCommand(state, catalogAdmin, command, now)).rejects.toThrow(
+    "활성화할 수 있는 상품",
+  );
+});
+
+it("defaults omitted website VAT to the hospital-approved exclusive policy, preserving explicit website VAT", () => {
+  const { beauty, page } = fixture();
+  page.offers[0].tax = "inclusive" as any;
+  const c = mergeHomepageCatalog(beauty, undefined, [page], now).catalog;
+  c.products[1].options[0].tax = "inclusive";
+  c.products[1].options[0].review = false;
+  const result = activateHomepageCatalog(
+    c,
+    { activate: true, publish: false, unknownTax: "exclusive" },
+    now,
+  );
+  expect(result.activated).toBe(3);
+  expect(result.catalog.products.map((p) => p.options[0].tax)).toEqual([
+    "inclusive",
+    "exclusive",
+    "exclusive",
+  ]);
 });

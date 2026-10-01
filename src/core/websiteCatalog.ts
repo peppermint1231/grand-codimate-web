@@ -11,10 +11,12 @@ import {
   EVENT_ORIGIN,
   isEventBanner,
   safeEventImage,
+  eventAvailability,
   mergeWebsiteEvents,
   type WebsiteEvent,
 } from "./eventCatalog";
 import { addMissingWebsiteBeauty } from "./websiteBeauty";
+import { productReviewIssues } from "./catalogProducts";
 import { withBeautyRootLabels } from "./catalogClassification";
 
 export const workingCatalog = (state: State, book: "미용" | "이벤트") =>
@@ -289,7 +291,16 @@ export type WebsiteBases = Record<
   { id: string; rev: number; publishedId: string }
 >;
 
-/** Website refresh has one writable destination; beauty is only the classification reference. */
+export const homepageSyncOptionsSchema = z.object({
+  activate: z.boolean().default(false),
+  publish: z.boolean().default(false),
+  unknownTax: z
+    .enum(["unknown", "inclusive", "exclusive", "exempt"])
+    .default("exclusive"),
+});
+export type HomepageSyncOptions = z.infer<typeof homepageSyncOptionsSchema>;
+
+/** Replace the working product set with the complete website scan; old versions remain immutable. */
 export function mergeHomepageCatalog(
   beauty: Catalog,
   base: Catalog | undefined,
@@ -300,12 +311,142 @@ export function mergeHomepageCatalog(
     throw new Error("기준 미용 SSOT가 필요합니다.");
   if (!pages.length || !pages.some((p) => p.offers.length))
     throw new Error("홈페이지 전체 조회가 완료되지 않았습니다.");
-  const result = mergeWebsiteEvents(base, pages, now, beauty, false, "all");
+  // Start fresh so removed, duplicated and manually inserted products cannot linger.
+  const result = mergeWebsiteEvents(
+    base && { ...base, products: [] },
+    pages,
+    now,
+    beauty,
+    false,
+    "all",
+  );
+  const oldBySource = new Map(
+    (base?.products || [])
+      .filter((p) => p.webEvent)
+      .map((p) => [p.webEvent!.eventId + ":" + p.webEvent!.offerId, p]),
+  );
+  const retained = new Set<string>();
+  result.summary.added = result.summary.changed = result.summary.unchanged = 0;
+  for (const product of result.catalog.products) {
+    const info = product.webEvent!;
+    const old = oldBySource.get(info.eventId + ":" + info.offerId);
+    if (!old) {
+      result.summary.added++;
+      continue;
+    }
+    retained.add(old.id);
+    product.id = old.id;
+    product.createdAt = old.createdAt;
+    product.rev = old.rev + 1;
+    product.publicVisible = old.publicVisible;
+    if (
+      result.catalog.folderTree?.some((f) => f.id === old.folderId && !f.linkTo)
+    )
+      product.folderId = old.folderId;
+    const option = product.options[0],
+      prior = old.options[0];
+    if (prior) {
+      option.id = prior.id;
+      // Keep an explicitly reviewed tax decision only when the source still omits VAT.
+      if (
+        option.tax === "unknown" &&
+        !prior.review &&
+        prior.tax !== "unknown" &&
+        old.websiteListings?.[0]?.tax === "unknown"
+      )
+        option.tax = prior.tax;
+    }
+    const same =
+      old.webEvent?.sourceSignature === info.sourceSignature &&
+      old.name === product.name &&
+      old.options.length === 1 &&
+      prior?.price === option.price &&
+      prior?.regularPrice === undefined;
+    if (same) {
+      result.summary.unchanged++;
+      option.review = prior.review;
+      product.active = old.active && eventAvailability(info, now) === "current";
+    } else result.summary.changed++;
+  }
+  result.summary.missing = (base?.products || []).filter(
+    (p) => !retained.has(p.id),
+  ).length;
+  // Discard empty generated folders, including nested generated folders from previous scans.
+  let nodes = result.catalog.folderTree || [];
+  while (true) {
+    const next = nodes.filter(
+      (f) =>
+        !f.id.startsWith("grand4-folder-") ||
+        result.catalog.products.some((p) => p.folderId === f.id) ||
+        nodes.some((n) => n.parentId === f.id || n.linkTo === f.id),
+    );
+    if (next.length === nodes.length) break;
+    nodes = next;
+  }
+  result.catalog.folderTree = nodes;
+  result.summary.review = result.catalog.products.filter((p) =>
+    p.options.some((o) => o.review),
+  ).length;
   result.catalog = withBeautyRootLabels(result.catalog, beauty);
   checkWebsiteListings(result.catalog, pages, now);
   result.catalog.websiteImport!.scope = "all";
   result.catalog.version = "홈페이지 갱신 · " + now.slice(0, 10);
   return result;
+}
+
+/** Explicit one-step activation never invents a missing price or VAT policy. */
+export function activateHomepageCatalog(
+  catalog: Catalog,
+  options: HomepageSyncOptions,
+  now = new Date().toISOString(),
+) {
+  const candidate = structuredClone(catalog);
+  const skipped: { id: string; name: string; reasons: string[] }[] = [];
+  let activated = 0;
+  for (const product of candidate.products) {
+    for (const option of product.options) {
+      if (
+        option.tax === "unknown" ||
+        (options.unknownTax !== "unknown" &&
+          product.websiteListings?.some(
+            (link) =>
+              !link.missing &&
+              link.optionId === option.id &&
+              link.tax === "unknown",
+          ))
+      )
+        option.tax = options.unknownTax;
+    }
+    const reasons = productReviewIssues(product);
+    const availability = eventAvailability(product.webEvent, now);
+    if (!product.webEvent || product.webEvent.missing)
+      reasons.push("현재 홈페이지 상품이 아닙니다");
+    if (availability === "ended") reasons.push("게시 기간 종료");
+    if (availability === "upcoming") reasons.push("게시 시작 전");
+    const sourceIssues = product.options.flatMap((o) =>
+      o.issues.filter(
+        (i) =>
+          i !== "홈페이지 가져오기 검토" &&
+          i !== "부가세 미표기 · 항목별 확인 필요",
+      ),
+    );
+    reasons.push(...sourceIssues);
+    product.active = !reasons.length;
+    if (reasons.length)
+      skipped.push({
+        id: product.id,
+        name: product.name,
+        reasons: [...new Set(reasons)],
+      });
+    else {
+      activated++;
+      for (const option of product.options) {
+        option.review = false;
+        option.issues = [];
+      }
+    }
+  }
+  return { catalog: candidate, activated, skipped };
 }
 
 /** Restore the hospital-maintained book without rewriting its products, prices or taxonomy. */

@@ -3695,7 +3695,8 @@ function ConsultationView({
                 {newestBook && newestBook.version !== catalog?.version && (
                   <div className="catalog-product-save">
                     <small>
-                      이 상담은 이전 {catalogBookLabel(book)} 단가표를 사용하고 있습니다.
+                      이 상담은 이전 {catalogBookLabel(book)} 단가표를 사용하고
+                      있습니다.
                     </small>
                     <button
                       type="button"
@@ -3717,8 +3718,9 @@ function ConsultationView({
                       (line) => (line.book || "미용") === book,
                     ) && (
                       <small>
-                        장바구니의 {catalogBookLabel(book)} 상품을 먼저 제거하면 불러올 수
-                        있습니다. 다른 단가표의 장바구니 상품은 유지됩니다.
+                        장바구니의 {catalogBookLabel(book)} 상품을 먼저 제거하면
+                        불러올 수 있습니다. 다른 단가표의 장바구니 상품은
+                        유지됩니다.
                       </small>
                     )}
                   </div>
@@ -5148,11 +5150,11 @@ function CatalogView({
             },
           }}
           disabled={unsaved || !!folderDraft}
-          onImport={async (pages, bases) => {
+          onImport={async (pages, bases, options) => {
             if (
               await send(
                 "catalog.homepage.import",
-                { pages, bases, complete: true },
+                { pages, bases, options, complete: true },
                 crypto.randomUUID(),
               )
             ) {
@@ -5505,7 +5507,7 @@ function CatalogView({
           )}
           {editable && current && (
             <CatalogBulkEdit
-                  onSelection={setBulkIds}
+              onSelection={setBulkIds}
               key={`${book}:${current.id}:${current.rev}`}
               catalog={current}
               ids={bulkIds}

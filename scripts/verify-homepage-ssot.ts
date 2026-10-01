@@ -99,7 +99,7 @@ try {
           configured: true,
           needsSetup: false,
           mode: "local-development",
-          version: "0.13.0",
+          version: "0.13.2",
         };
       else if (u.pathname === "/api/state")
         result = { state, user, driveConnected: true, pending: 0 };
@@ -175,84 +175,56 @@ try {
       "신규 3개",
     );
     assert.equal(commands, 0);
+    await expect(refresh).toContainText("이전 상품 제거 3개");
+    await expect(refresh.getByLabel("홈페이지 미표기 부가세 정책")).toHaveValue(
+      "exclusive",
+    );
+    await expect(refresh).toContainText("활성화 가능 3개 · 확인 필요 0개");
     await refresh
-      .getByRole("button", { name: "홈페이지 갱신 초안 저장", exact: true })
+      .getByLabel("홈페이지 미표기 부가세 정책")
+      .selectOption("unknown");
+    await expect(refresh).toContainText("활성화 가능 2개 · 확인 필요 1개");
+    await expect(refresh).toContainText("부가세 확인 필요");
+    await refresh
+      .getByLabel("홈페이지 미표기 부가세 정책")
+      .selectOption("exclusive");
+    await expect(refresh).toContainText("활성화 가능 3개 · 확인 필요 0개");
+    await refresh
+      .getByRole("button", { name: "동기화·활성화 후 게시", exact: true })
       .click();
-    await expect(refresh).toContainText(
-      "홈페이지 SSOT 갱신 초안을 저장했습니다",
-    );
+    await expect(refresh).toContainText("게시 완료: 상담에 반영했습니다.");
     assert.equal(commands, 1);
-    assert.deepEqual(state.catalogs[0], beautyBefore);
-    assert.equal(workingCatalog(state, "이벤트")!.products.length, 6);
-    const rows = page.getByRole("region", { name: "상품 목록", exact: true });
-    await rows.getByRole("button", { name: "선택 해제", exact: true }).click();
-    await page.keyboard.press("Alt+u");
-    await expect(
-      rows.locator('input[aria-label$=" 선택"]:checked'),
-    ).toHaveCount(5);
-    const bulk = page.getByRole("region", {
-      name: "선택 상품 일괄 수정",
-      exact: true,
-    });
-    await bulk
-      .getByRole("checkbox", { name: "선택 상품 일괄 검토완료", exact: true })
-      .check();
-    await bulk
-      .getByRole("button", { name: "선택 상품 일괄 적용", exact: true })
-      .click();
-    await expect(bulk.getByRole("status")).toContainText(
-      "3개 상품 적용·검토완료 · 2개 미적용",
-    );
-    const remaining = bulk.getByRole("region", {
-      name: "일괄 적용 미완료 상품",
-    });
-    await expect(remaining).toContainText("부가세 확인 필요");
-    await expect(
-      rows.getByRole("button", { name: "미검토 항목만 선택 (2개)" }),
-    ).toBeEnabled();
-    await remaining
-      .getByRole("button", { name: "미완료 상품만 선택 (2개)" })
-      .click();
-    await expect(
-      rows.locator('input[aria-label$=" 선택"]:checked'),
-    ).toHaveCount(2);
-    await remaining.scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: `artifacts/homepage-bulk-${viewport.width}.png`,
-    });
-    await bulk.getByLabel("일괄 부가세 정책").selectOption("inclusive");
-    await bulk
-      .getByRole("checkbox", { name: "선택 상품 일괄 검토완료", exact: true })
-      .check();
-    await bulk
-      .getByRole("button", { name: "선택 상품 일괄 적용", exact: true })
-      .click();
-    await expect(bulk.getByRole("status")).toContainText(
-      "2개 상품 적용·검토완료 · 0개 미적용",
-    );
-    await expect(
-      rows.getByRole("button", { name: "미검토 항목만 선택 (0개)" }),
-    ).toBeDisabled();
-    await page.keyboard.press("Control+z");
-    await expect(
-      rows.getByRole("button", { name: "미검토 항목만 선택 (2개)" }),
-    ).toBeEnabled();
-    await page.keyboard.press("Control+Shift+z");
-    await expect(
-      rows.getByRole("button", { name: "미검토 항목만 선택 (0개)" }),
-    ).toBeDisabled();
-    await page
-      .locator(".catalog-product-save")
-      .getByRole("button", { name: "초안 저장", exact: true })
-      .click();
-    await expect(page.locator(".catalog-save-status")).toContainText(
-      "초안 저장됨",
-    );
+    const published = workingCatalog(state, "이벤트")!;
+    assert.equal(published.products.length, 3);
+    assert.equal(published.status, "published");
     assert(
-      workingCatalog(state, "이벤트")!.products.every((p) =>
-        p.options.every((o) => !o.review && o.tax !== "unknown"),
+      published.products.every(
+        (p) => p.active && p.options.every((o) => !o.review),
       ),
     );
+    assert(state.catalogs[2].products.every((p) => p.id.startsWith("manual-")));
+    await refresh
+      .getByRole("button", { name: "홈페이지 갱신", exact: true })
+      .click();
+    await expect(refresh.getByLabel("홈페이지 갱신 요약")).toContainText(
+      "신규 0개",
+    );
+    await expect(refresh).toContainText("이전 상품 제거 0개");
+    await refresh
+      .getByLabel("홈페이지 미표기 부가세 정책")
+      .selectOption("unknown");
+    await expect(refresh).toContainText("활성화 가능 3개 · 확인 필요 0개");
+    await refresh
+      .getByRole("button", { name: "동기화·활성화 초안 저장", exact: true })
+      .click();
+    await expect(refresh).toContainText("초안 저장 완료");
+    assert.equal(commands, 2);
+    assert.equal(workingCatalog(state, "이벤트")!.products.length, 3);
+    assert.equal(workingCatalog(state, "이벤트")!.status, "draft");
+    await refresh.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: `artifacts/homepage-sync-${viewport.width}.png`,
+    });
     assert.deepEqual(state.catalogs[0], beautyBefore);
     assert(
       await page.evaluate(
@@ -266,10 +238,10 @@ try {
       allOffersImported: true,
       beautyUnchanged: true,
       onlyHomepageRefresh: true,
-      unreviewedShortcut: true,
-      partialSuccess: true,
-      remainingSelection: true,
-      undoRedo: true,
+      removedPreviousProducts: true,
+      oneStepActivationPublish: true,
+      explicitTaxChoice: true,
+      repeatScanPreservesConfirmedTax: true,
       saved: true,
       noOverflow: true,
       errors,
@@ -280,7 +252,7 @@ try {
   await browser.close();
 }
 await writeFile(
-  "artifacts/homepage-browser-013.json",
+  "artifacts/homepage-browser-0132.json",
   JSON.stringify(results, null, 2),
 );
 console.log(JSON.stringify(results));

@@ -1,5 +1,7 @@
 import {
   mergeHomepageCatalog,
+  activateHomepageCatalog,
+  type HomepageSyncOptions,
   websiteReviewNeeded,
   type WebsiteBases,
 } from "../core/websiteCatalog";
@@ -166,7 +168,11 @@ export function EventCatalogRefresh({
   beauty?: Catalog;
   bases: WebsiteBases;
   disabled: boolean;
-  onImport: (pages: WebsiteEvent[], bases: WebsiteBases) => Promise<boolean>;
+  onImport: (
+    pages: WebsiteEvent[],
+    bases: WebsiteBases,
+    options: HomepageSyncOptions,
+  ) => Promise<boolean>;
 }) {
   const [scan, setScan] = useState<{
       pages: WebsiteEvent[];
@@ -177,6 +183,8 @@ export function EventCatalogRefresh({
     [progress, setProgress] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
+  const [unknownTax, setUnknownTax] =
+    useState<HomepageSyncOptions["unknownTax"]>("exclusive");
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
   const refresh = async () => {
@@ -214,6 +222,16 @@ export function EventCatalogRefresh({
       return { previewError: (e as Error).message };
     }
   }, [scan]);
+  const activation = useMemo(
+    () =>
+      preview &&
+      activateHomepageCatalog(preview.catalog, {
+        activate: true,
+        publish: false,
+        unknownTax,
+      }),
+    [preview, unknownTax],
+  );
   const eventPages = scan?.pages || [];
   const stale = !!scan && JSON.stringify(scan.bases) !== JSON.stringify(bases);
   const recent = catalog?.websiteImport;
@@ -237,7 +255,9 @@ export function EventCatalogRefresh({
       </p>
       <p>
         미용 SSOT는 홈페이지 갱신과 독립적으로 관리됩니다. 홈페이지 SSOT에서
-        직접 배치한 폴더와 원문이 동일한 상품의 검토 상태는 유지합니다.
+        직접 배치한 폴더는 유지하며, 상품명·가격·기간은 홈페이지 기준으로
+        맞춥니다. 홈페이지에 없는 이전 상품은 최신 목록에서 제거합니다. 기존
+        상담·견적서와 이전 버전은 보존됩니다.
       </p>
       <a href={EVENT_LIST_URL} target="_blank" rel="noopener noreferrer">
         홈페이지 가격표 열기 <ExternalLink size={14} />
@@ -270,46 +290,101 @@ export function EventCatalogRefresh({
             <b>신규 {preview.summary.added}개</b>
             <b>변경 {preview.summary.changed}개</b>
             <span>동일 {preview.summary.unchanged}개</span>
-            <span>홈페이지 제외 {preview.summary.missing}개</span>
+            <span>이전 상품 제거 {preview.summary.missing}개</span>
             <span>기간 종료 {preview.summary.ended}개</span>
           </div>
           <p>
-            신규·변경 상품은 검토 후 활성화가 필요합니다. 홈페이지에서 제외된
-            상품은 비활성화합니다. 부가세 미표기는 항목별 확인 대상으로
-            남깁니다. 초안 저장 후 검토·게시하면 상담과 맞춤 시술 찾기에
-            반영됩니다.
+            현재 홈페이지 상품 {preview.catalog.products.length}개로 교체합니다.
+            가져온 가격을 확인한 뒤 한 번에 활성화·게시할 수 있습니다.
           </p>
+          <label>
+            홈페이지 부가세 미표기 상품
+            <select
+              aria-label="홈페이지 미표기 부가세 정책"
+              value={unknownTax}
+              disabled={busy}
+              onChange={(e) =>
+                setUnknownTax(
+                  e.target.value as HomepageSyncOptions["unknownTax"],
+                )
+              }
+            >
+              <option value="unknown">항목별 확인 유지</option>
+              <option value="exclusive">미표기 상품은 부가세 별도</option>
+              <option value="inclusive">미표기 상품은 부가세 포함</option>
+              <option value="exempt">미표기 상품은 면세</option>
+            </select>
+          </label>
+          <p role="status">
+            활성화 가능 {activation?.activated}개 · 확인 필요{" "}
+            {activation?.skipped.length}개. 홈페이지에 명시된 부가세는 유지하고, 미표기는 선택한 정책을 적용합니다.
+          </p>
+          {!!activation?.skipped.length && (
+            <details className="event-sync-preview" open>
+              <summary>
+                활성화되지 않는 상품과 이유 ({activation.skipped.length}개)
+              </summary>
+              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                {activation.skipped.map((p) => (
+                  <p key={p.id}>
+                    <b>{p.name}</b> · {p.reasons.join(" · ")}
+                  </p>
+                ))}
+              </div>
+            </details>
+          )}
           {stale && (
             <p className="error">
               기준 단가표가 변경되었습니다. 홈페이지를 다시 갱신하세요.
             </p>
           )}
-          <button
-            className="primary"
-            type="button"
-            disabled={busy || disabled || stale}
-            onClick={async () => {
-              setBusy(true);
-              setError("");
-              try {
-                if (await onImport(scan.pages, scan.bases)) {
-                  setScan(undefined);
-                  setProgress(
-                    "홈페이지 SSOT 갱신 초안을 저장했습니다. 검토 후 ‘검증 후 게시’를 눌러 반영하세요.",
-                  );
-                } else
-                  setError(
-                    "기기에 저장됐습니다. 동기화 완료 후 홈페이지 SSOT의 갱신 결과를 확인하세요.",
-                  );
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            홈페이지 갱신 초안 저장
-          </button>
+          <div className="actions">
+            {[false, true].map((publish) => (
+              <button
+                key={String(publish)}
+                className={publish ? "primary" : ""}
+                type="button"
+                disabled={
+                  busy ||
+                  disabled ||
+                  stale ||
+                  (publish && !activation?.activated)
+                }
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    if (
+                      await onImport(scan.pages, scan.bases, {
+                        activate: true,
+                        publish,
+                        unknownTax,
+                      })
+                    ) {
+                      const skipped = activation?.skipped.length || 0;
+                      setScan(undefined);
+                      setProgress(
+                        `홈페이지 상품 ${preview.catalog.products.length}개 동기화 · ${activation?.activated}개 활성화 · ${skipped}개 확인 필요. ${publish ? "게시 완료: 상담에 반영했습니다." : "초안 저장 완료: ‘검증 후 게시’하면 상담에 반영됩니다."}`,
+                      );
+                    } else
+                      setError(
+                        "기기에 저장됐습니다. 동기화 완료 후 홈페이지 SSOT의 결과를 확인하세요.",
+                      );
+                  } catch (e) {
+                    setError((e as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                {busy
+                  ? "저장 중…"
+                  : publish
+                    ? "동기화·활성화 후 게시"
+                    : "동기화·활성화 초안 저장"}
+              </button>
+            ))}
+          </div>
           <details className="event-sync-preview">
             <summary>
               가져온 전체 상품·가격·포스터 확인 ({eventPages.length}개)

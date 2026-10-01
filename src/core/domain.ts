@@ -23,6 +23,8 @@ import {
 } from "./quotePrices";
 import {
   mergeHomepageCatalog,
+  homepageSyncOptionsSchema,
+  activateHomepageCatalog,
   independentBeautyCatalog,
   websitePagesSchema,
   websiteListingSchema,
@@ -1432,7 +1434,10 @@ export async function applyCommand(
         id: cmd.id + "-beauty",
         authorId: user.id,
         status: p.publish === true ? "published" : "draft",
-        version: p.publish === true ? now + "-" + cmd.id : "미용 독립 구성 · " + now.slice(0, 10),
+        version:
+          p.publish === true
+            ? now + "-" + cmd.id
+            : "미용 독립 구성 · " + now.slice(0, 10),
       });
       delete candidate.publishedAt;
       if (p.publish === true) candidate.publishedAt = now;
@@ -1491,7 +1496,15 @@ export async function applyCommand(
         );
       ensure(beauty, "기준 미용 SSOT가 필요합니다");
       const result = mergeHomepageCatalog(beauty, event, pages, now);
-      const candidate = result.catalog;
+      const options = homepageSyncOptionsSchema.parse(p.options || {});
+      ensure(
+        !options.publish || options.activate,
+        "게시하려면 전체 활성화를 선택하세요",
+      );
+      const activation = options.activate
+        ? activateHomepageCatalog(result.catalog, options, now)
+        : undefined;
+      const candidate = activation?.catalog || result.catalog;
       Object.assign(candidate, base, {
         id: cmd.id + "-homepage",
         authorId: user.id,
@@ -1501,10 +1514,26 @@ export async function applyCommand(
         "이미 저장된 갱신입니다",
         409,
       );
-      validateCatalog(candidate);
+      validateCatalog(candidate, options.publish);
+      if (options.publish) {
+        ensure(
+          (activation?.activated || 0) > 0,
+          "활성화할 수 있는 상품이 없습니다. 미확정 항목을 확인하세요",
+        );
+        candidate.status = "published";
+        candidate.version = now + "-" + cmd.id.slice(0, 8);
+        candidate.publishedAt = now;
+      }
       s.catalogs.push(candidate);
-      recordCatalog(event, candidate, "홈페이지 전체 상품 갱신", "-homepage");
-      text = "홈페이지 SSOT 갱신 초안 저장";
+      recordCatalog(
+        event,
+        candidate,
+        `홈페이지 완전 동기화 · 이전 상품 ${result.summary.missing}개 제외${activation ? ` · 활성 ${activation.activated}개 / 미완료 ${activation.skipped.length}개` : ""}${options.publish ? " · 게시" : ""}`,
+        "-homepage",
+      );
+      text = options.publish
+        ? "홈페이지 동기화·활성화·게시"
+        : "홈페이지 SSOT 동기화 초안 저장";
       break;
     }
     case "catalog.events.import":

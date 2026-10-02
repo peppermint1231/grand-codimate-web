@@ -1,3 +1,4 @@
+import { version as appVersion } from "../package.json";
 import { reconcileGradeBenefits } from "../src/core/gradeBenefits";
 import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
@@ -739,7 +740,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.15.0",
+        version: appVersion,
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"

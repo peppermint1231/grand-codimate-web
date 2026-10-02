@@ -114,15 +114,16 @@ export function LedgerForm({
                     setAmount("");
                   }}
                 >
-                  <span>
+                  <span className="unpaid-item-details">
                     {c.createdAt.slice(0, 10)} · {c.category}
                     <small>
                       {c.quote.lines.map((l) => l.name).join(", ") || "상담"}
                     </small>
                   </span>
-                  <strong>
-                    {money(ledgerAvailable(s, c.id, "receipt"))} · 수납하기
-                  </strong>
+                  <span className="unpaid-item-action">
+                    <strong>{money(ledgerAvailable(s, c.id, "receipt"))}</strong>
+                    <span>수납하기</span>
+                  </span>
                 </button>
               ))}
           </section>

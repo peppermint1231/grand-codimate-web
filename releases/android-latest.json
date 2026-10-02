@@ -1,7 +1,7 @@
 {
-  "version": "0.15.0",
-  "versionCode": 65,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.15.0.apk",
-  "sha256": "52e916ae0f03b908930cd58bf050895ec6402f3b1d5be6ac3745d4ce035a7569",
-  "notes": "이전 메뉴 연장상담, 등급 강조, 미수납 바로 수납, 상담자 인계, 여러 의사 의견 요청, 등급별 포인트·기간 설정."
+  "version": "0.15.1",
+  "versionCode": 66,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.15.1.apk",
+  "sha256": "08906aeb87f07a6c2f18b85443ba79d863b7125d5c73f47d17cf75ced33466ae",
+  "notes": "미수납 내역의 금액과 수납하기 줄바꿈 개선."
 }

@@ -5340,7 +5340,10 @@ html.custom-pull-refresh {
 .consultation-owner form { position:absolute; z-index:30; top:100%; left:0; width:min(320px,80vw); padding:16px; border:1px solid #dce5df; background:white; border-radius:12px; box-shadow:0 6px 20px #15372b25; }
 .history-photo-owner { display:grid; gap:6px; min-width:0; }
 .unpaid-list { display:grid; gap:8px; padding:12px; background:#fff5ed; border:1px solid #efc2a6; border-radius:10px; margin-bottom:16px; }
-.unpaid-item { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; white-space:normal; }
+.unpaid-item { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 16px; text-align:left; white-space:normal; }
+.unpaid-item-details { flex:1 1 220px; min-width:0; overflow-wrap:anywhere; }
+.unpaid-item-action { flex:0 0 auto; display:grid; gap:3px; margin-left:auto; text-align:right; white-space:nowrap; }
+.unpaid-item-action > span { font-size:.85em; color:var(--primary, #145d55); }
 .unpaid-item small { display:block; }
 .unpaid-item[aria-pressed="true"] { border:2px solid #bc562c; }
 .opinion-recipient-list { display:flex; gap:12px; flex-wrap:wrap; border:1px solid #dce5df; border-radius:10px; padding:12px; }
@@ -5350,4 +5353,4 @@ html.custom-pull-refresh {
 .patient-money-grid > .ledger-entry-form { order:-1; }
 @media(max-width:700px) { .consultation-owner form { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:calc(100vw - 40px); max-height:80dvh; overflow:auto; box-shadow:0 0 0 100vmax #17352b55; } }
 .patient-grade-badge.compact { font-size:.78em; padding:3px 7px; margin-left:8px; border-width:1px; }
-@media(max-width:600px) { .unpaid-item { flex-direction:column; align-items:flex-start; } .unpaid-item strong { align-self:flex-end; white-space:nowrap; } .consultation-history-entry > .list-row > .history-photo-owner { grid-column:1 / -1; grid-row:2; max-width:100%; justify-self:start; } }
+@media(max-width:600px) { .consultation-history-entry > .list-row > .history-photo-owner { grid-column:1 / -1; grid-row:2; max-width:100%; justify-self:start; } }

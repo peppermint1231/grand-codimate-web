@@ -13,3 +13,5 @@
 검증 로그: `artifacts/check-0139.log`, `artifacts/consent-browser-0139.log`, `artifacts/consent-manager-browser-0139.log`, `artifacts/consent-live-prepare-0139.log`.
 
 Android 0.13.9 (62), 18,375,423 bytes. SHA-256 `fe5cc74b7b870cc62582a4a3eb1c940e893459f8c4df54454f239669d73f2bbe`. APK 내 웹 자산 48개가 빌드와 일치한다.
+
+운영 반영 완료: PR #6, 소스 `dfdd0eee56bb3a320a4a101ad4fedfe51d51b08d`, 병합 `8c7206c5d763ed75ae2f91b7d2d296da75fc7039`. GitHub 검사 및 Cloudflare Workers 빌드 성공. 운영 0.13.9, 웹 자산 48개와 APK 다운로드 해시를 확인했다. 개정 초안 23종을 등록하고 각 본문·확인 항목을 사전 계산 결과와 대조했다. 기존 게시본·서명 및 다른 업무 자료 해시가 유지됐고 대기 작업은 0이다. 초안은 설정 → 동의서 양식에서 확인·편집 후 게시한다. 검증 요약: `artifacts/consent-patient-copy-live-0139.json`, `artifacts/release-0139-assets.json`, `artifacts/deployment-0139.json`.

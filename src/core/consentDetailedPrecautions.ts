@@ -1,4 +1,4 @@
-import { patientConsentBody } from "./consentPatientCopy";
+import { patientConsentBody, packageExpiryClause } from "./consentPatientCopy";
 import {
   precautionFor,
   PRECAUTION_HEADING,
@@ -203,7 +203,7 @@ export const hospitalCommonClauses: ConsentDetail[] = [
   {
     id: "common-package",
     targets: clinicalTargets,
-    text: "패키지로 계약한 경우 기본 사용기간은 결제일부터 1년이며, 기간 경과 후 잔여 횟수는 소멸됩니다.",
+    text: packageExpiryClause,
   },
   {
     id: "common-liability",

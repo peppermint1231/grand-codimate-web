@@ -201,7 +201,15 @@ export function recommendedProducts(
   search = "",
 ) {
   const key = normalize(search);
+  // A current, publicly visible website offer takes precedence over its
+  // beauty-book counterpart, regardless of price or imported option labels.
+  // Keep quantities/durations in the key: 4-week and 8-week courses differ.
+  // Apply before search so searching an old option cannot revive a duplicate.
+  const websiteNames = new Set(
+    products.filter((p) => p.book === "이벤트").map((p) => normalize(p.name)),
+  );
   const ranked = products
+    .filter((p) => p.book !== "미용" || !websiteNames.has(normalize(p.name)))
     .filter((p) =>
       p.matches?.some(
         (m) =>
@@ -218,6 +226,7 @@ export function recommendedProducts(
     )
     .sort(
       (a, b) =>
+        Number(a.book !== "이벤트") - Number(b.book !== "이벤트") ||
         Number(a.options.every((o) => o.price === null)) -
           Number(b.options.every((o) => o.price === null)) ||
         a.name.localeCompare(b.name, "ko"),

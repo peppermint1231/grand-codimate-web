@@ -260,7 +260,7 @@ export function mergeWebsiteEvents(
                   id:
                     old?.options[0]?.id ||
                     `grand4-option-${event.id}-${offer.id}`,
-                  label: scope === "all" ? "홈페이지 가격" : "이벤트가",
+                  label: "이벤트가",
                   ...(old?.options[0]?.regularPrice !== undefined
                     ? { regularPrice: old.options[0].regularPrice }
                     : {}),

@@ -1,7 +1,7 @@
 {
-  "version": "0.17.0",
-  "versionCode": 68,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.17.0.apk",
-  "sha256": "207e073a7d71876415872336931adb9e4820d32d86265020b5f023cc437ce5fb",
-  "notes": "환자용 맞춤 시술 찾기 개편: 고민·상태별 통합 추천, 큰 글씨, 간편 상담 접수."
+  "version": "0.17.1",
+  "versionCode": 69,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.17.1.apk",
+  "sha256": "17a49b4b74304475409e72b376302e0f7e4b71a8e1161924ff417050bf4a3bf8",
+  "notes": "맞춤 시술 찾기: 홈페이지 상품 우선 표시 및 중복 숨김, 이벤트가 표기."
 }

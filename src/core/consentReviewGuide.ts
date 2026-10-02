@@ -95,7 +95,7 @@ export function consentReviewGuide(
       instruction: string,
       example: string,
     ): ConsentReviewGuide => ({ kind: "contract", instruction, example });
-    if (/환급|정산·공제/.test(topic))
+    if (/환급|정산·공제|적용 단가·공제/.test(topic))
       return contract(
         "적용 법령·분쟁해결기준을 검토한 실제 정산 방식, 공제 근거, 신청 방법과 처리 기한을 적으세요. 임의의 공제율이나 환불 불가 문구를 넣지 마세요.",
         `해지 신청은 ${fill("접수 방법")}으로 받습니다. 실결제액·사용 내역·혜택 사용액을 구분해 정산서를 제공합니다. 환급액 산식은 ${fill("검토한 산식과 항목별 공제 근거")}이며 처리 기한은 ${fill("검토된 기한")}입니다.`,

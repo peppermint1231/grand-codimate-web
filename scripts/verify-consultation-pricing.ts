@@ -57,7 +57,7 @@ try {
       name: name + " 맞춤 동의서",
       productIds: [product.id],
       body: name + " 검증용 설명",
-      checks: ["설명을 확인했습니다"],
+      checks: ["설명을 확인했습니다", "주의사항을 확인했습니다"],
       status: "published",
       version: 1,
     }));
@@ -74,7 +74,7 @@ try {
           ok: true,
           configured: true,
           mode: "local-development",
-          version: "0.13.7",
+          version: "0.13.9",
         };
       if (path === "/api/state")
         json = { state, user: catalogAdmin, pending: 0 };
@@ -147,7 +147,7 @@ try {
       .getByLabel("할인·변경 사유", { exact: true })
       .fill("진료 범위에 따른 결정");
     await expect(cart.getByRole("alert")).toHaveCount(0);
-    await cart.screenshot({ path: `artifacts/quote-mode-${width}-0137.png` });
+    await cart.screenshot({ path: `artifacts/quote-mode-${width}-0139.png` });
     await cart
       .getByRole("button", { name: "닫기", exact: true })
       .first()
@@ -179,14 +179,45 @@ try {
     await expect(consent.getByLabel("전체 시술동의서 양식")).toHaveValue(
       "consent-0",
     );
-    await expect(consent.getByRole("checkbox")).not.toBeChecked();
+    await expect(
+      consent.getByRole("checkbox", { name: /모두 동의/ }),
+    ).not.toBeChecked();
     await expect(
       consent.getByRole("button", { name: "서명 저장", exact: true }),
     ).toBeDisabled();
     for (const id of ["consent-0", "consent-1"]) {
       await expect(consent.getByLabel("전체 시술동의서 양식")).toHaveValue(id);
-      await expect(consent.getByRole("checkbox")).not.toBeChecked();
-      await consent.getByRole("checkbox").check();
+      await expect(
+        consent.getByRole("checkbox", { name: /모두 동의/ }),
+      ).not.toBeChecked();
+      await consent.getByRole("checkbox", { name: /모두 동의/ }).check();
+      await expect(
+        consent.getByRole("checkbox", {
+          name: "설명을 확인했습니다",
+          exact: true,
+        }),
+      ).toBeChecked();
+      await consent
+        .getByRole("checkbox", { name: "설명을 확인했습니다", exact: true })
+        .uncheck();
+      assert.equal(
+        await consent
+          .getByRole("checkbox", { name: /모두 동의/ })
+          .evaluate((e: HTMLInputElement) => e.indeterminate),
+        true,
+      );
+      await expect(
+        consent.getByRole("button", { name: "서명 저장", exact: true }),
+      ).toBeDisabled();
+      await consent.getByRole("checkbox", { name: /모두 동의/ }).check();
+      await consent.getByRole("checkbox", { name: /모두 동의/ }).uncheck();
+      await expect(
+        consent.getByRole("checkbox", {
+          name: "주의사항을 확인했습니다",
+          exact: true,
+        }),
+      ).not.toBeChecked();
+      await consent.getByRole("checkbox", { name: /모두 동의/ }).check();
       const canvas = consent.locator("canvas");
       await canvas.scrollIntoViewIfNeeded();
       const box = (await canvas.boundingBox())!;
@@ -204,7 +235,7 @@ try {
     await expect(consent.getByLabel("전체 시술동의서 양식")).toHaveValue("");
     await expect(consent.locator("canvas")).toHaveCount(0);
     await consent.screenshot({
-      path: `artifacts/consent-recommendation-${width}-0137.png`,
+      path: `artifacts/consent-recommendation-${width}-0139.png`,
     });
     await page.getByRole("button", { name: "환자 상세로 돌아가기" }).click();
     await page
@@ -290,7 +321,7 @@ try {
       editor.getByRole("checkbox", { name: /메뉴 판매/ }),
     ).toBeChecked();
     await editor.screenshot({
-      path: `artifacts/membership-options-${width}-0137.png`,
+      path: `artifacts/membership-options-${width}-0139.png`,
     });
     assert(await editor.evaluate((el) => el.scrollWidth <= el.clientWidth + 1));
     await editor
@@ -340,7 +371,7 @@ try {
     await page.close({ runBeforeUnload: false });
   }
   await writeFile(
-    "artifacts/consultation-pricing-browser-0137.json",
+    "artifacts/consultation-pricing-browser-0139.json",
     JSON.stringify(results, null, 2),
   );
   console.log(JSON.stringify(results));

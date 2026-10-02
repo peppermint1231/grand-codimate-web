@@ -1,3 +1,4 @@
+import { ConsentChecks } from "./components/ConsentChecks";
 import { CatalogSaveRetry } from "./lib/catalogSaveRetry";
 import { ConsentRecommendations } from "./components/ConsentRecommendations";
 import {
@@ -4821,22 +4822,12 @@ function ConsultationView({
                 return (
                   <>
                     <div className="consent-text">{t.body}</div>
-                    {t.checks.map((check) => (
-                      <label className="check" key={check}>
-                        <input
-                          type="checkbox"
-                          checked={checks.includes(check)}
-                          onChange={(e) =>
-                            setChecks(
-                              e.target.checked
-                                ? [...checks, check]
-                                : checks.filter((x) => x !== check),
-                            )
-                          }
-                        />
-                        {check}
-                      </label>
-                    ))}
+                    <ConsentChecks
+                      items={t.checks}
+                      selected={checks}
+                      onChange={setChecks}
+                      disabled={readonly}
+                    />
                     <Field label="서명자">
                       <input
                         value={signer}
@@ -4846,7 +4837,11 @@ function ConsultationView({
                     <SignaturePad key={template} onChange={setSig} />
                     <button
                       className="primary"
-                      disabled={!sig || readonly}
+                      disabled={
+                        !sig ||
+                        readonly ||
+                        !t.checks.every((check) => checks.includes(check))
+                      }
                       onClick={() =>
                         work(async () => {
                           if (JSON.stringify(draft) !== JSON.stringify(c))

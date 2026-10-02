@@ -117,12 +117,12 @@ try {
     );
     const text = await body.inputValue();
     const guides = page.locator(".consent-review-guide");
-    await expect(guides).toHaveCount(2);
+    await expect(guides).toHaveCount(1);
     await expect(guides.first()).toContainText("제품마다 단위");
-    await expect(guides.nth(1)).toContainText("이미 본문에 들어 있습니다");
+    await expect(page.getByRole("complementary", {name: "계약 조항 법률 검토 안내"})).toContainText("법적 효력");
     await expect(body).toContainText("3~4시간");
     await page
-      .getByText("원문 항목별 반영 내역 · 15개", { exact: true })
+      .getByText("원문 항목별 반영 내역 · 13개", { exact: true })
       .click();
     await expect(page.getByLabel("원문 항목별 반영 내역")).toContainText(
       "toxin-fat-09",

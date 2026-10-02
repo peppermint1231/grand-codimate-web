@@ -35,7 +35,7 @@ it("covers each of the independently inventoried 87 source items and common clau
       )
       .sort(),
   );
-  expect(hospitalCommonClauses).toHaveLength(5);
+  expect(hospitalCommonClauses).toHaveLength(3);
   for (const c of [...hospitalDetailedClauses, ...hospitalCommonClauses]) {
     expect(c.targets?.length, c.id).toBeGreaterThan(0);
     for (const key of c.targets || []) {

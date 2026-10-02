@@ -114,7 +114,7 @@ it("updates current unpublished forms, creates separate published revisions and 
   expect(pubCopy.productIds).toEqual(["product-0"]);
   expect(pubCopy.reviewedAt).toBeUndefined();
   expect(pubCopy.draftRevision).toBe(CONSENT_DRAFT_REVISION);
-  expect(consentPublishIssues(pubCopy).length).toBeGreaterThan(0);
+  expect(consentPublishIssues(pubCopy)).toEqual([]); // No generic editorial placeholder is added to patient text.
   const draft = s.consents.find((t) => t.id === before.consents[1].id)!;
   expect(draft.rev).toBe(before.consents[1].rev + 1);
   expect(draft.version).toBe(1);

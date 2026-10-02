@@ -110,7 +110,11 @@ export function publicProducts(state: State): PublicProduct[] {
               ? { event: eventOptionPrices(p, o) }
               : {}),
             id: o.id,
-            label: o.label,
+            label:
+              catalogBook(c) === "이벤트" &&
+              /^홈페이지\s*가격$/.test(o.label.trim())
+                ? "이벤트가"
+                : o.label,
             unit: o.unit,
             price: p.active && o.tax !== "unknown" ? o.price : null,
             tax: p.active && o.tax !== "unknown" ? o.tax : "unknown",

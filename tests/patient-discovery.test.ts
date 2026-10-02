@@ -154,3 +154,63 @@ it("returns only matching metadata, not internal descriptions or source material
   expect(json).not.toContain("내부 기록");
   expect(json).not.toContain("비공개 구성");
 });
+
+it("prefers website offers even when beauty prices and option names differ, preserving course lengths", () => {
+  const s = emptyState();
+  s.catalogs = threeCatalogs();
+  for (const c of s.catalogs) {
+    c.products = [product("굿바이 여드름/트러블 4주 패키지")];
+    c.products[0].publicVisible = true;
+    c.products[0].options[0].label =
+      c.book === "이벤트" ? "홈페이지 가격" : "5주 패키지";
+    c.products[0].options[0].price = c.book === "이벤트" ? 440000 : 530000;
+  }
+  const beauty = s.catalogs.find((c) => c.book === "미용")!;
+  beauty.products.push({
+    ...product("굿바이 여드름/트러블 8주 패키지"),
+    id: "eight",
+  });
+  beauty.products[0].name = "굿바이 여드름 · 트러블 4주 패키지";
+  const rows = publicProducts(s);
+  const result = recommendedProducts(rows, "patient:acne", "inflammatory-acne");
+  expect(result[0].book).toBe("이벤트");
+  expect(result.some((p) => p.book === "미용" && p.name.includes("4주"))).toBe(
+    false,
+  );
+  expect(result.some((p) => p.book === "미용" && p.name.includes("8주"))).toBe(
+    true,
+  );
+  expect(result.some((p) => p.book === "보험")).toBe(true);
+  expect(result[0].options[0].label).toBe("이벤트가");
+  expect(
+    recommendedProducts(rows, "patient:acne", "inflammatory-acne", "5주").some(
+      (p) => p.book === "미용" && p.name.includes("4주"),
+    ),
+  ).toBe(false);
+  const withoutWebsite = rows.filter((p) => p.book !== "이벤트");
+  expect(
+    recommendedProducts(
+      withoutWebsite,
+      "patient:acne",
+      "inflammatory-acne",
+    ).some((p) => p.book === "미용" && p.name.includes("4주")),
+  ).toBe(true);
+});
+
+it("does not collapse different doses or shot counts into a website offer", () => {
+  const s = emptyState();
+  s.catalogs = threeCatalogs();
+  for (const c of s.catalogs)
+    c.products = [
+      product(c.book === "이벤트" ? "리쥬란 힐러 2cc" : "리쥬란 힐러 4cc"),
+    ];
+  const rows = publicProducts(s).map((p) => ({
+    ...p,
+    matches: [{ concernId: "patient:booster", answerIds: [] }],
+  }));
+  expect(
+    recommendedProducts(rows, "patient:booster", "").some(
+      (p) => p.book === "미용",
+    ),
+  ).toBe(true);
+});

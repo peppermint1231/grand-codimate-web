@@ -1,24 +1,41 @@
+import "./Discovery.css";
+import {
+  patientConcerns,
+  recommendedProducts,
+  type PatientConcern,
+} from "../core/patientDiscovery";
 import { EventPrice } from "./EventCatalog";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   ArrowLeft,
+  CheckCircle2,
+  CircleHelp,
+  Phone,
+  Sun,
+  CircleDot,
+  Waves,
+  Grid2X2,
+  Heart,
+  MoveUpRight,
+  Eye,
+  Droplets,
+  Smile,
+  Feather,
+  PersonStanding,
+  Sprout,
+  Eraser,
+  HeartPulse,
+  BatteryCharging,
   Check,
   ChevronRight,
-  HeartHandshake,
   Search,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import { api } from "../lib/api";
-import {
-  catalogBookDisplayOrder,
-  catalogBookLabel,
-  money,
-  type CatalogBook,
-  type State,
-} from "../core/model";
+import { catalogBookLabel, money, type State } from "../core/model";
 import { concerns } from "../core/concerns";
-import type { Inquiry, PublicProduct, PublicCategory } from "../core/discovery";
+import type { Inquiry, PublicProduct } from "../core/discovery";
 const blankPerson = () => ({
   name: "",
   phone: "",
@@ -27,613 +44,855 @@ const blankPerson = () => ({
   address: "",
 });
 export function Discovery() {
-  const [concerns, setCategories] = useState<PublicCategory[]>([]);
-  const [folderFilter, setFolderFilter] = useState("");
+  type Selection = {
+    productId: string;
+    optionId: string;
+    catalogVersion: string;
+    concernId: string;
+    answerId: string;
+  };
+  const [categories, setCategories] =
+    useState<PatientConcern[]>(patientConcerns);
   const [products, setProducts] = useState<PublicProduct[]>([]),
     [token, setToken] = useState("");
   const [step, setStep] = useState(0),
-    [selectedConcerns, setConcerns] = useState<string[]>([]),
-    [answers, setAnswers] = useState<string[]>([]);
-  const [book, setBook] = useState<CatalogBook>("이벤트"),
-    [search, setSearch] = useState(""),
-    [selected, setSelected] = useState<
-      { productId: string; optionId: string; catalogVersion: string }[]
-    >([]);
+    [concernId, setConcernId] = useState(""),
+    [answerId, setAnswerId] = useState("");
+  const [search, setSearch] = useState(""),
+    [selected, setSelected] = useState<Selection[]>([]),
+    [limit, setLimit] = useState(6);
+  const [large, setLarge] = useState(false),
+    [loading, setLoading] = useState(true),
+    [busy, setBusy] = useState(false);
+  const [error, setError] = useState(""),
+    [receipt, setReceipt] = useState("");
   const [person, setPerson] = useState(blankPerson),
     [personalConsent, setPersonalConsent] = useState(false),
     [sensitiveConsent, setSensitiveConsent] = useState(false);
-  const [filterConcerns, setFilterConcerns] = useState(true);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [receipt, setReceipt] = useState("");
+  const epoch = useRef(0);
+  const kiosk = new URLSearchParams(location.search).has("kiosk");
+  const load = async (id: number) => {
+    setLoading(true);
+    try {
+      const d = await api("/public/catalog");
+      if (id !== epoch.current) return;
+      setProducts(d.products);
+      setCategories(d.patientConcerns || patientConcerns);
+      setToken(d.token);
+      setError("");
+    } catch (e) {
+      if (id === epoch.current) setError((e as Error).message);
+    } finally {
+      if (id === epoch.current) setLoading(false);
+    }
+  };
   const reset = () => {
+    const id = ++epoch.current;
     setStep(0);
-    setBook("이벤트");
-    setFolderFilter("");
-    setFilterConcerns(true);
-    setConcerns([]);
-    setAnswers([]);
+    setConcernId("");
+    setAnswerId("");
     setSelected([]);
+    setSearch("");
+    setLimit(6);
     setPerson(blankPerson());
     setPersonalConsent(false);
     setSensitiveConsent(false);
     setReceipt("");
-    setSearch("");
     setError("");
-    api("/public/catalog")
-      .then((d) => {
-        setProducts(d.products);
-        setCategories(d.categories || []);
-        setToken(d.token);
-      })
-      .catch((e) => setError(e.message));
+    setBusy(false);
+    setToken("");
+    void load(id);
   };
   useEffect(() => {
     reset();
+    return () => {
+      epoch.current++;
+    };
   }, []);
   useEffect(() => {
-    if (!new URLSearchParams(location.search).has("kiosk")) return;
+    if (!kiosk) return;
     let last = Date.now();
     const activity = () => {
       last = Date.now();
     };
-    window.addEventListener("pointerdown", activity);
-    window.addEventListener("keydown", activity);
-    const interval = setInterval(() => {
-      if (Date.now() - last > 180_000) {
+    const timer = setInterval(() => {
+      if (Date.now() - last > 180000) {
         last = Date.now();
         reset();
       }
     }, 5000);
+    window.addEventListener("pointerdown", activity);
+    window.addEventListener("keydown", activity);
     return () => {
-      clearInterval(interval);
+      clearInterval(timer);
       window.removeEventListener("pointerdown", activity);
       window.removeEventListener("keydown", activity);
     };
   }, []);
-  const filtered = products.filter(
-    (p) =>
-      p.book === book &&
-      (!filterConcerns ||
-        !selectedConcerns.length ||
-        (p.folders || [p.folder]).some((path) =>
-          path.some((f) => selectedConcerns.includes(p.book + ":" + f.id)),
-        )) &&
-      (!folderFilter ||
-        (p.folders || [p.folder]).some((path) =>
-          path.some((f) => f.id === folderFilter),
-        )) &&
-      [p.name, ...p.options.map((o) => o.label)].some((x) =>
-        x.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    document
+      .querySelector<HTMLElement>("[data-discovery-heading]")
+      ?.focus({ preventScroll: true });
+  }, [step, receipt]);
+  const concern = categories.find((c) => c.id === concernId),
+    answer = concern?.questions.find((q) => q.id === answerId);
+  const matches = recommendedProducts(products, concernId, answerId, search);
+  const query = search.trim().toLocaleLowerCase();
+  const shownConcerns = categories.filter(
+    (c) =>
+      [
+        c.name,
+        c.subtitle,
+        ...c.tags,
+        ...c.questions.flatMap((q) => [q.label, ...q.recommended]),
+      ]
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(query) ||
+      products.some(
+        (p) =>
+          p.matches?.some((m) => m.concernId === c.id) &&
+          p.name.toLocaleLowerCase().includes(query),
       ),
   );
-  const toggleConcern = (id: string) =>
-    setConcerns(
-      selectedConcerns.includes(id)
-        ? selectedConcerns.filter((x) => x !== id)
-        : [...selectedConcerns, id],
-    );
+  const go = (n: number) => {
+    setSearch("");
+    setLimit(6);
+    setError("");
+    setStep(n);
+  };
+  const choose = (c: PatientConcern) => {
+    setConcernId(c.id);
+    setAnswerId("");
+    go(1);
+  };
+  const itemKey = (
+    p: { catalogVersion: string; id: string },
+    optionId: string,
+  ) => p.catalogVersion + ":" + p.id + ":" + optionId;
+  const toggle = (p: PublicProduct, optionId: string) => {
+    const key = itemKey(p, optionId),
+      index = selected.findIndex(
+        (s) => s.catalogVersion + ":" + s.productId + ":" + s.optionId === key,
+      );
+    if (index >= 0) setSelected(selected.filter((_, i) => i !== index));
+    else if (selected.length < 30)
+      setSelected([
+        ...selected,
+        {
+          productId: p.id,
+          optionId,
+          catalogVersion: p.catalogVersion,
+          concernId,
+          answerId,
+        },
+      ]);
+    else setError("관심 시술은 30개까지 담을 수 있어요.");
+  };
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (busy) return;
+    const current = epoch.current;
+    setBusy(true);
+    setError("");
+    const concernIds = [
+      ...new Set(
+        [concernId, ...selected.map((s) => s.concernId)].filter(Boolean),
+      ),
+    ];
+    const answerIds = [
+      ...new Set(
+        [answerId, ...selected.map((s) => s.answerId)].filter(Boolean),
+      ),
+    ];
+    try {
+      const result = await api("/public/inquiries", {
+        method: "POST",
+        body: JSON.stringify({
+          token,
+          person,
+          selections: selected.map(
+            ({ productId, optionId, catalogVersion }) => ({
+              productId,
+              optionId,
+              catalogVersion,
+            }),
+          ),
+          concerns: concernIds,
+          answers: answerIds,
+          personalConsent,
+          sensitiveConsent,
+        }),
+      });
+      if (current !== epoch.current) return;
+      setPerson(blankPerson());
+      setSelected([]);
+      setConcernId("");
+      setAnswerId("");
+      setPersonalConsent(false);
+      setSensitiveConsent(false);
+      setReceipt(result.receipt);
+    } catch (e) {
+      if (current === epoch.current) setError((e as Error).message);
+    } finally {
+      if (current === epoch.current) setBusy(false);
+    }
+  };
   return (
-    <main className="discovery">
-      <header className="discovery-hero">
-        <div>
-          <span className="discovery-eyebrow">
-            <HeartHandshake size={18} /> GRAND · 상담 준비
-          </span>
-          <h1>맞춤 시술 찾기</h1>
-          <p>
-            관심 있는 고민과 시술을 골라주세요.
-            <br />
-            선택한 내용을 병원에 전달하면 상담을 이어갈 수 있어요.
-          </p>
-        </div>
-        <Sparkles size={64} />
-      </header>
-      {receipt ? (
-        <section className="card discovery-complete">
-          <Check size={44} />
-          <h2>상담 요청을 전달했어요</h2>
-          <p>
-            접수번호 <b>{receipt.slice(0, 8).toUpperCase()}</b>
-          </p>
-          <p>
-            병원에서 접수 내용을 확인한 뒤 상담을 이어갑니다. 예약 확정은 병원
-            안내를 확인해주세요.
-          </p>
-          <button className="primary" onClick={reset}>
-            처음으로
-          </button>
-        </section>
-      ) : (
-        <>
-          <nav className="discovery-steps" aria-label="상담 준비 단계">
-            {["고민 선택", "관심 시술", "상담 접수"].map((label, index) => (
-              <button
-                key={label}
-                className={step === index ? "active" : ""}
-                disabled={
-                  index > 0 && !selectedConcerns.length && !selected.length
-                }
-                onClick={() => setStep(index)}
-              >
-                {index + 1}. {label}
-              </button>
-            ))}
-          </nav>
-          <p className="discovery-note">
-            선택한 고민과 연결된 상담 후보를 안내합니다. 개인에게 맞는 시술과
-            최종 비용은 의료진 상담 후 결정됩니다.
-          </p>
-          {error && (
-            <p role="alert" className="error">
-              {error}
+    <main className={"patient-discovery" + (large ? " pd-large" : "")}>
+      <div className="pd-shell">
+        <header className="pd-header">
+          <a
+            className="pd-brand"
+            href="/discover"
+            aria-label="그랜드아름다운의원 맞춤 시술 찾기 처음으로"
+          >
+            <span className="pd-brand-mark">G</span>
+            <span>
+              그랜드아름다운의원<small>나를 위한 피부 상담</small>
+            </span>
+          </a>
+          <div className="pd-header-tools">
+            <button
+              aria-label={large ? "기본 글씨" : "큰 글씨"}
+              aria-pressed={large}
+              onClick={() => setLarge(!large)}
+            >
+              가<span>{large ? "기본 글씨" : "큰 글씨"}</span>
+            </button>
+            <a href="tel:1899-5109" aria-label="병원 전화상담">
+              <Phone size={18} />
+              <span>전화상담</span>
+            </a>
+          </div>
+        </header>
+        {receipt ? (
+          <section className="pd-complete pd-panel">
+            <CheckCircle2 size={52} />
+            <p className="pd-eyebrow">상담 준비 완료</p>
+            <h1 data-discovery-heading tabIndex={-1}>
+              선택하신 내용을
+              <br />
+              병원에 전달했어요
+            </h1>
+            <p>
+              접수번호 <strong>{receipt.slice(0, 8).toUpperCase()}</strong>
             </p>
-          )}
-          {step === 0 && (
-            <section>
-              <div className="section-title">
-                <h2>어떤 고민이 있으세요?</h2>
-                <span>여러 개 선택할 수 있어요</span>
+            <p>
+              원내에서는 직원에게 접수번호를 알려주세요.
+              <br />
+              온라인 접수는 병원 확인 후 상담을 이어갑니다.
+            </p>
+            <p className="pd-muted">예약 확정은 병원 안내를 확인해주세요.</p>
+            <button className="pd-primary" onClick={reset}>
+              처음으로 돌아가기
+            </button>
+          </section>
+        ) : (
+          <>
+            <section
+              className={"pd-hero" + (step > 0 ? " pd-hero-compact" : "")}
+            >
+              <div>
+                <p className="pd-eyebrow">GRAND · 맞춤 시술 찾기</p>
+                {step === 0 ? (
+                  <h1>
+                    내 피부 고민에 맞는 시술,
+                    <br />
+                    <em>차근차근 찾아보세요.</em>
+                  </h1>
+                ) : (
+                  <h1>맞춤 시술 찾기</h1>
+                )}
+                {step === 0 && (
+                  <p>
+                    어려운 시술 이름을 몰라도 괜찮아요.
+                    <br />
+                    가장 신경 쓰이는 고민부터 골라주세요.
+                  </p>
+                )}
               </div>
-              <div className="tabs" aria-label="고민 단가표 구분">
-                {catalogBookDisplayOrder.map((kind) => (
-                  <button
-                    key={kind}
-                    className={kind === book ? "active" : ""}
-                    onClick={() => {
-                      setBook(kind);
-                      setFolderFilter("");
-                    }}
-                  >
-                    {catalogBookLabel(kind)}
-                  </button>
-                ))}
-              </div>
-              <div className="discovery-concerns">
-                {concerns
-                  .filter((c) => c.book === book)
-                  .map((c) => (
+              <div className="pd-journey">
+                <span>간단한 세 단계</span>
+                <nav aria-label="시술 찾기 단계">
+                  {["고민 선택", "내 상태", "추천 시술"].map((label, i) => (
                     <button
-                      key={c.id}
-                      aria-pressed={selectedConcerns.includes(c.id)}
-                      className={
-                        selectedConcerns.includes(c.id) ? "selected" : ""
+                      key={label}
+                      disabled={i > 0 && !concernId}
+                      aria-current={
+                        Math.min(step, 2) === i ? "step" : undefined
                       }
-                      style={
-                        c.color
-                          ? { borderLeft: `5px solid ${c.color}` }
-                          : undefined
-                      }
-                      onClick={() => toggleConcern(c.id)}
+                      onClick={() => go(i)}
                     >
-                      <span>{c.name}</span>
-                      {selectedConcerns.includes(c.id) ? (
-                        <Check size={20} />
-                      ) : (
-                        <PlusMark />
-                      )}
+                      <b>{i + 1}</b>
+                      {label}
                     </button>
                   ))}
-              </div>
-              {selectedConcerns.map((id) => {
-                const c = concerns.find((c) => c.id === id)!;
-                if (!c.questions.length) return null;
-                return (
-                  <fieldset className="discovery-question" key={id}>
-                    <legend>{c.name} · 해당하는 내용을 골라주세요</legend>
-                    {c.questions.map((q) => (
-                      <label className="check" key={q.id}>
-                        <input
-                          type="checkbox"
-                          checked={answers.includes(q.id)}
-                          onChange={(e) =>
-                            setAnswers(
-                              e.target.checked
-                                ? [...answers, q.id]
-                                : answers.filter((x) => x !== q.id),
-                            )
-                          }
-                        />
-                        {q.label}
-                      </label>
-                    ))}
-                  </fieldset>
-                );
-              })}
-              <div className="discovery-bottom">
-                <span>{selectedConcerns.length}개 고민 선택</span>
-                <button
-                  className="primary"
-                  disabled={!selectedConcerns.length}
-                  onClick={() => setStep(1)}
-                >
-                  시술 둘러보기 <ChevronRight size={18} />
-                </button>
+                </nav>
+                <small>마음에 드는 시술은 상담으로 이어드려요.</small>
               </div>
             </section>
-          )}
-          {step === 1 && (
-            <section>
-              <div className="section-title">
-                <h2>상담하고 싶은 시술을 골라주세요</h2>
-                <button onClick={() => setStep(0)}>
-                  <ArrowLeft size={16} />
+            {error && (
+              <div className="pd-error" role="alert">
+                {error}
+                {!token && (
+                  <button onClick={() => void load(epoch.current)}>
+                    다시 불러오기
+                  </button>
+                )}
+              </div>
+            )}
+            {step === 0 && (
+              <section className="pd-section">
+                <div className="pd-section-head">
+                  <div>
+                    <p className="pd-eyebrow">STEP 01</p>
+                    <h2 data-discovery-heading tabIndex={-1}>
+                      가장 고민되는 곳은 어디인가요?
+                    </h2>
+                    <p>
+                      한 가지를 골라주세요. 다른 고민도 이어서 살펴볼 수 있어요.
+                    </p>
+                  </div>
+                  <label className="pd-search">
+                    <Search size={20} />
+                    <input
+                      aria-label="고민 검색"
+                      placeholder="예: 기미, 주름, 가려움"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                    {search && (
+                      <button
+                        aria-label="검색 지우기"
+                        onClick={() => setSearch("")}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </label>
+                </div>
+                <div className="pd-keywords" aria-label="자주 찾는 고민">
+                  {["기미", "여드름", "모공", "주름", "탈모", "가려움"].map(
+                    (s) => (
+                      <button
+                        key={s}
+                        aria-pressed={search === s}
+                        onClick={() => setSearch(search === s ? "" : s)}
+                      >
+                        #{s}
+                      </button>
+                    ),
+                  )}
+                </div>
+                {loading ? (
+                  <p role="status" className="pd-empty">
+                    상담 가능한 시술을 불러오고 있어요…
+                  </p>
+                ) : (
+                  <div className="pd-concern-grid">
+                    {shownConcerns.map((c, i) => (
+                      <button
+                        className="pd-concern-card"
+                        key={c.id}
+                        onClick={() => choose(c)}
+                      >
+                        <span className="pd-card-top">
+                          <ConcernSymbol id={c.id} />
+                          <span className="pd-select-hint">
+                            선택하기 <ChevronRight size={17} />
+                          </span>
+                        </span>
+                        <h3>{c.name}</h3>
+                        <p>{c.subtitle}</p>
+                        <span className="pd-tags">
+                          {c.tags.slice(0, 3).map((t) => (
+                            <span key={t}>{t}</span>
+                          ))}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!loading && !shownConcerns.length && (
+                  <div className="pd-empty">
+                    <h3>검색어와 맞는 고민을 찾지 못했어요</h3>
+                    <p>다른 말로 검색하거나 전체 고민을 살펴보세요.</p>
+                    <button onClick={() => setSearch("")}>
+                      전체 고민 보기
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
+            {step === 1 && concern && (
+              <section className="pd-section">
+                <button className="pd-back" onClick={() => go(0)}>
+                  <ArrowLeft size={18} />
                   고민 다시 선택
                 </button>
-              </div>
-              <div className="tabs" aria-label="시술 단가표 구분">
-                {catalogBookDisplayOrder.map((kind) => (
-                  <button
-                    key={kind}
-                    className={book === kind ? "active" : ""}
-                    onClick={() => {
-                      setBook(kind);
-                      setFolderFilter("");
-                    }}
-                  >
-                    {catalogBookLabel(kind)}
-                  </button>
-                ))}
-              </div>
-              <div className="search">
-                <Search size={18} />
-                <input
-                  aria-label="관심 시술 검색"
-                  placeholder="시술명이나 옵션으로 검색"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
-              <label className="check discovery-filter">
-                <input
-                  type="checkbox"
-                  checked={filterConcerns}
-                  onChange={(e) => setFilterConcerns(e.target.checked)}
-                />
-                선택한 고민에 해당하는 시술만 보기
-              </label>
-              <label className="field">
-                <span>세부 폴더</span>
-                <select
-                  value={folderFilter}
-                  onChange={(e) => setFolderFilter(e.target.value)}
-                >
-                  <option value="">전체 세부 폴더</option>
-                  {[
-                    ...new Map(
-                      products
-                        .filter((p) => p.book === book)
-                        .flatMap((p) =>
-                          (p.folders || [p.folder]).flatMap((path) =>
-                            path.map(
-                              (f, i) =>
-                                [
-                                  f.id,
-                                  {
-                                    id: f.id,
-                                    name: path
-                                      .slice(0, i + 1)
-                                      .map((x) => x.name)
-                                      .join(" / "),
-                                  },
-                                ] as const,
-                            ),
-                          ),
-                        ),
-                    ).values(),
-                  ].map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="discovery-products">
-                {filtered.map((p) => (
-                  <article className="card" key={p.id}>
-                    <small>
-                      {(
-                        (p.folders || [p.folder]).find((path) =>
-                          folderFilter
-                            ? path.some((f) => f.id === folderFilter)
-                            : path.some((f) =>
-                                selectedConcerns.includes(p.book + ":" + f.id),
-                              ),
-                        ) || p.folder
-                      )
-                        .map((f) => f.name)
-                        .join(" / ")}
-                    </small>
-                    <h3>{p.name}</h3>
-                    {p.event && (
-                      <div className="event-source-info">
-                        <p className="event-period">
-                          게시 기간: {p.event.period || "홈페이지 미표기"}
-                        </p>
-                        <EventPrice {...p.event} />
-                      </div>
-                    )}
-                    {p.options.map((o) => {
-                      const picked = selected.some(
-                        (x) =>
-                          x.catalogVersion === p.catalogVersion &&
-                          x.productId === p.id &&
-                          x.optionId === o.id,
-                      );
-                      return (
-                        <button
-                          key={o.id}
-                          aria-pressed={picked}
-                          className={
-                            "discovery-option " + (picked ? "selected" : "")
-                          }
-                          onClick={() => {
-                            if (picked)
-                              setSelected(
-                                selected.filter(
-                                  (x) =>
-                                    !(
-                                      x.catalogVersion === p.catalogVersion &&
-                                      x.productId === p.id &&
-                                      x.optionId === o.id
-                                    ),
-                                ),
-                              );
-                            else if (selected.length < 30)
-                              setSelected([
-                                ...selected,
-                                {
-                                  productId: p.id,
-                                  optionId: o.id,
-                                  catalogVersion: p.catalogVersion,
-                                },
-                              ]);
-                            else
-                              setError(
-                                "관심 시술은 30개까지 선택할 수 있어요.",
-                              );
-                          }}
-                        >
-                          <span>
-                            <b>{o.label}</b>
-                            <small>{o.unit}</small>
-                          </span>
-                          <span>
-                            {o.price === null ? (
-                              "상담 후 비용 확인"
-                            ) : o.event && p.options.length > 1 ? (
-                              <EventPrice {...o.event} />
-                            ) : (
-                              money(o.price)
-                            )}
-                            <small>
-                              {o.tax === "inclusive"
-                                ? "VAT 포함"
-                                : o.tax === "exclusive"
-                                  ? "VAT 별도"
-                                  : o.tax === "exempt"
-                                    ? "면세"
-                                    : ""}
-                            </small>
-                          </span>
-                          {picked && <Check size={18} />}
-                        </button>
-                      );
-                    })}
-                  </article>
-                ))}
-              </div>
-              {!filtered.length && (
-                <div className="empty">
-                  <p>
-                    선택한 고민의 시술 목록을 준비하고 있어요.
-                    <br />
-                    고민만 전달해도 상담을 요청할 수 있어요.
-                  </p>
+                <div className="pd-section-head">
+                  <div>
+                    <p className="pd-eyebrow">STEP 02 · {concern.name}</p>
+                    <h2 data-discovery-heading tabIndex={-1}>
+                      어떤 상태와 가장 비슷한가요?
+                    </h2>
+                    <p>가까운 항목 하나를 눌러주세요.</p>
+                  </div>
+                  <span className="pd-context">
+                    선택한 고민 <b>{concern.name}</b>
+                  </span>
                 </div>
-              )}
-              <div className="discovery-bottom">
-                <span>관심 시술 {selected.length}개</span>
-                <button className="primary" onClick={() => setStep(2)}>
-                  선택 내용 전달하기 <ChevronRight size={18} />
-                </button>
-              </div>
-            </section>
-          )}
-          {step === 2 && (
-            <form
-              className="card discovery-form"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (busy) return;
-                setBusy(true);
-                setError("");
-                try {
-                  const result = await api("/public/inquiries", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      token,
-                      person,
-                      selections: selected,
-                      concerns: selectedConcerns,
-                      answers: answers.filter((id) =>
-                        concerns.some(
-                          (c) =>
-                            selectedConcerns.includes(c.id) &&
-                            c.questions.some((q) => q.id === id),
-                        ),
-                      ),
-                      personalConsent,
-                      sensitiveConsent,
-                    }),
-                  });
-                  setPerson(blankPerson());
-                  setSelected([]);
-                  setConcerns([]);
-                  setAnswers([]);
-                  setReceipt(result.receipt);
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <h2>병원에서 상담을 이어갈게요</h2>
-              <p>
-                {selectedConcerns
-                  .map((id) => concerns.find((c) => c.id === id)?.name)
-                  .join(" · ")}
-              </p>
-              <div className="discovery-selection-list">
-                {selected.map((item) => {
-                  const p = products.find(
-                      (p) =>
-                        p.id === item.productId &&
-                        p.catalogVersion === item.catalogVersion,
-                    ),
-                    o = p?.options.find((o) => o.id === item.optionId);
-                  return (
-                    <div
-                      key={item.catalogVersion + item.productId + item.optionId}
+                <div className="pd-answer-grid">
+                  {concern.questions.map((q, i) => (
+                    <button
+                      key={q.id}
+                      className="pd-answer-card"
+                      onClick={() => {
+                        setAnswerId(q.id);
+                        go(2);
+                      }}
                     >
-                      <span>
-                        {catalogBookLabel(p?.book)} · {p?.name} / {o?.label}
+                      <span className="pd-answer-number">
+                        {String(i + 1).padStart(2, "0")}
                       </span>
+                      <strong>{q.label}</strong>
+                      <ChevronRight size={22} />
+                    </button>
+                  ))}
+                </div>
+                <button
+                  className="pd-unsure"
+                  onClick={() => {
+                    setAnswerId("");
+                    go(2);
+                  }}
+                >
+                  <CircleHelp size={22} />
+                  <span>
+                    <strong>잘 모르겠어요</strong>
+                    <small>이 고민의 시술을 먼저 둘러볼게요.</small>
+                  </span>
+                  <ChevronRight size={20} />
+                </button>
+              </section>
+            )}
+            {step === 2 && concern && (
+              <section className="pd-section">
+                <button className="pd-back" onClick={() => go(1)}>
+                  <ArrowLeft size={18} />내 상태 다시 선택
+                </button>
+                <div className="pd-result-intro">
+                  <div>
+                    <p className="pd-eyebrow">
+                      STEP 03 · 나에게 맞는 상담 준비
+                    </p>
+                    <h2 data-discovery-heading tabIndex={-1}>
+                      이런 시술을 상담해보세요
+                    </h2>
+                    <p>
+                      <strong>{concern.name}</strong>
+                      {answer && <> · {answer.label}</>}
+                    </p>
+                    <small>
+                      선택한 고민과 병원에 등록된 시술 정보로 찾은 상담
+                      후보입니다.
+                      <br />
+                      실제 적합한 시술과 최종 비용은 의료진 상담 후 결정돼요.
+                    </small>
+                  </div>
+                  <Sparkles size={42} />
+                </div>
+                <div className="pd-results-toolbar">
+                  <p>
+                    <b>{matches.length}</b>개의 상담 후보
+                  </p>
+                  <label className="pd-search">
+                    <Search size={20} />
+                    <input
+                      aria-label="추천 시술 검색"
+                      placeholder="결과에서 시술 찾기"
+                      value={search}
+                      onChange={(e) => {
+                        setSearch(e.target.value);
+                        setLimit(6);
+                      }}
+                    />
+                    {search && (
                       <button
-                        type="button"
-                        aria-label={(p?.name || "") + " 관심 목록에서 삭제"}
-                        onClick={() =>
-                          setSelected(selected.filter((x) => x !== item))
+                        aria-label="검색 지우기"
+                        onClick={() => setSearch("")}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </label>
+                </div>
+                <div className="pd-product-grid">
+                  {matches.slice(0, limit).map((p, i) => {
+                    const prices = p.options.flatMap((o) =>
+                      o.price === null ? [] : [o.price],
+                    );
+                    const from = prices.length ? Math.min(...prices) : null;
+                    const hasPicked = selected.some(
+                      (s) =>
+                        s.catalogVersion === p.catalogVersion &&
+                        s.productId === p.id,
+                    );
+                    return (
+                      <article
+                        className={
+                          "pd-product" + (hasPicked ? " pd-picked" : "")
+                        }
+                        key={p.catalogVersion + ":" + p.id}
+                      >
+                        <div className="pd-product-top">
+                          <span className="pd-result-number">
+                            {String(i + 1).padStart(2, "0")}
+                          </span>
+                          <span className="pd-product-concern">
+                            {concern.name}
+                          </span>
+                          {hasPicked && (
+                            <span className="pd-selected-mark">
+                              <Check size={16} />
+                              관심 담음
+                            </span>
+                          )}
+                        </div>
+                        <h3>{p.name}</h3>
+                        <p className="pd-product-copy">
+                          {answer
+                            ? `‘${answer.label}’ 선택에 연결된 상담 후보예요.`
+                            : `${concern.name} 고민으로 상담할 수 있는 시술이에요.`}
+                        </p>
+                        {p.event?.period && (
+                          <p className="pd-period">
+                            안내 기간 {p.event.period}
+                          </p>
+                        )}
+                        <div className="pd-price">
+                          {from === null ? (
+                            "상담 후 비용 안내"
+                          ) : (
+                            <>
+                              {money(from)}
+                              {p.options.length > 1 && <small>부터</small>}
+                            </>
+                          )}
+                          <small>
+                            구성별 금액과 부가세는 아래에서 확인해주세요.
+                          </small>
+                        </div>
+                        {p.options.length ? (
+                          <details
+                            className="pd-options"
+                            open={p.options.length === 1 ? true : undefined}
+                          >
+                            <summary>
+                              구성·가격 보기 <ChevronRight size={18} />
+                            </summary>
+                            {p.options.map((o) => {
+                              const picked = selected.some(
+                                (s) =>
+                                  s.catalogVersion === p.catalogVersion &&
+                                  s.productId === p.id &&
+                                  s.optionId === o.id,
+                              );
+                              return (
+                                <button
+                                  key={o.id}
+                                  aria-pressed={picked}
+                                  className={
+                                    "pd-option" + (picked ? " selected" : "")
+                                  }
+                                  onClick={() => toggle(p, o.id)}
+                                >
+                                  <span>
+                                    <strong>{o.label}</strong>
+                                    <small>{o.unit}</small>
+                                  </span>
+                                  <span className="pd-option-price">
+                                    {o.price === null ? (
+                                      "상담 후 비용 확인"
+                                    ) : o.event ? (
+                                      <EventPrice {...o.event} />
+                                    ) : (
+                                      money(o.price)
+                                    )}
+                                    <small>
+                                      {o.tax === "inclusive"
+                                        ? "부가세 포함"
+                                        : o.tax === "exclusive"
+                                          ? "부가세 별도"
+                                          : o.tax === "exempt"
+                                            ? "면세"
+                                            : ""}
+                                    </small>
+                                  </span>
+                                  <span className="pd-pick-label">
+                                    {picked ? (
+                                      <>
+                                        <Check size={16} />
+                                        담았어요
+                                      </>
+                                    ) : (
+                                      "관심 담기"
+                                    )}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </details>
+                        ) : (
+                          <p className="pd-muted">
+                            구체적인 구성은 상담으로 안내드려요.
+                          </p>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+                {!matches.length && (
+                  <div className="pd-empty">
+                    <CircleHelp size={36} />
+                    <h3>정확한 시술은 상담으로 찾아드릴게요</h3>
+                    <p>
+                      현재 선택과 연결된 안내 시술이 없어요.
+                      <br />
+                      고민만 전달해도 상담을 요청할 수 있습니다.
+                    </p>
+                    {search && (
+                      <button onClick={() => setSearch("")}>검색 지우기</button>
+                    )}
+                  </div>
+                )}
+                {matches.length > limit && (
+                  <button
+                    className="pd-more"
+                    onClick={() => setLimit(limit + 6)}
+                  >
+                    시술 더 보기 · {matches.length - limit}개 남음{" "}
+                    <ChevronRight size={18} />
+                  </button>
+                )}
+                <div className="pd-bottom">
+                  <div>
+                    <strong>관심 시술 {selected.length}개</strong>
+                    <small>고민만으로도 상담할 수 있어요.</small>
+                  </div>
+                  <button onClick={() => go(0)}>다른 고민도 찾기</button>
+                  <button className="pd-primary" onClick={() => go(3)}>
+                    상담으로 이어가기 <ChevronRight size={19} />
+                  </button>
+                </div>
+              </section>
+            )}
+            {step === 3 && (
+              <form className="pd-panel pd-form" onSubmit={submit}>
+                <button type="button" className="pd-back" onClick={() => go(2)}>
+                  <ArrowLeft size={18} />
+                  추천 시술로 돌아가기
+                </button>
+                <p className="pd-eyebrow">마지막으로 알려주세요</p>
+                <h2 data-discovery-heading tabIndex={-1}>
+                  병원에서 상담을 이어드릴게요
+                </h2>
+                <p>
+                  시술을 결정하는 단계가 아니에요. 고민을 편하게 전달해주세요.
+                </p>
+                <div className="pd-request-summary">
+                  <strong>{concern?.name}</strong>
+                  {answer && <p>{answer.label}</p>}
+                  {selected.map((item) => {
+                    const p = products.find(
+                        (p) =>
+                          p.id === item.productId &&
+                          p.catalogVersion === item.catalogVersion,
+                      ),
+                      o = p?.options.find((o) => o.id === item.optionId);
+                    return (
+                      <div
+                        key={
+                          item.catalogVersion + item.productId + item.optionId
                         }
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="form-grid">
-                <label className="field">
-                  <span>이름 *</span>
-                  <input
-                    required
-                    autoComplete="off"
-                    maxLength={80}
-                    value={person.name}
-                    onChange={(e) =>
-                      setPerson({ ...person, name: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>연락처 *</span>
-                  <input
-                    required
-                    type="tel"
-                    autoComplete="off"
-                    maxLength={15}
-                    value={person.phone}
-                    onChange={(e) =>
-                      setPerson({ ...person, phone: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>성별 (선택)</span>
-                  <select
-                    value={person.sex}
-                    onChange={(e) =>
-                      setPerson({
-                        ...person,
-                        sex: e.target.value as typeof person.sex,
-                      })
-                    }
-                  >
-                    <option value="U">선택 안 함</option>
-                    <option value="F">여성</option>
-                    <option value="M">남성</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>생년월일 (선택)</span>
-                  <input
-                    type="date"
-                    max={new Date().toISOString().slice(0, 10)}
-                    value={person.dob}
-                    onChange={(e) =>
-                      setPerson({ ...person, dob: e.target.value })
-                    }
-                  />
-                </label>
-                <label className="field">
-                  <span>주소 · 동까지 (선택)</span>
-                  <input
-                    autoComplete="off"
-                    maxLength={160}
-                    value={person.address}
-                    onChange={(e) =>
-                      setPerson({ ...person, address: e.target.value })
-                    }
-                  />
-                </label>
-              </div>
-              <div className="discovery-consent">
-                <p>
-                  그랜드아름다운의원은 상담 접수와 연락을 위해 이름·연락처 및
-                  직접 입력한 성별·생년월일·주소를 사용합니다. 선택한 고민과
-                  관심 시술도 함께 전달됩니다. 접수 정보는 30일 후 자동
-                  삭제하며, 상담으로 연결하면 접수함에서 삭제하고 병원 상담
-                  기록으로 관리합니다. 동의를 거부할 수 있으며 이 경우 온라인
-                  접수는 진행되지 않습니다.
-                </p>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={personalConsent}
-                    onChange={(e) => setPersonalConsent(e.target.checked)}
-                  />
-                  개인정보 수집·이용에 동의합니다. (필수)
-                </label>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    required
-                    checked={sensitiveConsent}
-                    onChange={(e) => setSensitiveConsent(e.target.checked)}
-                  />
-                  고민·관심 시술 등 건강 관련 정보의 수집·이용에 동의합니다.
-                  (필수)
-                </label>
-              </div>
-              <div className="button-row">
-                <button type="button" onClick={() => setStep(1)}>
-                  선택 수정
-                </button>
+                        <span>
+                          {p?.name} · {o?.label}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={(p?.name || "") + " 관심 목록에서 삭제"}
+                          onClick={() =>
+                            setSelected(selected.filter((s) => s !== item))
+                          }
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="pd-fields">
+                  <label>
+                    이름 <span>필수</span>
+                    <input
+                      required
+                      autoComplete="off"
+                      maxLength={80}
+                      value={person.name}
+                      onChange={(e) =>
+                        setPerson({ ...person, name: e.target.value })
+                      }
+                    />
+                  </label>
+                  <label>
+                    연락처 <span>필수</span>
+                    <input
+                      required
+                      type="tel"
+                      autoComplete="off"
+                      maxLength={15}
+                      placeholder="010-0000-0000"
+                      value={person.phone}
+                      onChange={(e) =>
+                        setPerson({ ...person, phone: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <details className="pd-optional">
+                  <summary>
+                    추가 정보 입력 <small>선택사항</small>
+                  </summary>
+                  <div className="pd-fields">
+                    <label>
+                      성별
+                      <select
+                        value={person.sex}
+                        onChange={(e) =>
+                          setPerson({
+                            ...person,
+                            sex: e.target.value as typeof person.sex,
+                          })
+                        }
+                      >
+                        <option value="U">선택 안 함</option>
+                        <option value="F">여성</option>
+                        <option value="M">남성</option>
+                      </select>
+                    </label>
+                    <label>
+                      생년월일
+                      <input
+                        type="date"
+                        max={new Date().toISOString().slice(0, 10)}
+                        value={person.dob}
+                        onChange={(e) =>
+                          setPerson({ ...person, dob: e.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      주소 · 동까지
+                      <input
+                        autoComplete="off"
+                        maxLength={160}
+                        value={person.address}
+                        onChange={(e) =>
+                          setPerson({ ...person, address: e.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                </details>
+                <div className="pd-consent">
+                  <details>
+                    <summary>개인정보·건강정보 수집 및 이용 안내</summary>
+                    <p>
+                      그랜드아름다운의원은 상담 접수와 연락을 위해 이름·연락처
+                      및 직접 입력한 성별·생년월일·주소를 사용합니다. 선택한
+                      고민과 관심 시술도 함께 전달됩니다. 접수 정보는 30일 후
+                      자동 삭제하며, 상담으로 연결하면 접수함에서 삭제하고 병원
+                      상담 기록으로 관리합니다. 동의를 거부할 수 있으며 이 경우
+                      온라인 접수는 진행되지 않습니다.
+                    </p>
+                  </details>
+                  <label>
+                    <input
+                      type="checkbox"
+                      required
+                      checked={personalConsent}
+                      onChange={(e) => setPersonalConsent(e.target.checked)}
+                    />
+                    개인정보 수집·이용에 동의합니다. (필수)
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      required
+                      checked={sensitiveConsent}
+                      onChange={(e) => setSensitiveConsent(e.target.checked)}
+                    />
+                    고민·관심 시술 등 건강 관련 정보의 수집·이용에 동의합니다.
+                    (필수)
+                  </label>
+                </div>
                 <button
-                  className="primary"
+                  className="pd-primary pd-submit"
                   disabled={
                     busy || !token || !personalConsent || !sensitiveConsent
                   }
                 >
-                  {busy ? "전달 중…" : "상담 요청 보내기"}
+                  {busy ? "전달하고 있어요…" : "상담 요청 보내기"}
+                  <ChevronRight size={20} />
                 </button>
-              </div>
-            </form>
+              </form>
+            )}
+          </>
+        )}
+        <footer className="pd-footer">
+          <b>그랜드아름다운의원</b>
+          <span>고민을 듣고, 나에게 맞는 방향을 함께 찾습니다.</span>
+          {kiosk && (
+            <small>
+              공용 태블릿에서는 3분 동안 입력이 없으면 처음 화면으로 돌아갑니다.
+            </small>
           )}
-        </>
-      )}
-      <footer>
-        원내 공용 태블릿에서는 3분 동안 입력이 없으면 초기화됩니다. 입력 정보는
-        이 브라우저에 저장하지 않습니다.
-      </footer>
+          <small>입력하신 개인정보는 이 브라우저에 저장하지 않습니다.</small>
+        </footer>
+      </div>
     </main>
   );
 }
-function PlusMark() {
-  return <ChevronRight size={20} />;
+function ConcernSymbol({ id }: { id: string }) {
+  const icons: Record<string, typeof Sparkles> = {
+    pigment: Sun,
+    acne: CircleDot,
+    scar: Waves,
+    pores: Grid2X2,
+    redness: Heart,
+    lifting: MoveUpRight,
+    eye: Eye,
+    booster: Droplets,
+    "botox-filler": Smile,
+    "hair-removal": Feather,
+    body: PersonStanding,
+    "hair-loss": Sprout,
+    tattoo: Eraser,
+    "large-scar": Waves,
+    medical: HeartPulse,
+    condition: BatteryCharging,
+  };
+  const Icon = icons[id.replace("patient:", "")] || Sparkles;
+  return (
+    <span className="pd-concern-icon">
+      <Icon size={26} strokeWidth={1.5} />
+    </span>
+  );
 }
+
 export function DiscoveryDesk({
   state,
   publicUrl,

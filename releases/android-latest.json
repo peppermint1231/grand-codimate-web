@@ -1,7 +1,7 @@
 {
-  "version": "0.16.0",
-  "versionCode": 67,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.16.0.apk",
-  "sha256": "d74214f3d2249f58cc807c0f51551e22608c4c5c61dbd6b48c9b371c51eb26f1",
-  "notes": "VIP 환자용 무기한 조회 QR: 최신 포인트·실적·혜택 확인, 링크 재발급·폐기."
+  "version": "0.17.0",
+  "versionCode": 68,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.17.0.apk",
+  "sha256": "207e073a7d71876415872336931adb9e4820d32d86265020b5f023cc437ce5fb",
+  "notes": "환자용 맞춤 시술 찾기 개편: 고민·상태별 통합 추천, 큰 글씨, 간편 상담 접수."
 }

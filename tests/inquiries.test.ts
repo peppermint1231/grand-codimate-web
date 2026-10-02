@@ -409,3 +409,26 @@ it("stores folder history atomically with its published catalog and hides draft 
     limited.state.catalogs.every((c: any) => c.status === "published"),
   ).toBe(true);
 });
+
+it("accepts unified patient concerns and records detail labels while retaining original book selections", async () => {
+  const f = await fixture();
+  expect(
+    f.pub.patientConcerns.some((c: any) => c.id === "patient:pigment"),
+  ).toBe(true);
+  const input = {
+    ...f.input,
+    concerns: ["patient:pigment", "patient:medical"],
+    answers: ["spots", "itch-dermatitis"],
+  };
+  const response = await f.request("/public/inquiries", input, true);
+  expect(response.status, await response.clone().text()).toBe(200);
+  const receipt = ((await response.json()) as any).receipt;
+  const entry = (
+    (await (await f.request("/inquiries")).json()) as any
+  ).inquiries.find((x: any) => x.id === receipt);
+  expect(entry.concernLabels).toEqual(["점·잡티·기미", "피부 증상·손발톱"]);
+  expect(entry.answerLabels).toContain("잡티·주근깨가 눈에 띄어요");
+  expect(new Set(entry.selections.map((s: any) => s.book))).toEqual(
+    new Set(["미용", "보험", "이벤트"]),
+  );
+});

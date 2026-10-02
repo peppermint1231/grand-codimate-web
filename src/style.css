@@ -5331,3 +5331,23 @@ html.custom-pull-refresh {
 .referral-picker legend { font-weight:700; }
 .referral-results { max-height:260px; overflow:auto; }
 .referral-results button { width:100%; text-align:left; }
+
+.patient-grade-badge { display:inline-flex; align-items:center; gap:6px; padding:8px 12px; border-radius:10px; font-size:1.05em; font-weight:800; color:var(--grade-color); border:2px solid currentColor; background:color-mix(in srgb,var(--grade-color) 10%,white); white-space:nowrap; }
+.patient-grade-badge.vip { background:linear-gradient(120deg,#fff3c9,#f5df95); border-color:#aa7c20; color:#694715; box-shadow:0 2px 8px #9f791b26; }
+.patient-grade-badge.ungraded { color:#83918a; background:#f3f5f3; border-color:transparent; font-size:.85em; font-weight:400; }
+.consultation-owner { display:flex; gap:8px; align-items:center; flex-wrap:wrap; font-size:.85rem; text-align:left; }
+.consultation-owner details { position:relative; }
+.consultation-owner form { position:absolute; z-index:30; top:100%; left:0; width:min(320px,80vw); padding:16px; border:1px solid #dce5df; background:white; border-radius:12px; box-shadow:0 6px 20px #15372b25; }
+.history-photo-owner { display:grid; gap:6px; min-width:0; }
+.unpaid-list { display:grid; gap:8px; padding:12px; background:#fff5ed; border:1px solid #efc2a6; border-radius:10px; margin-bottom:16px; }
+.unpaid-item { display:flex; justify-content:space-between; align-items:center; gap:12px; text-align:left; white-space:normal; }
+.unpaid-item small { display:block; }
+.unpaid-item[aria-pressed="true"] { border:2px solid #bc562c; }
+.opinion-recipient-list { display:flex; gap:12px; flex-wrap:wrap; border:1px solid #dce5df; border-radius:10px; padding:12px; }
+.grade-settings-row { border:1px solid #dce5df; border-left:4px solid #145d55; border-radius:10px; padding:16px; margin:14px 0; }
+.grade-settings-row details { margin:12px 0; }
+.grade-settings-row summary { font-weight:700; padding:8px 0; }
+.patient-money-grid > .ledger-entry-form { order:-1; }
+@media(max-width:700px) { .consultation-owner form { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:calc(100vw - 40px); max-height:80dvh; overflow:auto; box-shadow:0 0 0 100vmax #17352b55; } }
+.patient-grade-badge.compact { font-size:.78em; padding:3px 7px; margin-left:8px; border-width:1px; }
+@media(max-width:600px) { .unpaid-item { flex-direction:column; align-items:flex-start; } .unpaid-item strong { align-self:flex-end; white-space:nowrap; } .consultation-history-entry > .list-row > .history-photo-owner { grid-column:1 / -1; grid-row:2; max-width:100%; justify-self:start; } }

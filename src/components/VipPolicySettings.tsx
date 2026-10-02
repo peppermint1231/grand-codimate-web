@@ -39,8 +39,9 @@ export function VipPolicySettings({
     >
       <h3>VIP 포인트 운영</h3>
       <p>
-        수납 이력상 최초 VIP 승급일부터 1년씩 · 각 기간 1회 지급 · 기존 VIP도
-        최초 적립 · 유효기간 없음
+        수납 이력상 최초 VIP 승급일부터 {value.annualMonths || 12}개월씩 · 각
+        기간 1회 지급 · 기존 VIP도 최초 적립 · 새 적립 유효기간{" "}
+        {value.expiryMonths ? `${value.expiryMonths}개월` : "없음"}
       </p>
       <label className="check">
         <input

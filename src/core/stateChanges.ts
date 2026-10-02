@@ -63,9 +63,13 @@ export function visibleChanges(
       return [];
     if (change.section === "notes" && !allowed(user, "note.read")) return [];
     if (
-      ["ledger", "quoteConsents", "vipAccounts", "pointEntries"].includes(
-        change.section,
-      ) &&
+      [
+        "ledger",
+        "quoteConsents",
+        "vipAccounts",
+        "pointEntries",
+        "benefitAccounts",
+      ].includes(change.section) &&
       !allowed(user, "money.read")
     )
       return [];

@@ -207,7 +207,7 @@ it("interim consultation can complete without quotation and does not close sourc
   expect(packageActive(s.consultations[0])).toBe(true);
   expect(packageActive(s.consultations[1])).toBe(false);
 });
-it("follow-up refuses different patient/category and unavailable renewal product", async () => {
+it("follow-up refuses different patient/category but carries unavailable renewal products as historical snapshots", async () => {
   const s = await fixture();
   s.consultations[0].status = "P";
   await expect(
@@ -224,19 +224,23 @@ it("follow-up refuses different patient/category and unavailable renewal product
     ),
   ).rejects.toThrow("같은 환자");
   s.catalogs[0].products[0].active = false;
-  await expect(
-    send(
-      s,
-      "consultation.create",
-      {
-        patientId: "patient",
-        category: "미용",
-        kind: "renewal",
-        sourceConsultationId: "consult",
-      },
-      "bad",
-    ),
-  ).rejects.toThrow("현재 판매");
+  const renewed = await send(
+    s,
+    "consultation.create",
+    {
+      patientId: "patient",
+      category: "미용",
+      kind: "renewal",
+      sourceConsultationId: "consult",
+    },
+    "bad",
+  );
+  expect(renewed.consultations.at(-1)?.quote.lines[0].renewalNotice).toContain(
+    "이전 상담",
+  );
+  expect(renewed.consultations.at(-1)?.quote.lines[0].price).toBe(
+    s.consultations[0].quote.lines[0].price,
+  );
 });
 it("photo selection, ordering, free rotation and styles round-trip; foreign annotations cannot be changed", async () => {
   let s = await fixture();

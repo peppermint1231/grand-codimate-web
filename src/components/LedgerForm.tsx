@@ -1,5 +1,5 @@
 import { pointBalance } from "../core/vipPoints";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { activeLedger, ledgerAvailable } from "../core/domain";
 import { money, type State, type Patient } from "../core/model";
 
@@ -7,11 +7,22 @@ export function LedgerForm({
   state: s,
   patient: p,
   send,
+  initialConsultationId,
 }: {
   state: State;
   patient: Patient;
   send: (...args: any[]) => any;
+  initialConsultationId?: string;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (initialConsultationId) {
+      setSelected(initialConsultationId);
+      setKind("receipt");
+      setFull(true);
+      formRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [initialConsultationId]);
   const [method, setMethod] = useState("카드");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -28,7 +39,9 @@ export function LedgerForm({
   );
   const consultationId = consultations.some((c) => c.id === selected)
     ? selected
-    : consultations[0]?.id || "";
+    : consultations.find((c) => ledgerAvailable(s, c.id, "receipt") > 0)?.id ||
+      consultations[0]?.id ||
+      "";
   const receipts = activeLedger(s).filter(
     (l) =>
       l.consultationId === consultationId &&
@@ -51,7 +64,8 @@ export function LedgerForm({
       : available;
   return (
     <form
-      className="card"
+      ref={formRef}
+      className="card ledger-entry-form"
       onSubmit={async (e) => {
         e.preventDefault();
         const data = Object.fromEntries(new FormData(e.currentTarget));
@@ -82,6 +96,37 @@ export function LedgerForm({
       }}
     >
       <h3>금액 기록</h3>
+      {kind === "receipt" &&
+        consultations.some((c) => ledgerAvailable(s, c.id, "receipt") > 0) && (
+          <section className="unpaid-list" aria-label="미수납 상담">
+            <b>미수납 내역 · 선택하면 전액이 입력됩니다</b>
+            {consultations
+              .filter((c) => ledgerAvailable(s, c.id, "receipt") > 0)
+              .map((c) => (
+                <button
+                  type="button"
+                  className="unpaid-item"
+                  aria-pressed={consultationId === c.id}
+                  key={c.id}
+                  onClick={() => {
+                    setSelected(c.id);
+                    setFull(true);
+                    setAmount("");
+                  }}
+                >
+                  <span>
+                    {c.createdAt.slice(0, 10)} · {c.category}
+                    <small>
+                      {c.quote.lines.map((l) => l.name).join(", ") || "상담"}
+                    </small>
+                  </span>
+                  <strong>
+                    {money(ledgerAvailable(s, c.id, "receipt"))} · 수납하기
+                  </strong>
+                </button>
+              ))}
+          </section>
+        )}
       {error && (
         <p role="alert" className="warning-panel">
           {error}

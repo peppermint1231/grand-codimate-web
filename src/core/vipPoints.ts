@@ -1,3 +1,9 @@
+import {
+  availablePointBalance,
+  addMonths,
+  type PointAllocation,
+  type PointCredit,
+} from "./pointLedger";
 import type { Base, Patient, State, Ledger } from "./model";
 
 export interface VipPolicy {
@@ -10,6 +16,8 @@ export interface VipPolicy {
   annualReward: number;
   referralReward: number;
   existingWelcome: boolean;
+  annualMonths?: number;
+  expiryMonths?: number;
 }
 export interface VipAccount extends Base {
   patientId: string;
@@ -23,7 +31,19 @@ export interface VipAccount extends Base {
 export interface PointEntry extends Base {
   patientId: string;
   amount: number;
-  kind: "grant" | "revoke" | "use" | "return" | "adjustment" | "correction";
+  kind:
+    | "grant"
+    | "revoke"
+    | "use"
+    | "return"
+    | "adjustment"
+    | "correction"
+    | "expiry";
+  expiresAt?: string;
+  periodFrom?: string;
+  periodTo?: string;
+  allocations?: PointAllocation[];
+  creditParts?: PointCredit[];
   reason: string;
   actorId: string;
   benefitKey?: string;
@@ -77,10 +97,7 @@ export function cashRevenue(
     )
     .reduce((n, l) => n + (l.kind === "receipt" ? l.amount : -l.amount), 0);
 }
-export const pointBalance = (s: State, patientId: string) =>
-  (s.pointEntries || [])
-    .filter((e) => e.patientId === patientId)
-    .reduce((n, e) => n + e.amount, 0);
+export const pointBalance = availablePointBalance;
 export const vipAccount = (s: State, patientId: string) =>
   (s.vipAccounts || []).find((a) => a.patientId === patientId && !a.mergedInto);
 /** The first actual cash threshold crossing establishes permanent membership.
@@ -136,12 +153,23 @@ function anniversary(date: string, year: number): string {
   const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
   return `${year}-${String(month).padStart(2, "0")}-${String(Math.min(day, last)).padStart(2, "0")}`;
 }
-export function vipPeriod(account: VipAccount, at: string) {
+export function vipPeriod(
+  account: Pick<VipAccount, "enrolledAt">,
+  at: string,
+  months = 12,
+) {
   const joined = seoulDay(account.enrolledAt),
     day = seoulDay(at);
-  let year = Number(day.slice(0, 4));
-  if (anniversary(joined, year) > day) year--;
-  return { from: anniversary(joined, year), to: anniversary(joined, year + 1) };
+  const elapsed =
+    (Number(day.slice(0, 4)) - Number(joined.slice(0, 4))) * 12 +
+    Number(day.slice(5, 7)) -
+    Number(joined.slice(5, 7));
+  let index = Math.max(0, Math.floor(elapsed / months));
+  if (addMonths(joined, index * months) > day) index = Math.max(0, index - 1);
+  return {
+    from: addMonths(joined, index * months),
+    to: addMonths(joined, (index + 1) * months),
+  };
 }
 export function annualCash(
   s: State,
@@ -240,11 +268,26 @@ export function reconcileVip(
       const birthday = anniversary(patient.dob, year);
       if (birthday >= start && birthday >= benefitsStart && birthday <= day)
         add("birthday:" + year, policy.birthday);
-      const from = anniversary(start, year),
-        to = anniversary(start, year + 1);
+    }
+    const periodMonths = policy.annualMonths || 12;
+    for (
+      let offset = 0;
+      addMonths(start, offset) <= day;
+      offset += periodMonths
+    ) {
+      const from = addMonths(start, offset),
+        to = addMonths(start, offset + periodMonths);
       if (
-        from <= day &&
         to > benefitsStart &&
+        !s.pointEntries.some(
+          (e) =>
+            e.patientId === patient.id &&
+            e.kind === "grant" &&
+            e.benefitKey?.startsWith("annual:") &&
+            e.benefitKey !== "annual:" + from &&
+            (e.periodFrom || e.benefitKey.slice(7)) < to &&
+            (e.periodTo || addMonths(e.benefitKey.slice(7), 12)) > from,
+        ) &&
         annualCash(s, account, from, to, now) >= policy.annualThreshold
       )
         add("annual:" + from, policy.annualReward);
@@ -269,7 +312,14 @@ export function reconcileVip(
         first &&
         first.createdAt >= account.enrolledAt &&
         first.date >= benefitsStart &&
-        net > 0
+        net > 0 &&
+        !s.pointEntries.some(
+          (e) =>
+            e.patientId === patient.id &&
+            e.sourcePatientId === referred.id &&
+            e.kind === "grant" &&
+            e.benefitKey !== "referral:" + referred.id,
+        )
       )
         add("referral:" + referred.id, policy.referralReward, referred.id);
     }
@@ -301,6 +351,15 @@ export function reconcileVip(
           benefitLabel(key) + (amount < 0 ? " · 환자 병합 중복 적립 정리" : ""),
         actorId,
         benefitKey: key,
+        ...(key.startsWith("annual:")
+          ? {
+              periodFrom: key.slice(7),
+              periodTo: addMonths(key.slice(7), policy.annualMonths || 12),
+            }
+          : {}),
+        ...(amount > 0 && policy.expiryMonths
+          ? { expiresAt: addMonths(day, policy.expiryMonths) }
+          : {}),
         benefitAmount:
           original?.benefitAmount ?? rule?.amount ?? Math.max(current, 0),
         sourcePatientId: rule?.sourcePatientId || original?.sourcePatientId,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { State } from "../core/model";
-import { vipEligible } from "../core/vipPoints";
+import { currentBenefitGrade, benefitSettings } from "../core/gradeBenefits";
 export function ReferralPicker({
   state,
   value,
@@ -13,6 +13,13 @@ export function ReferralPicker({
   disabled?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const referralLabel = (id: string) => {
+    const g = currentBenefitGrade(state, id, new Date().toISOString());
+    const b = g && benefitSettings(state, g);
+    return b?.enabled && b.referralReward > 0
+      ? `${g!.name} 소개 혜택 ${b.referralReward.toLocaleString()}P`
+      : "현재 자동 소개 혜택 없음";
+  };
   const selected = state.patients.find((p) => p.id === value);
   const normalized = query.trim().toLowerCase();
   const rows = normalized
@@ -35,11 +42,7 @@ export function ReferralPicker({
           <b>
             {selected.name} · {selected.number} · {selected.phone.slice(-4)}
           </b>
-          <span>
-            {vipEligible(state, selected)
-              ? "VIP 소개 혜택 대상"
-              : "VIP 기준 달성 전"}
-          </span>
+          <span>{referralLabel(selected.id)}</span>
           {!disabled && (
             <button
               type="button"
@@ -80,7 +83,7 @@ export function ReferralPicker({
                     {p.number} · {p.dob} · 연락처 끝 {p.phone.slice(-4)}
                   </small>
                 </span>
-                <span>{vipEligible(state, p) ? "VIP" : ""}</span>
+                <span>{referralLabel(p.id)}</span>
               </button>
             ))}
             {normalized && !rows.length && <p>검색 결과가 없습니다.</p>}
@@ -88,8 +91,8 @@ export function ReferralPicker({
         </>
       )}
       <p className="small">
-        포인트는 소개해 준 VIP 환자에게 지급합니다. 새 환자의 첫 실제 수납 후
-        1회 지급되며, 등록만으로 지급되지는 않습니다.
+        포인트는 소개해 준 환자의 등급별 혜택에 따라 지급합니다. 새 환자의 첫
+        실제 수납 후 1회 지급되며, 등록만으로 지급되지는 않습니다.
       </p>
     </fieldset>
   );

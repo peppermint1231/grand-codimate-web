@@ -39,7 +39,7 @@ const open = async () => {
     .filter({
       has: page.getByRole("heading", { name: "상담이력", exact: true }),
     })
-    .locator("button.list-row")
+    .locator('button.list-row, [role="link"].list-row')
     .click();
   await page.getByRole("button", { name: /01 사진/ }).click();
   await page.getByLabel("사진 편집 캔버스").waitFor();

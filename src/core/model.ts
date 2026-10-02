@@ -1,3 +1,4 @@
+import type { GradeBenefits, BenefitAccount } from "./gradeBenefits";
 import type { VipPolicy, VipAccount, PointEntry } from "./vipPoints";
 import type { EventOriginInfo } from "./eventCatalog";
 export const jobRoles = [
@@ -179,6 +180,7 @@ export interface Line {
   customPrice?: number;
   /** Server-derived snapshot: this option requires a consultation price. */
   requiresCustomPrice?: boolean;
+  renewalNotice?: string;
   categorySnapshot?: string;
   /** Unit list price at selection; price remains the actual sale price. */
   regularPrice?: number;
@@ -282,6 +284,7 @@ export interface Ledger extends Base {
   actorId: string;
 }
 export interface Grade {
+  benefits?: GradeBenefits;
   id: string;
   name: string;
   color: string;
@@ -345,6 +348,7 @@ export interface Event extends Base {
   operationId: string;
 }
 export interface State {
+  benefitAccounts: BenefitAccount[];
   vipAccounts: VipAccount[];
   pointEntries: PointEntry[];
   patients: Patient[];
@@ -369,6 +373,7 @@ export interface Command {
   payload: Record<string, unknown>;
 }
 export const emptyState = (): State => ({
+  benefitAccounts: [],
   vipAccounts: [],
   pointEntries: [],
   patients: [],

@@ -77,7 +77,7 @@ const history = () =>
     .filter({
       has: page.getByRole("heading", { name: "상담이력", exact: true }),
     })
-    .locator("button.list-row");
+    .locator('button.list-row, [role="link"].list-row');
 try {
   await page.goto("http://localhost:5173");
   await login();

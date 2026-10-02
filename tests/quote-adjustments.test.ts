@@ -368,9 +368,11 @@ it("consultation-priced options require an explicit amount and reason, derived o
   await expect(
     applyCommand(saved, catalogAdmin, command(payload, 2)),
   ).rejects.toThrow("상담 가격을 입력하세요");
-  expect(() =>
-    renewalQuote(saved.consultations[0], s.catalogs, "renewal"),
-  ).toThrow("새 상담에서 선택");
+  const renewed = renewalQuote(saved.consultations[0], s.catalogs, "renewal");
+  expect(renewed.lines[0].renewalNotice).toContain("이전 상담");
+  expect(renewed.lines[0].price).toBe(
+    saved.consultations[0].quote.lines[0].customPrice,
+  );
 });
 
 it("snapshots only the selected membership tier benefits and preserves them after catalog edits", async () => {

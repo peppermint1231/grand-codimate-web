@@ -1,3 +1,4 @@
+import { catalogApplyGuard } from "../src/core/catalogApply";
 import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
 import { handleIntake } from "./intake";
@@ -7,7 +8,12 @@ import {
   type PatientSearchRow,
 } from "../src/core/patientSearch";
 import { buildAnalytics } from "../src/core/analytics";
-import { lightCatalog, visibleChanges, diffStateChanges, isConsentDeletion } from "../src/core/stateChanges";
+import {
+  lightCatalog,
+  visibleChanges,
+  diffStateChanges,
+  isConsentDeletion,
+} from "../src/core/stateChanges";
 import {
   QuoteShares,
   quoteShareInput,
@@ -159,24 +165,118 @@ export class Clinic extends DurableObject<Env> {
     const account = await this.secret<Account>("user:" + id);
     return account ? normalizeUser(account) : undefined;
   }
-  private async state(includeHistory = true, sections?: (keyof State)[]) {
+  /** Read encrypted rows one at a time, without retaining the complete SQL result. */
+  private async *entityRows(where = "1", args: unknown[] = []) {
+    let cursor = 0;
+    while (true) {
+      const row = this.sql
+        .exec<{
+          cursor: number;
+          section: keyof State;
+          id: string;
+          value: string;
+        }>(
+          `SELECT rowid AS cursor,section,id,value FROM entities WHERE (${where}) AND rowid>? ORDER BY rowid LIMIT 1`,
+          ...(args as any[]),
+          cursor,
+        )
+        .toArray()[0];
+      if (!row) break;
+      cursor = row.cursor;
+      yield row;
+    }
+  }
+  private async commandCatalogState(cmd: Command) {
+    const s = await this.state(false, []);
+    // Old catalogue bodies and unrelated patient records are not command inputs.
+    for await (const row of this.entityRows("section='catalogs'")) {
+      const c = await open<State["catalogs"][number]>(
+        row.value,
+        this.env.ENCRYPTION_KEY,
+      );
+      s.catalogs.push(lightCatalog(c, false));
+    }
+    const keep = new Set<string>([
+      cmd.entityId || "",
+      String(cmd.payload.baseCatalogId || ""),
+    ]);
+    for (const book of ["미용", "보험", "이벤트"] as const) {
+      const guard = catalogApplyGuard(s, book);
+      keep.add(guard.workingId);
+      keep.add(guard.publishedId);
+    }
+    for (let i = 0; i < s.catalogs.length; i++) {
+      const c = s.catalogs[i];
+      if (!keep.has(c.id)) continue;
+      const row = this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='catalogs' AND id=?",
+          c.id,
+        )
+        .toArray()[0];
+      s.catalogs[i] = await open(row.value, this.env.ENCRYPTION_KEY);
+    }
+    for await (const row of this.entityRows("section='catalogRevisions'")) {
+      const r = await open<State["catalogRevisions"][number]>(
+        row.value,
+        this.env.ENCRYPTION_KEY,
+      );
+      s.catalogRevisions.push(
+        cmd.type === "catalog.restore" && r.id === cmd.payload.revisionId
+          ? r
+          : {
+              ...r,
+              changes: [],
+              snapshot: {
+                rev: r.snapshot.rev,
+                status: r.snapshot.status,
+              } as State["catalogs"][number],
+            },
+      );
+    }
+    return s;
+  }
+  private async state(
+    includeHistory = true,
+    sections?: (keyof State)[],
+    workspace = false,
+  ) {
     const s = emptyState();
-    const query = sections
+    const where = sections
       ? sections.length
-        ? "SELECT section,value FROM entities WHERE section IN (" +
-          sections.map(() => "?").join(",") +
-          ")"
-        : "SELECT section,value FROM entities WHERE 0"
+        ? "section IN (" + sections.map(() => "?").join(",") + ")"
+        : "0"
       : includeHistory
-        ? "SELECT section,value FROM entities"
-        : "SELECT section,value FROM entities WHERE section != 'catalogRevisions'";
-    for (const row of this.sql
-      .exec<{ section: keyof State; value: string }>(query, ...(sections || []))
-      .toArray()) {
+        ? "1"
+        : "section != 'catalogRevisions'";
+    for await (const row of this.entityRows(where, sections || [])) {
       let item = await open<any>(row.value, this.env.ENCRYPTION_KEY);
       if (!includeHistory && row.section === "catalogs")
-        item = lightCatalog(item);
+        item = lightCatalog(item, !workspace);
       (s[row.section] as unknown[]).push(item);
+    }
+    if (workspace) {
+      const keep = new Set(latestCatalogs(s).map((c) => c.id));
+      const versions = new Set(
+        s.consultations.flatMap((c) => [
+          c.catalogVersion,
+          ...Object.values(c.catalogVersions || {}),
+          ...c.quote.lines.map((l) => l.catalogVersion || ""),
+        ]),
+      );
+      for (let i = 0; i < s.catalogs.length; i++) {
+        const c = s.catalogs[i];
+        if (!keep.has(c.id) && !versions.has(c.version)) continue;
+        const row = this.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM entities WHERE section='catalogs' AND id=?",
+            c.id,
+          )
+          .toArray()[0];
+        s.catalogs[i] = lightCatalog(
+          await open(row.value, this.env.ENCRYPTION_KEY),
+        );
+      }
     }
     const rows = this.sql
       .exec<{ id: string }>("SELECT id FROM secrets WHERE id LIKE ?", "user:%")
@@ -420,11 +520,18 @@ export class Clinic extends DurableObject<Env> {
   private async flush() {
     const root = await this.storageRoot();
     const rows = this.sql
-      .exec<{ id: string; value: string }>(
-        "SELECT id,value FROM operations WHERE done=0 ORDER BY rowid",
+      .exec<{ id: string }>(
+        "SELECT id FROM operations WHERE done=0 ORDER BY rowid",
       )
       .toArray();
-    for (const row of rows) {
+    for (const item of rows) {
+      const row = this.sql
+        .exec<{ id: string; value: string }>(
+          "SELECT id,value FROM operations WHERE id=? AND done=0",
+          item.id,
+        )
+        .toArray()[0];
+      if (!row) continue;
       const op = await open<{ changes: Change[]; path: string }>(
         row.value,
         this.env.ENCRYPTION_KEY,
@@ -480,23 +587,30 @@ export class Clinic extends DurableObject<Env> {
           "application/json",
         );
       }
-      const encrypted = await Promise.all(
-        op.changes.map(async (c) => ({
+      const encrypted: Change[] = [];
+      for (const c of op.changes)
+        encrypted.push({
           ...c,
-          value: isConsentDeletion(c) ? null : await seal(c.value, this.env.ENCRYPTION_KEY),
-        })),
-      );
+          value: isConsentDeletion(c)
+            ? null
+            : await seal(c.value, this.env.ENCRYPTION_KEY),
+        });
       this.patientRows = undefined;
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
           if (isConsentDeletion(c))
-            this.sql.exec("DELETE FROM entities WHERE section=? AND id=?", c.section, c.id);
-          else this.sql.exec(
-            "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
-            c.section,
-            c.id,
-            c.value,
-          );
+            this.sql.exec(
+              "DELETE FROM entities WHERE section=? AND id=?",
+              c.section,
+              c.id,
+            );
+          else
+            this.sql.exec(
+              "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
+              c.section,
+              c.id,
+              c.value,
+            );
         this.sql.exec("UPDATE operations SET done=1 WHERE id=?", row.id);
       });
     }
@@ -562,7 +676,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.13.7",
+        version: "0.13.8",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1670,11 +1784,7 @@ export class Clinic extends DurableObject<Env> {
       );
       const book = new URL(req.url).searchParams.get("book");
       const revisions = [];
-      for (const row of this.sql
-        .exec<{ value: string }>(
-          "SELECT value FROM entities WHERE section='catalogRevisions' ORDER BY rowid DESC",
-        )
-        .toArray()) {
+      for await (const row of this.entityRows("section='catalogRevisions'")) {
         const revision = await open<State["catalogRevisions"][number]>(
           row.value,
           this.env.ENCRYPTION_KEY,
@@ -1684,11 +1794,13 @@ export class Clinic extends DurableObject<Env> {
           revisions.push({ ...summary, snapshot: { status: snapshot.status } });
         }
       }
-      return json({ revisions });
+      return json({ revisions: revisions.reverse() });
     }
     if (path === "/api/state") {
       const s = await this.state(
         new URL(req.url).searchParams.get("view") !== "workspace",
+        undefined,
+        new URL(req.url).searchParams.get("view") === "workspace",
       );
       if (url.searchParams.get("view") === "workspace") {
         const keep = new Set(latestCatalogs(s).map((c) => c.id));
@@ -1858,7 +1970,9 @@ export class Clinic extends DurableObject<Env> {
         });
       }
       await this.flush();
-      const before = await this.state(cmd.type.startsWith("catalog."));
+      const before = cmd.type.startsWith("catalog.")
+        ? await this.commandCatalogState(cmd)
+        : await this.state(false);
       const after = await applyCommand(before, user, cmd);
       if (
         cmd.type === "consultation.finalize" ||
@@ -1945,6 +2059,15 @@ export class Clinic extends DurableObject<Env> {
         }
       }
       const changes = diffStateChanges(before, after);
+      if (cmd.type === "catalog.apply" && !changes.length) {
+        const current = latestCatalogs(after).find(
+          (c) =>
+            catalogBook(c) ===
+            catalogBook(cmd.payload.catalog as State["catalogs"][number]),
+        );
+        if (current)
+          changes.push({ section: "catalogs", id: current.id, value: current });
+      }
       await this.persistChanges(cmd.id, user.id, digest, changes);
       return json({
         ok: true,
@@ -1988,7 +2111,9 @@ export class Clinic extends DurableObject<Env> {
       const encrypted = await Promise.all(
         changes.map(async (c) => ({
           ...c,
-          value: isConsentDeletion(c) ? null : await seal(c.value, this.env.ENCRYPTION_KEY),
+          value: isConsentDeletion(c)
+            ? null
+            : await seal(c.value, this.env.ENCRYPTION_KEY),
         })),
       );
       const restored: { table: string; id: string; value: string }[] = [];
@@ -2087,13 +2212,18 @@ export class Clinic extends DurableObject<Env> {
           );
         for (const c of encrypted)
           if (isConsentDeletion(c))
-            this.sql.exec("DELETE FROM entities WHERE section=? AND id=?", c.section, c.id);
-          else this.sql.exec(
-            "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
-            c.section,
-            c.id,
-            c.value,
-          );
+            this.sql.exec(
+              "DELETE FROM entities WHERE section=? AND id=?",
+              c.section,
+              c.id,
+            );
+          else
+            this.sql.exec(
+              "INSERT OR REPLACE INTO entities VALUES(?,?,?)",
+              c.section,
+              c.id,
+              c.value,
+            );
       });
       const response = json({
         ok: true,

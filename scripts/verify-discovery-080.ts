@@ -214,7 +214,7 @@ try {
     .locator(".sidebar")
     .getByRole("button", { name: "맞춤 시술 찾기", exact: true })
     .click();
-  await page.locator("button.list-row").filter({ hasText: personName }).click();
+  await page.locator('button.list-row, [role="link"].list-row').filter({ hasText: personName }).click();
   await page.screenshot({
     path: "private/browser080/intake-desktop.png",
     fullPage: true,

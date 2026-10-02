@@ -188,7 +188,7 @@ try {
     await dialog.getByLabel("주소 (동까지)", { exact: true }).fill("시험동");
     await dialog.getByLabel("소개해 준 환자 검색").fill("포인트");
     await dialog.locator(".referral-results button").click();
-    await expect(dialog.getByText("VIP 소개 혜택 대상")).toBeVisible();
+    await expect(dialog.getByText("VIP 소개 혜택 20,000P")).toBeVisible();
     await page.screenshot({
       path: `artifacts/vip-referral-${width}.png`,
       fullPage: true,
@@ -208,7 +208,7 @@ try {
     await expect(
       page.getByRole("heading", { name: "VIP 포인트 운영", exact: true }),
     ).toBeVisible();
-    await page.getByLabel("친구 소개 포인트", { exact: true }).fill("20000");
+    await page.locator(".vip-policy").getByLabel("친구 소개 포인트", { exact: true }).fill("20000");
     await page
       .getByRole("button", { name: "VIP 운영 설정 저장", exact: true })
       .click();

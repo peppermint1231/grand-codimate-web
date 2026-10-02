@@ -1,3 +1,5 @@
+import { GradeSettings } from "./components/GradeSettings";
+import { ConsultationOwner } from "./components/ConsultationOwner";
 import { ReferralPicker } from "./components/ReferralPicker";
 import { PatientPoints } from "./components/PatientPoints";
 import { VipPolicySettings } from "./components/VipPolicySettings";
@@ -723,6 +725,16 @@ export function App() {
       document.removeEventListener("visibilitychange", run);
     };
   }, [user?.id, pending.length]);
+  const [paymentTarget, setPaymentTarget] = useState<{
+    patientId: string;
+    consultationId: string;
+  }>();
+  const openPayment = (c: Consultation) => {
+    setPaymentTarget({ patientId: c.patientId, consultationId: c.id });
+    setPatientId(c.patientId);
+    setConsultId("");
+    setPage("patients");
+  };
   const catalogSaveRetry = useRef(new CatalogSaveRetry());
   const send = (
     type: string,
@@ -1412,6 +1424,12 @@ export function App() {
           {page === "patients" &&
             (patient ? (
               <PatientDetail
+                key={patient.id}
+                initialPaymentId={
+                  paymentTarget?.patientId === patient.id
+                    ? paymentTarget.consultationId
+                    : undefined
+                }
                 patient={patient}
                 state={state}
                 user={user}
@@ -1435,6 +1453,7 @@ export function App() {
                 select={(id) =>
                   work(async () => {
                     if (navigator.onLine) await refresh();
+                    setPaymentTarget(undefined);
                     setPatientId(id);
                   })
                 }
@@ -1456,7 +1475,13 @@ export function App() {
                     .slice()
                     .reverse()
                     .map((c) => (
-                      <button
+                      <div
+                        role="link"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.target === e.currentTarget && e.key === "Enter")
+                            e.currentTarget.click();
+                        }}
                         className="list-row"
                         key={c.id}
                         onClick={() => {
@@ -1472,14 +1497,21 @@ export function App() {
                             {c.createdAt.slice(0, 10)} · {c.category}
                           </small>
                         </span>
+                        <ConsultationOwner
+                          state={state}
+                          consult={c}
+                          user={user}
+                          send={send}
+                        />
                         <span className={"badge " + c.status}>{status(c)}</span>
                         <ConsultationPayment
                           state={state}
                           consult={c}
                           user={user}
+                          onPay={() => openPayment(c)}
                         />
                         <ChevronRight />
-                      </button>
+                      </div>
                     ))
                 ) : (
                   <Empty>환자목록에서 첫 상담을 시작하세요.</Empty>
@@ -1986,6 +2018,22 @@ function Patients({
                       <span className="patient-avatar">{p.name[0]}</span>
                       <span>
                         <b>{p.name}</b>
+                        {g.id !== "none" && (
+                          <span
+                            className={
+                              "patient-grade-badge compact " +
+                              (g.name.toUpperCase() === "VIP" ? "vip" : "")
+                            }
+                            style={
+                              {
+                                "--grade-color": g.color,
+                              } as React.CSSProperties
+                            }
+                          >
+                            {g.name.toUpperCase() === "VIP" && "★ "}
+                            {g.name}
+                          </span>
+                        )}
                         <small>환자번호 {p.number || p.id}</small>
                         {!!candidates(p).length && (
                           <button
@@ -2034,7 +2082,20 @@ function Patients({
                     {allowed(user, "money.read") ? money(m.outstanding) : "—"}
                   </td>
                   <td>
-                    <span className="grade" style={{ color: g.color }}>
+                    <span
+                      className={
+                        "patient-grade-badge " +
+                        (g.name.toUpperCase() === "VIP"
+                          ? "vip"
+                          : g.id === "none"
+                            ? "ungraded"
+                            : "")
+                      }
+                      style={
+                        { "--grade-color": g.color } as React.CSSProperties
+                      }
+                    >
+                      {g.name.toUpperCase() === "VIP" && "★ "}
                       {g.name}
                     </span>
                   </td>
@@ -2394,6 +2455,7 @@ function PatientDetail({
   start,
   send,
   open,
+  initialPaymentId,
 }: {
   patient: Patient;
   state: State;
@@ -2406,12 +2468,20 @@ function PatientDetail({
   ) => Promise<unknown>;
   send: (...args: any[]) => any;
   open: (c: Consultation) => void;
+  initialPaymentId?: string;
 }) {
   const [tab, setTab] = useState("history"),
     [edit, setEdit] = useState(false),
     [starting, setStarting] = useState<Consultation["kind"] | null>(null),
     [startCategory, setStartCategory] = useState<"미용" | "보험">("미용"),
     [sourceId, setSourceId] = useState("");
+  const [paymentId, setPaymentId] = useState(initialPaymentId);
+  useEffect(() => {
+    if (initialPaymentId) {
+      setTab("money");
+      setPaymentId(initialPaymentId);
+    }
+  }, [initialPaymentId]);
   const m = metrics(s, p.id),
     g = gradeFor(s, p),
     cs = s.consultations.filter((c) => c.patientId === p.id);
@@ -2544,11 +2614,17 @@ function PatientDetail({
                   </p>
                   {renewalPreview && (
                     <p>
-                      이전 견적 {money(source.quote.total)} → 현재 단가 견적{" "}
+                      이전 견적 {money(source.quote.total)} → 연장 견적{" "}
                       {money(renewalPreview.total)} · 할인 초기화
                     </p>
                   )}
                 </div>
+              )}
+              {renewalPreview?.lines.some((l) => l.renewalNotice) && (
+                <p className="warning-panel">
+                  일부 상품은 이전 상담의 단가·부가세로 불러옵니다. 시작 후
+                  장바구니에서 확인·변경할 수 있습니다.
+                </p>
               )}
               {renewalError && (
                 <p className="error" role="alert">
@@ -2558,7 +2634,7 @@ function PatientDetail({
               <p className="small">
                 이전 사진과 주석을 불러온 뒤 비교할 사진을 선택합니다.
                 {starting === "renewal"
-                  ? " 기존 시술은 현재 게시 단가로 담으며, 이전 할인은 자동 적용하지 않습니다."
+                  ? " 현재 판매 상품은 최신 단가, 찾을 수 없는 상품은 이전 상담 단가로 불러옵니다. 이전 할인은 자동 적용하지 않습니다."
                   : ""}
               </p>
             </>
@@ -2620,7 +2696,12 @@ function PatientDetail({
       </div>
       <div className="patient-banner">
         <span className="grade" style={{ color: g.color }}>
-          {g.name} · {vipAccount(s, p.id) ? "영구 VIP" : g.manual ? "관리자 지정" : "자동 산정"}
+          {g.name} ·{" "}
+          {vipAccount(s, p.id)
+            ? "영구 VIP"
+            : g.manual
+              ? "관리자 지정"
+              : "자동 산정"}
         </span>
         <span>{p.address}</span>
         <small>환자번호 {p.number || p.id}</small>
@@ -2686,18 +2767,43 @@ function PatientDetail({
                 .reverse()
                 .map((c) => (
                   <article className="consultation-history-entry" key={c.id}>
-                    <button className="list-row" onClick={() => open(c)}>
+                    <div
+                      className="list-row"
+                      role="link"
+                      tabIndex={0}
+                      onClick={() => open(c)}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && e.key === "Enter")
+                          open(c);
+                      }}
+                    >
                       <span>
                         <b>
                           {c.category} · {consultationKind(c)}
                         </b>
                         <small>{c.createdAt.slice(0, 10)}</small>
                       </span>
-                      <ConsultationCover photos={c.photos} />
+                      <div className="history-photo-owner">
+                        <ConsultationCover photos={c.photos} />
+                        <ConsultationOwner
+                          state={s}
+                          consult={c}
+                          user={user}
+                          send={send}
+                        />
+                      </div>
                       <span className={"badge " + c.status}>{status(c)}</span>
-                      <ConsultationPayment state={s} consult={c} user={user} />
+                      <ConsultationPayment
+                        state={s}
+                        consult={c}
+                        user={user}
+                        onPay={() => {
+                          setPaymentId(c.id);
+                          setTab("money");
+                        }}
+                      />
                       <ChevronRight size={18} />
-                    </button>
+                    </div>
                   </article>
                 ))
             ) : (
@@ -2803,7 +2909,7 @@ function PatientDetail({
         />
       )}
       {tab === "money" && allowed(user, "money.read") && (
-        <div className="detail-grid">
+        <div className="detail-grid patient-money-grid">
           <div className="card">
             <h3>수납·환불 기록</h3>
             {s.ledger
@@ -2851,7 +2957,12 @@ function PatientDetail({
                 </div>
               ))}
           </div>
-          <LedgerForm state={s} patient={p} send={send} />
+          <LedgerForm
+            state={s}
+            patient={p}
+            send={send}
+            initialConsultationId={paymentId}
+          />
         </div>
       )}
       {tab === "grade" && (
@@ -2955,10 +3066,12 @@ function ConsultationPayment({
   state,
   consult,
   user,
+  onPay,
 }: {
   state: State;
   consult: Consultation;
   user: User;
+  onPay?: () => void;
 }) {
   if (!allowed(user, "money.read")) return <span>—</span>;
   const outstanding = ledgerAvailable(state, consult.id, "receipt");
@@ -2966,9 +3079,16 @@ function ConsultationPayment({
     <span className="consultation-payment">
       <span>{money(consult.quote.total)}</span>
       {outstanding > 0 && (
-        <strong className="unpaid-badge">
+        <button
+          type="button"
+          className="unpaid-badge"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPay?.();
+          }}
+        >
           미수납 {money(outstanding)} · 수납 확인
-        </strong>
+        </button>
       )}
     </span>
   );
@@ -3076,10 +3196,7 @@ function ConsultationView({
   };
   const [notePopup, setNotePopup] = useState<"memo" | "opinion" | null>(null);
   const [opinionRequest, setOpinionRequest] = useState("");
-  const [opinionTo, setOpinionTo] = useState(
-    () =>
-      s.users.find((u) => u.role === "doctor" || isAdministrator(u))?.id || "",
-  );
+  const [opinionTo, setOpinionTo] = useState<string[]>([]);
   const [opinionFailed, setOpinionFailed] = useState(false);
   useAppBack(!!notePopup, () => setNotePopup(null), 85);
 
@@ -3384,6 +3501,13 @@ function ConsultationView({
             {consultationKind(c)} · {c.category} · {sexLabel(c.patient.sex)} ·{" "}
             {age(c.patient.dob)}세 · {c.createdAt.slice(0, 10)}
           </p>
+          <ConsultationOwner
+            state={s}
+            consult={c}
+            user={user}
+            send={send}
+            disabled={dirty}
+          />
         </div>
         <button
           className="primary consultation-save"
@@ -4249,7 +4373,7 @@ function ConsultationView({
                     void work(() =>
                       send("opinion.request", {
                         consultationId: c.id,
-                        toId: opinionTo,
+                        toIds: opinionTo,
                         request: opinionRequest,
                       }),
                     ).then((ok: unknown) => {
@@ -4266,21 +4390,31 @@ function ConsultationView({
                       닫기
                     </button>
                   </div>
-                  <select
-                    name="toId"
-                    aria-label="의견 요청 의사"
-                    required
-                    value={opinionTo}
-                    onChange={(e) => setOpinionTo(e.target.value)}
-                  >
+                  <fieldset className="opinion-recipient-list">
+                    <legend>의견 요청 의사 · 여러 명 선택 가능</legend>
                     {s.users
-                      .filter((u) => u.role === "doctor" || isAdministrator(u))
+                      .filter(
+                        (u) =>
+                          u.active &&
+                          (u.role === "doctor" || isAdministrator(u)),
+                      )
                       .map((u) => (
-                        <option key={u.id} value={u.id}>
+                        <label className="check" key={u.id}>
+                          <input
+                            type="checkbox"
+                            checked={opinionTo.includes(u.id)}
+                            onChange={(e) =>
+                              setOpinionTo((ids) =>
+                                e.target.checked
+                                  ? [...ids, u.id]
+                                  : ids.filter((id) => id !== u.id),
+                              )
+                            }
+                          />
                           {u.name}
-                        </option>
+                        </label>
                       ))}
-                  </select>
+                  </fieldset>
                   <textarea
                     name="request"
                     value={opinionRequest}
@@ -4299,7 +4433,9 @@ function ConsultationView({
                     닫아도 작성 중인 요청은 유지됩니다. 보내기를 누르면 해당
                     상담에 연결됩니다.
                   </small>
-                  <button className="primary">요청 보내기</button>
+                  <button className="primary" disabled={!opinionTo.length}>
+                    {opinionTo.length}명에게 요청 보내기
+                  </button>
                 </form>
               )}
             </PhotoModal>
@@ -4336,6 +4472,9 @@ function ConsultationView({
                 {draft.quote.lines.map((l, i) => (
                   <div className="cart-line" key={l.id}>
                     <b>{l.name}</b>
+                    {l.renewalNotice && (
+                      <p className="warning-panel">{l.renewalNotice}</p>
+                    )}
                     <small>
                       {catalogBookLabel(l.book)} · {l.label} ·{" "}
                       {l.tax === "inclusive"
@@ -6600,7 +6739,6 @@ function SettingsView({
   health: any;
 }) {
   const [tab, setTab] = useState(isAdministrator(user) ? "grade" : "consent"),
-    [grades, setGrades] = useState(s.policies[0]?.grades || []),
     [account, setAccount] = useState<User | undefined>(),
     [storageRoot, setStorageRoot] = useState(health.storageRoot || "상담"),
     [storageNotice, setStorageNotice] = useState("");
@@ -6702,93 +6840,7 @@ function SettingsView({
       {activeTab === "grade" && (
         <>
           <VipPolicySettings state={s} send={send} work={work} />
-          <div className="card">
-            <h3>누적 기여매출 기준</h3>
-            <p>
-              수납 − 환불에 따라 자동 산정합니다. 기준 미설정 시 미분류입니다.
-            </p>
-            {grades.map((g, i) => (
-              <div className="inline-fields" key={g.id}>
-                <Field label="등급명">
-                  <input
-                    value={g.name}
-                    onChange={(e) =>
-                      setGrades(
-                        grades.map((v, j) =>
-                          i === j ? { ...v, name: e.target.value } : v,
-                        ),
-                      )
-                    }
-                  />
-                </Field>
-                <Field label="하한액 (원)">
-                  <input
-                    type="number"
-                    min={0}
-                    value={g.minimum}
-                    onChange={(e) =>
-                      setGrades(
-                        grades.map((v, j) =>
-                          i === j
-                            ? { ...v, minimum: Number(e.target.value) }
-                            : v,
-                        ),
-                      )
-                    }
-                  />
-                </Field>
-                <input
-                  aria-label="등급 색상"
-                  type="color"
-                  value={g.color}
-                  onChange={(e) =>
-                    setGrades(
-                      grades.map((v, j) =>
-                        i === j ? { ...v, color: e.target.value } : v,
-                      ),
-                    )
-                  }
-                />
-                <button
-                  onClick={() => setGrades(grades.filter((_, j) => j !== i))}
-                >
-                  삭제
-                </button>
-              </div>
-            ))}
-            <div className="button-row">
-              <button
-                onClick={() =>
-                  setGrades([
-                    ...grades,
-                    {
-                      id: crypto.randomUUID(),
-                      name: "새 등급",
-                      minimum: 0,
-                      color: "#145d55",
-                    },
-                  ])
-                }
-              >
-                등급 추가
-              </button>
-              <button
-                className="primary"
-                onClick={() =>
-                  work(() =>
-                    send(
-                      "grade.policy",
-                      { grades },
-                      "grades",
-                      s.policies[0]?.rev,
-                    ),
-                  )
-                }
-              >
-                기준 적용·재산정
-              </button>
-            </div>
-          </div>
+          <GradeSettings state={s} send={send} />
         </>
       )}
       {activeTab === "users" && (

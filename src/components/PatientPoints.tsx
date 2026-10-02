@@ -1,3 +1,4 @@
+import { benefitSettings, currentBenefitGrade } from "../core/gradeBenefits";
 import { useEffect, useState } from "react";
 import {
   allowed,
@@ -39,14 +40,43 @@ export function PatientPoints({
   useEffect(() => {
     setPage(0);
   }, [patient.id]);
-  const policy = vipPolicy(state),
+  const grade = currentBenefitGrade(
+    state,
+    patient.id,
+    new Date().toISOString(),
+  );
+  const generic = grade && grade.name.toUpperCase() !== "VIP";
+  const policy = generic
+      ? {
+          ...vipPolicy(state),
+          ...benefitSettings(state, grade),
+          minimumRevenue: grade.minimum,
+        }
+      : vipPolicy(state),
     account = vipAccount(state, patient.id),
     balance = pointBalance(state, patient.id),
     now = new Date().toISOString();
   const active = vipEligible(state, patient),
-    period = account ? vipPeriod(account, now) : undefined;
+    benefitAccount =
+      account ||
+      state.benefitAccounts?.find(
+        (a) =>
+          a.patientId === patient.id &&
+          a.gradeId === grade?.id &&
+          !a.mergedInto,
+      ),
+    period = benefitAccount
+      ? vipPeriod(benefitAccount, now, policy.annualMonths || 12)
+      : undefined;
   const used =
-    account && period ? annualCash(state, account, period.from, period.to) : 0;
+    benefitAccount && period
+      ? annualCash(
+          state,
+          { ...benefitAccount, cardNumber: "" },
+          period.from,
+          period.to,
+        )
+      : 0;
   const rows = (state.pointEntries || [])
     .filter((e) => e.patientId === patient.id)
     .slice()
@@ -73,19 +103,27 @@ export function PatientPoints({
       <div className="detail-grid">
         <div className="card vip-card">
           <div className="button-row">
-            <h3>VIP 멤버십</h3>
+            <h3>{generic ? grade.name + " 등급 포인트" : "VIP 멤버십"}</h3>
             <span className="badge">
-              {account
-                ? active
-                  ? "영구 VIP"
-                  : "현재 적립 조건 미충족"
-                : "VIP 승급 전"}
+              {generic
+                ? grade.name
+                : account
+                  ? active
+                    ? "영구 VIP"
+                    : "현재 적립 조건 미충족"
+                  : "VIP 승급 전"}
             </span>
           </div>
           <strong className="points-balance">
             {balance.toLocaleString("ko-KR")} P
           </strong>
-          <p>1P = 1원 · 유효기간 없음 · 본인만 사용</p>
+          <p>
+            1P = 1원 ·{" "}
+            {policy.expiryMonths
+              ? `새 적립 유효기간 ${policy.expiryMonths}개월`
+              : "유효기간 없음"}{" "}
+            · 본인만 사용
+          </p>
           {balance < 0 && (
             <p className="warning-panel">
               수동 조정으로 차감할 포인트가 남아 있습니다. 이후 적립금에서
@@ -124,8 +162,8 @@ export function PatientPoints({
             </>
           ) : (
             <p>
-              누적 기여매출 {money(cashRevenue(state, patient.id))} / VIP 기준{" "}
-              {money(policy.minimumRevenue)}
+              누적 기여매출 {money(cashRevenue(state, patient.id))} /{" "}
+              {generic ? grade.name : "VIP"} 기준 {money(policy.minimumRevenue)}
             </p>
           )}
           {!policy.enabled && (
@@ -138,14 +176,18 @@ export function PatientPoints({
         <div className="card">
           <h3>자동 혜택</h3>
           <ul>
-            <li>첫 VIP 승급 {policy.welcome.toLocaleString()}P · 최초 1회</li>
+            <li>
+              첫 {generic ? grade.name : "VIP"} 승급{" "}
+              {policy.welcome.toLocaleString()}P · 최초 1회
+            </li>
             <li>
               매년 생일 {policy.birthday.toLocaleString()}P · 등록된 생년월일
               기준
             </li>
             <li>
-              승급일부터 1년마다 이용금액 {money(policy.annualThreshold)} 달성
-              시 {policy.annualReward.toLocaleString()}P · 기간별 1회
+              승급일부터 {policy.annualMonths || 12}개월마다 이용금액{" "}
+              {money(policy.annualThreshold)} 달성 시{" "}
+              {policy.annualReward.toLocaleString()}P · 기간별 1회
             </li>
             <li>
               소개한 새 환자의 첫 실제 수납 후{" "}
@@ -171,9 +213,10 @@ export function PatientPoints({
             포인트 결제는 기여매출·연간 이용 실적에서 제외합니다. 첫 승급을 만든
             기존 수납은 첫 연간 실적에 중복 산입하지 않습니다. 도입 전
             생일·종료된 연간 기간은 소급 적립하지 않습니다. 2월 29일 생일은
-            평년에 2월 28일 적용합니다. 영구 VIP이며 환불·연간 실적 감소로 기존
-            적립을 회수하지 않습니다.
+            평년에 2월 28일 적용합니다. VIP는 영구 유지되며 환불·연간 실적
+            감소로 기존 적립을 회수하지 않습니다.
           </p>
+          {grade?.benefits?.description && <p>{grade.benefits.description}</p>}
           {patient.referredByPatientId && (
             <p>
               소개해 준 환자:{" "}
@@ -206,7 +249,7 @@ export function PatientPoints({
                       {new Date(e.createdAt).toLocaleString("ko-KR", {
                         timeZone: "Asia/Seoul",
                       })}{" "}
-                      ·{" "}
+                      {e.expiresAt && ` · 유효기간 ${e.expiresAt}까지`} ·{" "}
                       {e.benefitKey
                         ? "자동 처리"
                         : state.users.find((u) => u.id === e.actorId)?.name ||

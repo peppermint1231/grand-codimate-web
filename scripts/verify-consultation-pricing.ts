@@ -114,7 +114,7 @@ try {
     };
     await nav("상담이력");
     await page
-      .locator("button.list-row")
+      .locator('button.list-row, [role="link"].list-row')
       .filter({ hasText: "가격검증환자" })
       .first()
       .click();
@@ -164,7 +164,7 @@ try {
     );
     await nav("상담이력");
     await page
-      .locator("button.list-row")
+      .locator('button.list-row, [role="link"].list-row')
       .filter({ hasText: "가격검증환자" })
       .first()
       .click();

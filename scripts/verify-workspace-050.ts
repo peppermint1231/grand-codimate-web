@@ -45,7 +45,7 @@ const open = async () => {
     .filter({
       has: page.getByRole("heading", { name: "상담이력", exact: true }),
     })
-    .locator("button.list-row")
+    .locator('button.list-row, [role="link"].list-row')
     .click();
   await page.getByRole("button", { name: /01 사진/ }).click();
   await page
@@ -575,7 +575,7 @@ try {
       })),
     );
   const historyRow = page
-    .locator("button.list-row")
+    .locator('button.list-row, [role="link"].list-row')
     .filter({ has: page.locator(".consultation-covers") });
   const descriptionBounds = (await historyRow
     .locator(":scope > span")

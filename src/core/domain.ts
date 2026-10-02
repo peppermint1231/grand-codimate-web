@@ -1,3 +1,9 @@
+import { gradeBenefitsSchema, reconcileGradeBenefits } from "./gradeBenefits";
+import {
+  pointAllocations,
+  refundPointCredits,
+  expirePoints,
+} from "./pointLedger";
 import {
   activeMoneyRows,
   pointBalance,
@@ -205,35 +211,38 @@ export function renewalQuote(
         (!old.book || catalogBook(c) === old.book) &&
         c.products.some((p) => p.id === old.productId && p.active),
     );
-    ensure(
-      matches.length <= 1,
-      `${old.name}: 같은 상품 ID가 여러 단가표에 있습니다. 상담에서 다시 선택하세요`,
-    );
-    const matchedCatalog = matches[0];
+    const matchedCatalog = matches.length === 1 ? matches[0] : undefined;
     const product = matchedCatalog?.products.find(
       (x) => x.id === old.productId && x.active,
     );
-    ensure(
-      !product?.options.some(
-        (x) => x.id === old.optionId && x.priceKind === "quote",
-      ),
-      `${old.name}: 상담 시 가격 입력 상품은 새 상담에서 선택한 뒤 가격을 입력하세요`,
-    );
     const option = product?.options.find(
-      (x) => x.id === old.optionId && x.price !== null,
+      (x) =>
+        x.id === old.optionId &&
+        x.price !== null &&
+        x.priceKind !== "quote" &&
+        x.tax !== "unknown",
     );
-    ensure(
-      product && option,
-      `${old.name}: 현재 판매 단가·부가세를 검토·게시한 뒤 연장하세요`,
-    );
-    ensure(
-      eventAvailability(product.webEvent) === "current",
-      `${old.name}: 이벤트 기간이 지난 상품은 연장할 수 없습니다`,
-    );
+    if (
+      !product ||
+      !option ||
+      eventAvailability(product.webEvent) !== "current"
+    )
+      return {
+        ...old,
+        id: `${id}-${index}`,
+        catalogVersion: old.catalogVersion || source.catalogVersion,
+        price: old.customPrice ?? old.price,
+        customPrice: undefined,
+        requiresCustomPrice: undefined,
+        renewalNotice:
+          "현재 판매 단가를 찾을 수 없어 이전 상담의 단가·부가세를 적용했습니다. 장바구니에서 확인하거나 변경하세요.",
+        discount: { kind: "amount" as const, value: 0 },
+      };
     return {
       ...old,
       customPrice: undefined,
       requiresCustomPrice: undefined,
+      renewalNotice: undefined,
       id: `${id}-${index}`,
       catalogVersion: matchedCatalog!.version,
       book: catalogBook(matchedCatalog!),
@@ -664,9 +673,11 @@ export async function applyCommand(
     ),
     catalogRevisions: [...(input.catalogRevisions || [])],
     quoteConsents: structuredClone(input.quoteConsents || []),
+    benefitAccounts: structuredClone(input.benefitAccounts || []),
     vipAccounts: structuredClone(input.vipAccounts || []),
     pointEntries: structuredClone(input.pointEntries || []),
   };
+  expirePoints(s, now, cmd.id);
   let patientId: string | undefined;
   let text = cmd.type;
   const need = (v: Permission) =>
@@ -854,6 +865,36 @@ export async function applyCommand(
           x.referredByPatientId = x.id === target.id ? undefined : target.id;
           touch(x);
         }
+      for (const a of s.benefitAccounts.filter(
+        (a) => a.patientId === from.id,
+      )) {
+        a.patientId = target.id;
+        touch(a);
+      }
+      for (const gradeId of new Set(
+        s.benefitAccounts
+          .filter((a) => a.patientId === target.id)
+          .map((a) => a.gradeId),
+      )) {
+        const rows = s.benefitAccounts
+          .filter(
+            (a) =>
+              a.patientId === target.id &&
+              a.gradeId === gradeId &&
+              !a.mergedInto,
+          )
+          .sort((a, b) => a.enrolledAt.localeCompare(b.enrolledAt));
+        if (rows.length > 1) {
+          rows[0].baselineReceiptIds = [
+            ...new Set(rows.flatMap((a) => a.baselineReceiptIds)),
+          ];
+          touch(rows[0]);
+          for (const other of rows.slice(1)) {
+            other.mergedInto = rows[0].id;
+            touch(other);
+          }
+        }
+      }
       const accounts = s.vipAccounts
         .filter(
           (a) => !a.mergedInto && [from.id, target.id].includes(a.patientId),
@@ -1000,8 +1041,26 @@ export async function applyCommand(
         kind === "interim"
           ? "중간상담 시작"
           : kind === "renewal"
-            ? "연장상담 시작 · 현재 단가 적용"
+            ? "연장상담 시작 · 현재 단가 또는 이전 상담 단가 적용"
             : "보류 상담 시작";
+      break;
+    }
+    case "consultation.owner": {
+      const c = consultation();
+      ensure(
+        isAdministrator(user) || c.ownerId === user.id,
+        "상담자 본인 또는 관리자만 상담자를 변경할 수 있습니다",
+        403,
+      );
+      const owner = s.users.find((u) => u.id === p.ownerId && u.active);
+      ensure(owner, "활성 직원 계정을 선택하세요");
+      const reason = z.string().trim().min(1).max(1000).parse(p.reason);
+      ensure(c.ownerId !== owner.id, "현재 상담자와 같습니다");
+      const previous =
+        s.users.find((u) => u.id === c.ownerId)?.name || "이전 직원";
+      c.ownerId = owner.id;
+      touch(c);
+      text = `상담자 변경: ${previous} → ${owner.name} · ${reason}`;
       break;
     }
     case "consultation.annotate": {
@@ -1090,23 +1149,30 @@ export async function applyCommand(
         const lineCatalog = s.catalogs.find(
           (x) => x.status === "published" && x.version === version,
         );
-        ensure(
-          !l.book || (lineCatalog && catalogBook(lineCatalog) === l.book),
-          "단가표 구분과 버전이 일치하지 않습니다",
-        );
         const old = c.quote.lines.find(
           (x) =>
             x.id === l.id &&
             x.productId === l.productId &&
             x.optionId === l.optionId,
         );
-        if (old && (old.catalogVersion || c.catalogVersion) === version)
+        if (old && (old.catalogVersion || c.catalogVersion) === version) {
+          ensure(
+            !l.book ||
+              l.book === old.book ||
+              (!old.book && lineCatalog && catalogBook(lineCatalog) === l.book),
+            "단가표 구분과 버전이 일치하지 않습니다",
+          );
           return {
             ...old,
             quantity: l.quantity,
             discount: l.discount,
             customPrice: l.customPrice,
           };
+        }
+        ensure(
+          !l.book || (lineCatalog && catalogBook(lineCatalog) === l.book),
+          "단가표 구분과 버전이 일치하지 않습니다",
+        );
         const product = lineCatalog?.products.find(
             (x) => x.id === l.productId && x.active,
           ),
@@ -1466,7 +1532,7 @@ export async function applyCommand(
                 : -d.amount;
         if (delta < 0)
           ensure(
-            pointBalance(s, c.patientId) >= -delta,
+            pointBalance(s, c.patientId, now) >= -delta,
             "사용 가능한 VIP 포인트가 부족합니다. 최신 잔액을 확인하세요",
             409,
           );
@@ -1481,6 +1547,24 @@ export async function applyCommand(
           id: pointEntryId,
           patientId: c.patientId,
           amount: delta,
+          ...(delta < 0
+            ? { allocations: pointAllocations(s, c.patientId, -delta, now) }
+            : kind === "refund" ||
+                (kind === "reversal" && original?.kind === "receipt")
+              ? {
+                  creditParts: refundPointCredits(
+                    s,
+                    original?.pointEntryId,
+                    d.amount,
+                    active
+                      .filter(
+                        (x) =>
+                          x.kind === "refund" && x.originalId === original!.id,
+                      )
+                      .reduce((n, x) => n + x.amount, 0),
+                  ),
+                }
+              : {}),
           kind:
             kind === "receipt"
               ? "use"
@@ -1532,6 +1616,8 @@ export async function applyCommand(
           annualReward: amount,
           referralReward: amount,
           existingWelcome: z.literal(true),
+          annualMonths: z.number().int().min(1).max(120).default(12),
+          expiryMonths: z.number().int().min(0).max(120).default(0),
         })
         .parse(p.policy);
       const old = s.policies[0];
@@ -1550,6 +1636,20 @@ export async function applyCommand(
           grades: [],
           vip: { ...value, startedAt: now },
         });
+      const vipGrade = s.policies[0]?.grades.find(
+        (g) => g.name.toUpperCase() === "VIP",
+      );
+      if (vipGrade) {
+        ensure(
+          !s.policies[0].grades.some(
+            (g) => g.id !== vipGrade.id && g.minimum === value.minimumRevenue,
+          ),
+          "다른 등급의 기준금액과 겹칩니다",
+        );
+        vipGrade.minimum = value.minimumRevenue;
+        if (vipGrade.benefits)
+          vipGrade.benefits = { ...vipGrade.benefits, ...value };
+      }
       text = "VIP 포인트 운영 설정 변경";
       break;
     }
@@ -1587,7 +1687,7 @@ export async function applyCommand(
         .parse(p.amount);
       const reason = z.string().trim().min(1).max(1000).parse(p.reason);
       ensure(
-        p.expectedBalance === pointBalance(s, patient.id),
+        p.expectedBalance === pointBalance(s, patient.id, now),
         "포인트 잔액이 변경되었습니다. 다시 확인하세요",
         409,
       );
@@ -1595,6 +1695,9 @@ export async function applyCommand(
         ...base,
         patientId: patient.id,
         amount: delta,
+        ...(delta < 0
+          ? { allocations: pointAllocations(s, patient.id, -delta, now) }
+          : {}),
         kind: "adjustment",
         reason,
         actorId: user.id,
@@ -1612,6 +1715,7 @@ export async function applyCommand(
             name: z.string().min(1),
             color: z.string().regex(/^#[a-fA-F0-9]{6}$/),
             minimum: amount,
+            benefits: gradeBenefitsSchema.optional(),
           }),
         )
         .parse(p.grades);
@@ -1634,7 +1738,18 @@ export async function applyCommand(
       s.policies = [
         { ...old, ...base, id: "grades", rev: (old?.rev || 0) + 1, grades },
       ];
-      text = "환자 등급 기준 변경";
+      const vipGrade = grades.find(
+        (g) => g.name.toUpperCase() === "VIP" && g.benefits,
+      );
+      if (vipGrade?.benefits)
+        s.policies[0].vip = {
+          ...s.policies[0].vip,
+          ...vipGrade.benefits,
+          startedAt: s.policies[0].vip?.startedAt || now,
+          minimumRevenue: vipGrade.minimum,
+          existingWelcome: true,
+        };
+      text = "환자 등급 기준·혜택 변경";
       break;
     }
     case "grade.override": {
@@ -2044,23 +2159,38 @@ export async function applyCommand(
     case "opinion.request": {
       const c = s.consultations.find((c) => c.id === p.consultationId);
       ensure(c && c.status === "H", "보류 상담을 선택하세요");
-      ensure(
-        s.users.some(
-          (u) =>
-            u.id === p.toId &&
-            u.active &&
-            (u.role === "doctor" || isAdministrator(u)),
+      const recipients = [
+        ...new Set(
+          z
+            .array(z.string().min(1))
+            .min(1)
+            .max(50)
+            .parse(p.toIds || [p.toId]),
         ),
-        "의사를 선택하세요",
+      ];
+      ensure(
+        recipients.every((id) =>
+          s.users.some(
+            (u) =>
+              u.id === id &&
+              u.active &&
+              (u.role === "doctor" || isAdministrator(u)),
+          ),
+        ),
+        "활성 의사를 선택하세요",
       );
-      s.opinions.push({
-        ...base,
-        consultationId: c.id,
-        fromId: user.id,
-        toId: String(p.toId),
-        request: z.string().min(1).max(5000).parse(p.request),
-        answer: "",
-      });
+      const request = z.string().trim().min(1).max(5000).parse(p.request);
+      recipients.forEach((toId, index) =>
+        s.opinions.push({
+          ...base,
+          id: index ? `${id}-${index}` : id,
+          consultationId: c.id,
+          fromId: user.id,
+          toId,
+          request,
+          answer: "",
+        }),
+      );
       patientId = c.patientId;
       text = "의사 의견 요청";
       break;
@@ -2487,9 +2617,25 @@ export async function applyCommand(
       "ledger.create",
       "vip.policy",
       "vip.reconcile",
+      "grade.policy",
+      "grade.override",
     ].includes(cmd.type)
   )
     reconcileVip(s, now, cmd.id);
+  if (
+    [
+      "patient.create",
+      "patient.update",
+      "patient.archive",
+      "patient.merge",
+      "ledger.create",
+      "vip.policy",
+      "vip.reconcile",
+      "grade.policy",
+      "grade.override",
+    ].includes(cmd.type)
+  )
+    reconcileGradeBenefits(s, now, cmd.id);
   s.events.push({
     ...base,
     id: cmd.id,

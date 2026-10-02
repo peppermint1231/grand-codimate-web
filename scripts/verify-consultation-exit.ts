@@ -188,7 +188,7 @@ try {
     const open = async () => {
       await nav("상담이력");
       await page
-        .locator("button.list-row")
+        .locator('button.list-row, [role="link"].list-row')
         .filter({ hasText: "보험검증환자" })
         .first()
         .click();

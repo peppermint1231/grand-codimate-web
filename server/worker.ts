@@ -1,3 +1,4 @@
+import { reconcileGradeBenefits } from "../src/core/gradeBenefits";
 import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
 import { topQuoteReasons } from "../src/core/quoteReasons";
@@ -381,8 +382,16 @@ export class Clinic extends DurableObject<Env> {
       "policies",
       "vipAccounts",
       "pointEntries",
+      "benefitAccounts",
     ]);
-    if (!vipPolicy(before).enabled) return;
+    if (
+      !vipPolicy(before).enabled &&
+      !before.policies[0]?.grades.some((g) => g.benefits?.enabled) &&
+      !before.pointEntries.some(
+        (e) => e.expiresAt || e.creditParts?.some((p) => p.expiresAt),
+      )
+    )
+      return;
     const id = "vip-auto-" + day;
     const receipt = this.sql
       .exec("SELECT id FROM operations WHERE id=?", id)
@@ -390,6 +399,7 @@ export class Clinic extends DurableObject<Env> {
     if (!receipt) {
       const after = structuredClone(before);
       reconcileVip(after, now, id);
+      reconcileGradeBenefits(after, now, id);
       const changes = diffStateChanges(before, after);
       if (changes.length) {
         changes.push({
@@ -729,7 +739,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.14.0",
+        version: "0.15.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1871,6 +1881,7 @@ export class Clinic extends DurableObject<Env> {
       if (!allowed(user, "note.read")) s.notes = [];
       if (!allowed(user, "money.read")) {
         s.ledger = [];
+        s.benefitAccounts = [];
         s.vipAccounts = [];
         s.pointEntries = [];
         s.quoteConsents = [];
@@ -2125,7 +2136,10 @@ export class Clinic extends DurableObject<Env> {
           changes.push({ section: "catalogs", id: current.id, value: current });
       }
       await this.persistChanges(cmd.id, user.id, digest, changes);
-      if (cmd.type === "vip.policy" && this.ctx.storage.setAlarm)
+      if (
+        ["vip.policy", "grade.policy"].includes(cmd.type) &&
+        this.ctx.storage.setAlarm
+      )
         await this.ctx.storage.setAlarm(Date.now() + 60000);
       return json({
         ok: true,

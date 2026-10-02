@@ -1,7 +1,7 @@
 {
-  "version": "0.14.0",
-  "versionCode": 64,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.14.0.apk",
-  "sha256": "fb681530ba25459f1d00a7cf7e4f6ef28237e73f0c57f644f0879edd670ae19d",
-  "notes": "영구 VIP, 생일·연간 이용·친구 소개 자동 포인트, 포인트 수납·반환 및 인증 카드 발급 기록."
+  "version": "0.15.0",
+  "versionCode": 65,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.15.0.apk",
+  "sha256": "52e916ae0f03b908930cd58bf050895ec6402f3b1d5be6ac3745d4ce035a7569",
+  "notes": "이전 메뉴 연장상담, 등급 강조, 미수납 바로 수납, 상담자 인계, 여러 의사 의견 요청, 등급별 포인트·기간 설정."
 }

@@ -743,3 +743,116 @@ it("bounds catalog saves to current bodies and revision headers even with a larg
     409,
   );
 }, 30000);
+
+it("persists VIP grants and point payments atomically with retry-safe receipts and daily birthday catch-up", async () => {
+  const { defaultVipPolicy, pointBalance } =
+    await import("../src/core/vipPoints");
+  const f = await fixture();
+  const clinic = f.clinic as any;
+  const load = () => clinic.state(false);
+  let s = await load();
+  const patient = s.patients[0];
+  const tomorrow = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Seoul",
+  }).format(new Date(Date.now() + 86400000));
+  const birthdayMonthDay = tomorrow.slice(5);
+  patient.dob = "1980-" + birthdayMonthDay;
+  const consult = s.consultations[0];
+  consult.status = "P";
+  consult.quote.total = 6000000;
+  const now = new Date().toISOString();
+  const cash = {
+    id: "old-cash",
+    rev: 1,
+    createdAt: now,
+    updatedAt: now,
+    kind: "receipt",
+    amount: 5000000,
+    date: now.slice(0, 10),
+    method: "카드",
+    memo: "",
+    patientId: "patient",
+    consultationId: "consult",
+    actorId: s.users[0].id,
+  };
+  for (const [section, row] of [
+    ["patients", patient],
+    ["consultations", consult],
+    ["ledger", cash],
+  ] as const)
+    f.db
+      .prepare("INSERT OR REPLACE INTO entities VALUES(?,?,?)")
+      .run(section, row.id, await seal(row, f.key));
+  const policyOperation = crypto.randomUUID();
+  const payload = { policy: { ...defaultVipPolicy, enabled: true } };
+  const enabled = await f.cmd(
+    "vip.policy",
+    payload,
+    "grades",
+    undefined,
+    policyOperation,
+  );
+  expect(enabled.status, await enabled.text()).toBe(200);
+  expect(
+    (await f.cmd("vip.policy", payload, "grades", undefined, policyOperation))
+      .status,
+  ).toBe(200);
+  s = await load();
+  expect(pointBalance(s, "patient")).toBe(100000);
+  expect(s.vipAccounts).toHaveLength(1);
+  const paymentId = crypto.randomUUID();
+  const pay = {
+    kind: "receipt",
+    consultationId: "consult",
+    amount: 10000,
+    date: now.slice(0, 10),
+    method: "VIP 포인트",
+    memo: "",
+  };
+  const payment = await f.cmd(
+    "ledger.create",
+    pay,
+    "point-payment",
+    undefined,
+    paymentId,
+  );
+  expect(payment.status, await payment.text()).toBe(200);
+  expect(
+    (await f.cmd("ledger.create", pay, "point-payment", undefined, paymentId))
+      .status,
+  ).toBe(200);
+  s = await load();
+  expect(pointBalance(s, "patient")).toBe(90000);
+  expect(s.ledger.filter((l: any) => l.tender === "points")).toHaveLength(1);
+  const snapshot = { entries: s.pointEntries.length, ledger: s.ledger.length };
+  const rejected = await f.cmd(
+    "ledger.create",
+    { ...pay, amount: 100001 },
+    "too-much",
+  );
+  expect(rejected.status).toBe(409);
+  s = await load();
+  expect({ entries: s.pointEntries.length, ledger: s.ledger.length }).toEqual(
+    snapshot,
+  );
+  // Two daily retries, including a process restart after a committed operation,
+  // preserve one birthday grant and retain its encrypted backup.
+  const year = Number(now.slice(0, 4)) + 1;
+  const birthday = `${year}-${birthdayMonthDay}T00:00:00.000Z`;
+  await clinic.runVipDay(birthday);
+  await clinic.runVipDay(birthday);
+  await clinic.setSecret("vip-last-day", "");
+  await clinic.runVipDay(birthday);
+  s = await load();
+  expect(
+    s.pointEntries.filter((e: any) => e.benefitKey === `birthday:${year}`),
+  ).toHaveLength(1);
+  expect(
+    f.db.prepare("SELECT count(*) as n FROM operations WHERE done=0").get()!.n,
+  ).toBe(0);
+  expect(
+    [...f.files.keys()].some((path) =>
+      path.includes(`vip-auto-${year}-${birthdayMonthDay}`),
+    ),
+  ).toBe(true);
+});

@@ -1,3 +1,4 @@
+import type { VipPolicy, VipAccount, PointEntry } from "./vipPoints";
 import type { EventOriginInfo } from "./eventCatalog";
 export const jobRoles = [
   "doctor",
@@ -54,6 +55,7 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  referredByPatientId?: string;
   acquisitionSource?: string;
   number?: string;
   storageName?: string;
@@ -267,6 +269,8 @@ export interface Consultation extends Base {
   reason?: string;
 }
 export interface Ledger extends Base {
+  tender?: "cash" | "points";
+  pointEntryId?: string;
   patientId: string;
   consultationId: string;
   kind: "receipt" | "refund" | "reversal";
@@ -284,6 +288,7 @@ export interface Grade {
   minimum: number;
 }
 export interface Policy extends Base {
+  vip?: VipPolicy;
   grades: Grade[];
 }
 export interface Opinion extends Base {
@@ -340,6 +345,8 @@ export interface Event extends Base {
   operationId: string;
 }
 export interface State {
+  vipAccounts: VipAccount[];
+  pointEntries: PointEntry[];
   patients: Patient[];
   notes: PatientNote[];
   consultations: Consultation[];
@@ -362,6 +369,8 @@ export interface Command {
   payload: Record<string, unknown>;
 }
 export const emptyState = (): State => ({
+  vipAccounts: [],
+  pointEntries: [],
   patients: [],
   notes: [],
   consultations: [],

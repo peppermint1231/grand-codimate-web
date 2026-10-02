@@ -271,11 +271,12 @@ export function buildAnalytics(
       (balances.get(l.consultationId) || 0) +
         (l.kind === "receipt" ? l.amount : -l.amount),
     );
-    lifetimeNet.set(
-      l.patientId,
-      (lifetimeNet.get(l.patientId) || 0) +
-        (l.kind === "receipt" ? l.amount : -l.amount),
-    );
+    if (l.tender !== "points")
+      lifetimeNet.set(
+        l.patientId,
+        (lifetimeNet.get(l.patientId) || 0) +
+          (l.kind === "receipt" ? l.amount : -l.amount),
+      );
   }
   for (const c of s.consultations.filter(eligible)) {
     const d = koreanDay(c.createdAt),
@@ -368,7 +369,8 @@ export function buildAnalytics(
   const byConsultation = new Map(s.consultations.map((c) => [c.id, c]));
   for (const l of active) {
     const c = byConsultation.get(l.consultationId);
-    if (!c || !matchesFilter(c) || !inPeriod(l.date)) continue;
+    if (!c || !matchesFilter(c) || !inPeriod(l.date) || l.tender === "points")
+      continue;
     const values = allocate(c, l.amount),
       chosen = selections.get(c.id)!.chosen;
     const amount = chosen.reduce((n, x) => n + values[x.index], 0),
@@ -564,6 +566,7 @@ export function buildAnalytics(
     ),
     methods: [...methods.values()],
     definitions: [
+      "VIP 포인트 수납·반환은 실수납·기여매출·직원 매출 및 인센티브에서 제외하고, 미수금에는 결제수단으로 반영합니다.",
       "상담·계약은 상담 작성일(한국시간) 기준이며 취소·중간상담을 제외합니다. 현재 상태를 집계하므로 과거 기간도 이후 결과 변경에 따라 달라질 수 있습니다.",
       "전환율 = 성공 ÷ (성공+실패). 보류를 제외하며, 같은 상담에 여러 분야가 있으면 분야별 상담 수의 합은 전체보다 클 수 있습니다.",
       "수납·환불은 처리일 기준, 정정 취소된 금액 기록은 제외합니다. 담당 상담자에게 귀속하며 결제 입력 직원의 매출로 계산하지 않습니다.",

@@ -1,3 +1,7 @@
+import { ReferralPicker } from "./components/ReferralPicker";
+import { PatientPoints } from "./components/PatientPoints";
+import { VipPolicySettings } from "./components/VipPolicySettings";
+import { pointBalance, vipAccount } from "./core/vipPoints";
 import { ConsentChecks } from "./components/ConsentChecks";
 import { CatalogSaveRetry } from "./lib/catalogSaveRetry";
 import { ConsentRecommendations } from "./components/ConsentRecommendations";
@@ -1159,7 +1163,7 @@ export function App() {
                             throw new Error(
                               "오프라인 로그인 유효기간(12시간)이 지났습니다. 온라인 로그인하세요.",
                             );
-                          setState(cached.state);
+                          setState({ ...emptyState(), ...cached.state });
                           setUser(cached.user);
                           setPending(
                             (await vaultRead<Command[]>("pending")) || [],
@@ -2234,6 +2238,9 @@ function PatientForm({
   openExisting?: (id: string) => void;
 }) {
   const [intakeId, setIntakeId] = useState<string>();
+  const [referredBy, setReferredBy] = useState(
+    patient?.referredByPatientId || "",
+  );
   const [data, setData] = useState({
     name: patient?.name || "",
     sex: patient?.sex || "F",
@@ -2273,7 +2280,15 @@ function PatientForm({
             )
           )
             return;
-          save(data, intakeId);
+          save(
+            {
+              ...data,
+              ...(!patient && referredBy
+                ? { referredByPatientId: referredBy }
+                : {}),
+            },
+            intakeId,
+          );
         }}
       >
         <div className="form-grid">
@@ -2347,6 +2362,18 @@ function PatientForm({
             </select>
           </Field>
         </div>
+        {(!patient || patient.referredByPatientId) && (
+          <ReferralPicker
+            state={state}
+            value={referredBy}
+            disabled={!!patient}
+            onChange={(id) => {
+              setReferredBy(id);
+              if (id)
+                setData((d) => ({ ...d, acquisitionSource: "친구 소개" }));
+            }}
+          />
+        )}
         {found.length > 0 && (
           <div className="warning-panel">
             기존 환자 후보:{" "}
@@ -2593,7 +2620,7 @@ function PatientDetail({
       </div>
       <div className="patient-banner">
         <span className="grade" style={{ color: g.color }}>
-          {g.name} · {g.manual ? "관리자 지정" : "자동 산정"}
+          {g.name} · {vipAccount(s, p.id) ? "영구 VIP" : g.manual ? "관리자 지정" : "자동 산정"}
         </span>
         <span>{p.address}</span>
         <small>환자번호 {p.number || p.id}</small>
@@ -2631,6 +2658,14 @@ function PatientDetail({
           ["money", "수납·환불"],
           ["notes", "환자 메모"],
           ["grade", "등급·관리"],
+          ...(allowed(user, "money.read")
+            ? [
+                [
+                  "points",
+                  `VIP·포인트 ${pointBalance(s, p.id).toLocaleString()}P`,
+                ],
+              ]
+            : []),
         ].map(([k, l]) => (
           <button
             className={tab === k ? "active" : ""}
@@ -2757,6 +2792,15 @@ function PatientDetail({
             </form>
           )}
         </div>
+      )}
+      {tab === "points" && allowed(user, "money.read") && (
+        <PatientPoints
+          state={s}
+          patient={p}
+          user={user}
+          send={send}
+          openMoney={() => setTab("money")}
+        />
       )}
       {tab === "money" && allowed(user, "money.read") && (
         <div className="detail-grid">
@@ -6656,91 +6700,96 @@ function SettingsView({
         </form>
       )}
       {activeTab === "grade" && (
-        <div className="card">
-          <h3>누적 기여매출 기준</h3>
-          <p>
-            수납 − 환불에 따라 자동 산정합니다. 기준 미설정 시 미분류입니다.
-          </p>
-          {grades.map((g, i) => (
-            <div className="inline-fields" key={g.id}>
-              <Field label="등급명">
+        <>
+          <VipPolicySettings state={s} send={send} work={work} />
+          <div className="card">
+            <h3>누적 기여매출 기준</h3>
+            <p>
+              수납 − 환불에 따라 자동 산정합니다. 기준 미설정 시 미분류입니다.
+            </p>
+            {grades.map((g, i) => (
+              <div className="inline-fields" key={g.id}>
+                <Field label="등급명">
+                  <input
+                    value={g.name}
+                    onChange={(e) =>
+                      setGrades(
+                        grades.map((v, j) =>
+                          i === j ? { ...v, name: e.target.value } : v,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
+                <Field label="하한액 (원)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={g.minimum}
+                    onChange={(e) =>
+                      setGrades(
+                        grades.map((v, j) =>
+                          i === j
+                            ? { ...v, minimum: Number(e.target.value) }
+                            : v,
+                        ),
+                      )
+                    }
+                  />
+                </Field>
                 <input
-                  value={g.name}
+                  aria-label="등급 색상"
+                  type="color"
+                  value={g.color}
                   onChange={(e) =>
                     setGrades(
                       grades.map((v, j) =>
-                        i === j ? { ...v, name: e.target.value } : v,
+                        i === j ? { ...v, color: e.target.value } : v,
                       ),
                     )
                   }
                 />
-              </Field>
-              <Field label="하한액 (원)">
-                <input
-                  type="number"
-                  min={0}
-                  value={g.minimum}
-                  onChange={(e) =>
-                    setGrades(
-                      grades.map((v, j) =>
-                        i === j ? { ...v, minimum: Number(e.target.value) } : v,
-                      ),
-                    )
-                  }
-                />
-              </Field>
-              <input
-                aria-label="등급 색상"
-                type="color"
-                value={g.color}
-                onChange={(e) =>
-                  setGrades(
-                    grades.map((v, j) =>
-                      i === j ? { ...v, color: e.target.value } : v,
+                <button
+                  onClick={() => setGrades(grades.filter((_, j) => j !== i))}
+                >
+                  삭제
+                </button>
+              </div>
+            ))}
+            <div className="button-row">
+              <button
+                onClick={() =>
+                  setGrades([
+                    ...grades,
+                    {
+                      id: crypto.randomUUID(),
+                      name: "새 등급",
+                      minimum: 0,
+                      color: "#145d55",
+                    },
+                  ])
+                }
+              >
+                등급 추가
+              </button>
+              <button
+                className="primary"
+                onClick={() =>
+                  work(() =>
+                    send(
+                      "grade.policy",
+                      { grades },
+                      "grades",
+                      s.policies[0]?.rev,
                     ),
                   )
                 }
-              />
-              <button
-                onClick={() => setGrades(grades.filter((_, j) => j !== i))}
               >
-                삭제
+                기준 적용·재산정
               </button>
             </div>
-          ))}
-          <div className="button-row">
-            <button
-              onClick={() =>
-                setGrades([
-                  ...grades,
-                  {
-                    id: crypto.randomUUID(),
-                    name: "새 등급",
-                    minimum: 0,
-                    color: "#145d55",
-                  },
-                ])
-              }
-            >
-              등급 추가
-            </button>
-            <button
-              className="primary"
-              onClick={() =>
-                work(() =>
-                  send(
-                    "grade.policy",
-                    { grades },
-                    "grades",
-                    s.policies[0]?.rev,
-                  ),
-                )
-              }
-            >
-              기준 적용·재산정
-            </button>
           </div>
-        </div>
+        </>
       )}
       {activeTab === "users" && (
         <div className="detail-grid employee-settings">

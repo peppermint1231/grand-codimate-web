@@ -69,6 +69,9 @@ export function patientIndex(s: State): PatientSearchRow[] {
           consultations: cs,
           ledger: ledger.get(p.id) || [],
           policies: s.policies,
+          vipAccounts: (s.vipAccounts || []).filter(
+            (a) => a.patientId === p.id,
+          ),
         };
       const dupe = new Set([
         ...(nameBirth.get(

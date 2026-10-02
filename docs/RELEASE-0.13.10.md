@@ -9,3 +9,5 @@
 검증: 자동 테스트 367개와 TypeScript/Vite 빌드 통과. 회귀 테스트는 단어 생략, 공백, 줄바꿈, 이전 부분 수정, 맞춤 기간 보존, 새 양식 19종을 확인한다. `artifacts/consent-expiry-live.json`, `artifacts/consent-expiry-tests.log`, `artifacts/check-01310.log`에 검증 결과를 기록했다.
 
 Android 0.13.10 (63), 18,375,503 bytes. SHA-256 `3e552a2083efcc0fc7f009c83a6597e7ccd2f387064bb1b4e63cd0fd3dd842d4`. APK 내 웹 자산 48개 일치.
+
+운영 배포 완료: PR #7, 코드 `852e60156f382985dcb0a4fa028230fd3123ab76`, 병합 `54011d5b58f502a7e9abf6b1a966adfe9e86d476`. GitHub 검사와 Cloudflare 빌드 성공. 운영 버전 0.13.10 및 웹 자산 48개·공개 APK 해시를 확인했다. 검증 기록: `artifacts/release-01310-assets.json`, `artifacts/deployment-01310.json`.

@@ -1,7 +1,7 @@
 {
-  "version": "0.13.10",
-  "versionCode": 63,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.10.apk",
-  "sha256": "3e552a2083efcc0fc7f009c83a6597e7ccd2f387064bb1b4e63cd0fd3dd842d4",
-  "notes": "패키지 사용기간 조항의 문장 변형으로 발생한 개정 누락 수정. 개정 초안 19종 문구 재확인."
+  "version": "0.14.0",
+  "versionCode": 64,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.14.0.apk",
+  "sha256": "fb681530ba25459f1d00a7cf7e4f6ef28237e73f0c57f644f0879edd670ae19d",
+  "notes": "영구 VIP, 생일·연간 이용·친구 소개 자동 포인트, 포인트 수납·반환 및 인증 카드 발급 기록."
 }

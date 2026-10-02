@@ -5291,3 +5291,32 @@ html.custom-pull-refresh {
 .consent-recommendation-list small { display: block; }
 .option-edit > .offering-editor { grid-column: 1 / -1; }
 .option-edit > .section-title { grid-column: 1 / -1; gap: 8px; flex-wrap: wrap; }
+
+.consent-checks {
+  margin: 16px 0;
+  padding: 12px;
+  border: 1px solid var(--border, #dce5df);
+  border-radius: 10px;
+  min-width: 0;
+}
+.consent-checks legend {
+  font-weight: 700;
+  padding: 0 6px;
+}
+.consent-checks .check {
+  align-items: flex-start;
+  margin: 10px 0;
+  line-height: 1.6;
+}
+.consent-checks input {
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+.consent-checks-all {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border, #dce5df);
+}
+.consent-checks-all .small {
+  margin-left: auto;
+  white-space: nowrap;
+}

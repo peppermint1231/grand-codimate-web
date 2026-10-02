@@ -11,3 +11,9 @@ OneDrive 전송 대기열은 작업 ID만 먼저 읽고 개별 작업을 처리�
 `npm run check`: 58개 파일의 357개 테스트 통과, TypeScript/Vite 빌드 완료. 검증 기록은 `artifacts/check-0138.log`, `artifacts/catalog-save-recovery-0138.json`에 있다.
 
 Android: `0.13.8 (61)`, APK 18,372,043 bytes, SHA-256 `ef164b9d4951b94486427118ba0dc3d995440d1ad140c34e32abdf1c5630c115`. APK 내 웹 자산 48개가 빌드 결과와 일치한다.
+
+운영 배포 확인: PR #5, 코드 `20b6eeb7fd1f5f93dfb7fef8700d961d95cf334e`, 병합 `45f879ff141979756f9d4be3d1eb3596fdb919d4`. GitHub 검사와 Cloudflare Workers 빌드가 모두 성공했다. 운영 `/api/health` 0.13.8, 웹 자산 48개와 공개 APK 다운로드 SHA-256 일치를 확인했다.
+
+운영 자료 읽기 검증: 작업 화면 조회 2.66초, 미용·보험·홈페이지 게시본 499·10·417개 상품을 각 0.88·0.19·0.94초에 조회했다. 수정이력은 24·8·17건 정상 조회했다. 이 수치는 이번 확인의 관측값이며 성능 보장은 아니다. 실제 단가표 저장·수정은 실행하지 않았다. `artifacts/catalog-live-0138.json`, `artifacts/release-0138-assets.json`, `artifacts/deployment-0138.json`에 검증 요약을 기록했다.
+
+사용자 안내: 현재 편집 화면을 유지한 채 동일 내용으로 저장을 먼저 재시도하고, 완료 확인 후 새로고침 또는 APK 업데이트를 한다. 기기 보관이 꺼져 있으면 새로고침·종료 전 편집 내용이 영구 보관된다고 보장하지 않는다.

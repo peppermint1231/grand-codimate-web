@@ -1,7 +1,7 @@
 {
-  "version": "0.13.8",
-  "versionCode": 61,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.8.apk",
-  "sha256": "ef164b9d4951b94486427118ba0dc3d995440d1ad140c34e32abdf1c5630c115",
-  "notes": "단가표 저장 시 이전 버전·수정이력 전체 로드 제거. 응답 유실 후 동일 작업 재시도 및 이미 저장된 동일 내용 확인. 작성 내용 보존 안내 개선."
+  "version": "0.13.9",
+  "versionCode": 62,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.9.apk",
+  "sha256": "fe5cc74b7b870cc62582a4a3eb1c940e893459f8c4df54454f239669d73f2bbe",
+  "notes": "동의서 환자용 문구 정리와 개정 초안. 서명 필수 확인 항목의 모두 동의·부분 선택·전체 해제 지원."
 }

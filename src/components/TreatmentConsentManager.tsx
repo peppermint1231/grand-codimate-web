@@ -1,3 +1,4 @@
+import { consentLegalReview } from "../core/consentPatientCopy";
 import {
   detailedClausesFor,
   DETAIL_HEADING,
@@ -364,6 +365,24 @@ function ConsentEditor({
           {dirty ? " · 저장하지 않은 변경" : ""}
         </span>
       </div>
+      {/(법적인 책임|50%|잔여 횟수는 소멸)/.test(
+        [value.body, checks].join("\n"),
+      ) && (
+        <aside
+          className="consent-review-notes consent-review-required"
+          aria-label="계약 조항 법률 검토 안내"
+        >
+          <b>게시 전 계약 조항 확인</b>
+          <p>{consentLegalReview}</p>
+          <a
+            href="https://law.go.kr/LSW/lsLinkCommonInfo.do?chrClsCd=010202&lsJoLnkSeq=1025032399"
+            target="_blank"
+            rel="noreferrer"
+          >
+            약관법 제7·9·14조 확인
+          </a>
+        </aside>
+      )}
       {source && (
         <details className="consent-review-notes consent-review-required" open>
           <summary>

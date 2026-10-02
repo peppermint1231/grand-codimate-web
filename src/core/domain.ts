@@ -1,3 +1,4 @@
+import { patientConsentBody, patientChecksFor } from "./consentPatientCopy";
 import {
   catalogApplyGuard,
   catalogApplyGuardSchema,
@@ -2059,16 +2060,18 @@ export async function applyCommand(
           )[0];
         const template = treatmentConsentDrafts.find((t) => t.key === key)!;
         const body = source
-          ? supplementDetailedConsentBody(key, source.body)
+          ? patientConsentBody(supplementDetailedConsentBody(key, source.body))
           : template.body;
         const checks = source
-          ? supplementConsentChecks(key, source.checks)
+          ? patientChecksFor(key, supplementConsentChecks(key, source.checks))
           : [...template.checks];
         // Only current hospital-library drafts are updated in place. Older drafts
         // remain history; published forms always receive a separate draft version.
         if (
           source?.status === "draft" &&
-          ["2026-09-30.2", "2026-09-30.3"].includes(source.draftRevision || "")
+          ["2026-09-30.2", "2026-09-30.3", "2026-09-30.4"].includes(
+            source.draftRevision || "",
+          )
         ) {
           source.body = body;
           source.checks = checks;

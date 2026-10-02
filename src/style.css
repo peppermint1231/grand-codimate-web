@@ -5342,6 +5342,10 @@ html.custom-pull-refresh {
 .unpaid-list { display:grid; gap:8px; padding:12px; background:#fff5ed; border:1px solid #efc2a6; border-radius:10px; margin-bottom:16px; }
 .unpaid-item { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:8px 16px; text-align:left; white-space:normal; }
 .unpaid-item-details { flex:1 1 220px; min-width:0; overflow-wrap:anywhere; }
+.vip-qr-content { display:flex; flex-wrap:wrap; gap:20px; align-items:center; }
+.vip-qr-content img { max-width:100%; height:auto; border-radius:12px; }
+.vip-qr-content > div { flex:1 1 240px; min-width:0; }
+.vip-patient-qr p { overflow-wrap:anywhere; }
 .unpaid-item-action { flex:0 0 auto; display:grid; gap:3px; margin-left:auto; text-align:right; white-space:nowrap; }
 .unpaid-item-action > span { font-size:.85em; color:var(--primary, #145d55); }
 .unpaid-item small { display:block; }

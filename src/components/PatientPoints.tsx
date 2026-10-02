@@ -1,4 +1,5 @@
 import { benefitSettings, currentBenefitGrade } from "../core/gradeBenefits";
+import { VipPatientQR } from "./VipPatientQR";
 import { useEffect, useState } from "react";
 import {
   allowed,
@@ -234,6 +235,12 @@ export function PatientPoints({
           </details>
         </div>
       </div>
+      {account &&
+        active &&
+        allowed(user, "money.read") &&
+        allowed(user, "export") && (
+          <VipPatientQR key={patient.id} patientId={patient.id} />
+        )}
       <div className="card">
         <h3>포인트 지급·사용 이력</h3>
         {!rows.length ? (

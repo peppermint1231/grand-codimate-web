@@ -1,4 +1,10 @@
 import { version as appVersion } from "../package.json";
+import {
+  VipShares,
+  vipShareSchema,
+  vipPortalData,
+  vipPortalHTML,
+} from "./vipShares";
 import { reconcileGradeBenefits } from "../src/core/gradeBenefits";
 import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
@@ -150,6 +156,7 @@ export class Clinic extends DurableObject<Env> {
       "CREATE TABLE IF NOT EXISTS access_log(id TEXT PRIMARY KEY,at TEXT NOT NULL,value TEXT NOT NULL,backedUp INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
     );
     this.sql.exec(restoreSchema);
+    this.sql.exec(vipShareSchema);
   }
   private async secret<T>(id: string) {
     const row = this.sql
@@ -919,6 +926,50 @@ export class Clinic extends DurableObject<Env> {
       }
       return Response.redirect(this.env.APP_ORIGIN + "/?connected=1", 302);
     }
+    if (path.startsWith("/api/public/vip/") && req.method === "GET") {
+      const share = await new VipShares(this.sql, this.env.ENCRYPTION_KEY).get(
+        path.slice("/api/public/vip/".length),
+      );
+      const headers = {
+        ...quoteShareHeaders,
+        "Content-Type": "text/html; charset=utf-8",
+      };
+      const unavailable = () =>
+        new Response(
+          "이 VIP 조회 링크는 사용할 수 없습니다. 병원에 새 QR을 요청해주세요.",
+          { status: 410, headers },
+        );
+      if (
+        !share ||
+        (await this.secret("restore-required")) ||
+        this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+      )
+        return unavailable();
+      const actor = await this.account(share.actorId);
+      if (
+        !actor?.active ||
+        !allowed(actor, "money.read") ||
+        !allowed(actor, "export")
+      )
+        return unavailable();
+      const state = await this.state(false, [
+        "patients",
+        "vipAccounts",
+        "pointEntries",
+        "ledger",
+        "policies",
+      ]);
+      const data = vipPortalData(state, share.patientId);
+      // A revoke or reissue while the state was loading invalidates this response too.
+      if (
+        !data ||
+        !(await new VipShares(this.sql, this.env.ENCRYPTION_KEY).get(
+          share.token,
+        ))
+      )
+        return unavailable();
+      return new Response(vipPortalHTML(data), { headers });
+    }
     if (path.startsWith("/api/public/quotes/") && req.method === "GET") {
       const parts = path.split("/");
       const token = parts[4],
@@ -1160,6 +1211,7 @@ export class Clinic extends DurableObject<Env> {
       [
         "/api/commands",
         "/api/quote-shares",
+        "/api/vip-shares",
         "/api/users",
         "/api/media",
         "/api/admin-handover",
@@ -1213,6 +1265,67 @@ export class Clinic extends DurableObject<Env> {
         "원본 복구 확인 중입니다. 복구를 완료하거나 취소한 뒤 변경하세요",
         409,
       );
+    if (path === "/api/vip-shares") {
+      ensure(
+        allowed(user, "money.read") && allowed(user, "export"),
+        "금액 열람·내보내기 권한이 필요합니다",
+        403,
+      );
+      const input =
+        req.method === "GET"
+          ? { patientId: url.searchParams.get("patientId"), action: "list" }
+          : await body();
+      ensure(
+        typeof input.patientId === "string" && input.patientId.length > 0,
+        "환자를 선택하세요",
+      );
+      const state = await this.state(false, ["patients", "vipAccounts"]);
+      const patient = state.patients.find((p) => p.id === input.patientId);
+      ensure(
+        patient &&
+          !patient.archived &&
+          !patient.mergedInto &&
+          state.vipAccounts.some(
+            (a) => a.patientId === patient.id && !a.mergedInto,
+          ),
+        "VIP 환자만 조회 QR을 발급할 수 있습니다",
+        409,
+      );
+      const store = new VipShares(this.sql, this.env.ENCRYPTION_KEY);
+      const present = (s: Awaited<ReturnType<VipShares["forPatient"]>>) =>
+        s
+          ? {
+              id: s.id,
+              url: this.env.APP_ORIGIN + "/api/public/vip/" + s.token,
+              createdAt: s.createdAt,
+            }
+          : null;
+      if (req.method === "GET")
+        return json({ share: present(await store.forPatient(patient.id)) });
+      ensure(req.method === "POST", "지원하지 않는 요청입니다", 405);
+      if (input.action === "revoke") {
+        store.remove(patient.id);
+        await this.auditAccess(user.id, "vip.share.revoke", patient.id);
+        return json({ share: null });
+      }
+      ensure(
+        input.action === "create" || input.action === "regenerate",
+        "QR 작업을 확인하세요",
+      );
+      const existing = await store.forPatient(patient.id);
+      const issuer = existing && (await this.account(existing.actorId));
+      if (
+        existing &&
+        input.action === "create" &&
+        issuer?.active &&
+        allowed(issuer, "money.read") &&
+        allowed(issuer, "export")
+      )
+        return json({ share: present(existing) });
+      const share = await store.create(patient.id, user.id);
+      await this.auditAccess(user.id, "vip.share." + input.action, patient.id);
+      return json({ share: present(share) });
+    }
     if (path === "/api/quote-shares") {
       ensure(
         allowed(user, "export") && allowed(user, "money.read"),

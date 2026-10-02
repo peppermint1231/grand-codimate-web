@@ -255,6 +255,14 @@ export class RestoreJobs {
       this.sql.exec("DELETE FROM media");
       this.sql.exec("DELETE FROM inquiries");
       this.sql.exec("DELETE FROM quote_shares");
+      if (
+        this.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='vip_shares'",
+          )
+          .toArray().length
+      )
+        this.sql.exec("DELETE FROM vip_shares");
       this.sql.exec(
         "DELETE FROM secrets WHERE id LIKE 'user:%' OR id LIKE 'session:%' OR id='restore-required'",
       );

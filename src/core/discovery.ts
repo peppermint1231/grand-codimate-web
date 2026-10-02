@@ -2,6 +2,7 @@ import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
 import { eventOptionPrices } from "./eventPrices";
 import { withBeautyRootLabels } from "./catalogClassification";
 import { z } from "zod";
+import { patientMatches } from "./patientDiscovery";
 import {
   latestCatalogs,
   latestCatalog,
@@ -26,6 +27,7 @@ export interface PublicOption {
   tax: string;
 }
 export interface PublicProduct {
+  matches?: { concernId: string; answerIds: string[] }[];
   event?: Pick<
     EventOriginInfo,
     "period" | "regularPrice" | "discountRate" | "salePrice"
@@ -77,6 +79,7 @@ export function publicProducts(state: State): PublicProduct[] {
         .map((p) => ({
           id: p.id,
           name: p.name,
+          matches: patientMatches(p, productFolderPaths(c, p)),
           ...((p.webEvent || catalogBook(c) === "이벤트") &&
           p.active &&
           p.options.length === 1 &&

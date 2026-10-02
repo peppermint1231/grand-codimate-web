@@ -1,4 +1,5 @@
 import { version as appVersion } from "../package.json";
+import { patientConcerns } from "../src/core/patientDiscovery";
 import {
   VipShares,
   vipShareSchema,
@@ -1060,6 +1061,7 @@ export class Clinic extends DurableObject<Env> {
       return json({
         products: publicProducts(state),
         categories: publicCategories(state),
+        patientConcerns,
         token,
       });
     }
@@ -1115,7 +1117,10 @@ export class Clinic extends DurableObject<Env> {
       });
       const publicState = await this.catalogState();
       const available = publicProducts(publicState);
-      const categories = publicCategories(publicState);
+      const categories = [
+        ...publicCategories(publicState),
+        ...patientConcerns.map((c) => ({ ...c, folderId: c.id })),
+      ];
       const chosenCategories = input.concerns.map(
         (id) =>
           categories.find((c) => c.id === id) ||

@@ -5320,3 +5320,14 @@ html.custom-pull-refresh {
   margin-left: auto;
   white-space: nowrap;
 }
+
+.patient-points .vip-card { background: linear-gradient(120deg, #edf5f1, #fffaf0); }
+.points-balance { display:block; font-size:clamp(26px,4vw,38px); margin:16px 0; color:#145d55; }
+.points-plus { color:#145d55; white-space:nowrap; }
+.points-minus { color:#a33f35; white-space:nowrap; }
+.patient-points progress { width:100%; accent-color:#145d55; }
+.point-history { max-height:520px; overflow:auto; }
+.referral-picker { min-width:0; padding:14px; border:1px solid #dce5df; border-radius:10px; margin:12px 0; }
+.referral-picker legend { font-weight:700; }
+.referral-results { max-height:260px; overflow:auto; }
+.referral-results button { width:100%; text-align:left; }

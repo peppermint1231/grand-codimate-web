@@ -1,3 +1,4 @@
+import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
 import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
@@ -371,6 +372,50 @@ export class Clinic extends DurableObject<Env> {
       await this.storageRoot(),
     );
   }
+  private async runVipDay(now = new Date().toISOString()) {
+    const day = seoulDay(now);
+    if ((await this.secret<string>("vip-last-day")) === day) return;
+    const before = await this.state(false, [
+      "patients",
+      "ledger",
+      "policies",
+      "vipAccounts",
+      "pointEntries",
+    ]);
+    if (!vipPolicy(before).enabled) return;
+    const id = "vip-auto-" + day;
+    const receipt = this.sql
+      .exec("SELECT id FROM operations WHERE id=?", id)
+      .toArray()[0];
+    if (!receipt) {
+      const after = structuredClone(before);
+      reconcileVip(after, now, id);
+      const changes = diffStateChanges(before, after);
+      if (changes.length) {
+        changes.push({
+          section: "events",
+          id,
+          value: {
+            id,
+            rev: 1,
+            createdAt: now,
+            updatedAt: now,
+            actorId: "system-vip",
+            kind: "vip.auto",
+            text: `VIP 자동 혜택 ${changes.filter((c) => c.section === "pointEntries").length}건 처리`,
+            operationId: id,
+          },
+        });
+        await this.persistChanges(
+          id,
+          "system-vip",
+          await sha(JSON.stringify({ id, day })),
+          changes,
+        );
+      }
+    }
+    await this.setSecret("vip-last-day", day);
+  }
   async alarm() {
     const run = this.queue.then(async () => {
       try {
@@ -382,6 +427,7 @@ export class Clinic extends DurableObject<Env> {
         await this.settleStorageRename();
         await this.flush();
         await this.flushAccess();
+        await this.runVipDay();
         const store = await this.inquiryStore();
         await store.purge();
         new QuoteShares(this.sql, this.env.ENCRYPTION_KEY).purge();
@@ -395,7 +441,14 @@ export class Clinic extends DurableObject<Env> {
             .exec("SELECT id FROM operations WHERE done=0 LIMIT 1")
             .toArray().length;
         await this.ctx.storage.setAlarm(
-          Date.now() + (queued ? 60000 : 3600_000),
+          queued
+            ? Date.now() + 60000
+            : Math.min(
+                Date.now() + 3600_000,
+                Date.parse(
+                  seoulDay(new Date().toISOString()) + "T00:00:00+09:00",
+                ) + 86400000,
+              ),
         );
       }
     });
@@ -676,7 +729,7 @@ export class Clinic extends DurableObject<Env> {
     if (path === "/api/health")
       return json({
         ok: true,
-        version: "0.13.10",
+        version: "0.14.0",
         mode:
           this.env.REQUIRE_ONEDRIVE === "true"
             ? "onedrive"
@@ -1709,6 +1762,7 @@ export class Clinic extends DurableObject<Env> {
             "consultations",
             "ledger",
             "policies",
+            "vipAccounts",
           ]),
         );
       const p = url.searchParams;
@@ -1817,6 +1871,8 @@ export class Clinic extends DurableObject<Env> {
       if (!allowed(user, "note.read")) s.notes = [];
       if (!allowed(user, "money.read")) {
         s.ledger = [];
+        s.vipAccounts = [];
+        s.pointEntries = [];
         s.quoteConsents = [];
         s.consultations = s.consultations.map((c) => ({
           ...c,
@@ -2069,6 +2125,8 @@ export class Clinic extends DurableObject<Env> {
           changes.push({ section: "catalogs", id: current.id, value: current });
       }
       await this.persistChanges(cmd.id, user.id, digest, changes);
+      if (cmd.type === "vip.policy" && this.ctx.storage.setAlarm)
+        await this.ctx.storage.setAlarm(Date.now() + 60000);
       return json({
         ok: true,
         changes: visibleChanges(changes, user),

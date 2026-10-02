@@ -1,3 +1,10 @@
+import {
+  activeMoneyRows,
+  pointBalance,
+  reconcileVip,
+  vipAccount,
+  vipPolicy,
+} from "./vipPoints";
 import { patientConsentBody, patientChecksFor } from "./consentPatientCopy";
 import {
   catalogApplyGuard,
@@ -243,12 +250,8 @@ export function renewalQuote(
   });
   return calculate(lines, { kind: "amount", value: 0 }, source.quote.vat);
 }
-export function activeLedger(s: State) {
-  const reversed = new Set(
-    s.ledger.filter((l) => l.kind === "reversal").map((l) => l.originalId),
-  );
-  return s.ledger.filter((l) => l.kind !== "reversal" && !reversed.has(l.id));
-}
+export const activeLedger = activeMoneyRows;
+
 export function ledgerAvailable(
   s: State,
   consultationId: string,
@@ -288,10 +291,10 @@ export function ledgerAvailable(
 export function metrics(s: State, patientId: string) {
   const entries = activeLedger(s).filter((l) => l.patientId === patientId);
   const receipts = entries
-      .filter((l) => l.kind === "receipt")
+      .filter((l) => l.kind === "receipt" && l.tender !== "points")
       .reduce((a, l) => a + l.amount, 0),
     refunds = entries
-      .filter((l) => l.kind === "refund")
+      .filter((l) => l.kind === "refund" && l.tender !== "points")
       .reduce((a, l) => a + l.amount, 0);
   const contracts = s.consultations.filter(
     (c) => c.patientId === patientId && c.status === "P" && !c.cancelled,
@@ -313,14 +316,24 @@ export function metrics(s: State, patientId: string) {
 }
 export function gradeFor(s: State, p: Patient) {
   const grades = s.policies[0]?.grades || [];
-  if (p.gradeOverride) {
-    const g = grades.find((g) => g.id === p.gradeOverride!.gradeId);
-    if (g) return { ...g, manual: true };
-  }
+  const membership = vipAccount(s, p.id);
+  const vip = membership
+    ? grades.find((g) => g.name.toUpperCase() === "VIP") || {
+        id: "vip",
+        name: "VIP",
+        color: "#145d55",
+        minimum: vipPolicy(s).minimumRevenue,
+      }
+    : undefined;
+  const override =
+    p.gradeOverride && grades.find((g) => g.id === p.gradeOverride!.gradeId);
+  if (override && (!vip || override.minimum >= vip.minimum))
+    return { ...override, manual: true };
   const r = metrics(s, p.id).revenue;
   const g = [...grades]
     .sort((a, b) => b.minimum - a.minimum)
     .find((g) => r >= g.minimum);
+  if (vip && (!g || g.minimum <= vip.minimum)) return { ...vip, manual: false };
   return g
     ? { ...g, manual: false }
     : {
@@ -651,6 +664,8 @@ export async function applyCommand(
     ),
     catalogRevisions: [...(input.catalogRevisions || [])],
     quoteConsents: structuredClone(input.quoteConsents || []),
+    vipAccounts: structuredClone(input.vipAccounts || []),
+    pointEntries: structuredClone(input.pointEntries || []),
   };
   let patientId: string | undefined;
   let text = cmd.type;
@@ -727,6 +742,26 @@ export async function applyCommand(
   switch (cmd.type) {
     case "patient.create": {
       const d = patientSchema.parse(p);
+      const referredBy =
+        z.string().max(100).optional().parse(p.referredByPatientId) ||
+        undefined;
+      if (referredBy) {
+        ensure(referredBy !== id, "본인을 소개자로 선택할 수 없습니다");
+        const referrer = s.patients.find(
+          (x) => x.id === referredBy && !x.archived && !x.mergedInto,
+        );
+        ensure(referrer, "소개한 기존 환자를 다시 선택하세요");
+        ensure(
+          !s.patients.some(
+            (x) =>
+              !x.mergedInto &&
+              x.name === d.name &&
+              x.dob === d.dob &&
+              x.phone === d.phone,
+          ),
+          "동일한 환자가 이미 등록되어 있어 신규 소개 혜택을 중복 연결할 수 없습니다",
+        );
+      }
       ensure(
         !s.patients.some((x) => x.id === id),
         "환자 ID가 이미 있습니다",
@@ -745,6 +780,7 @@ export async function applyCommand(
         number,
         storageName: safeName(`${number}${d.sex}${d.name}`),
         ownerId: user.id,
+        ...(referredBy ? { referredByPatientId: referredBy } : {}),
       });
       patientId = id;
       text = "환자 등록";
@@ -801,6 +837,39 @@ export async function applyCommand(
           }
       for (const x of s.events)
         if (x.patientId === from.id) x.patientId = target.id;
+      for (const x of s.pointEntries) {
+        if (x.patientId === from.id) {
+          x.patientId = target.id;
+          touch(x);
+        }
+        if (x.sourcePatientId === from.id) {
+          x.sourcePatientId = target.id;
+          if (x.benefitKey?.startsWith("referral:"))
+            x.benefitKey = "referral:" + target.id;
+          touch(x);
+        }
+      }
+      for (const x of s.patients)
+        if (x.referredByPatientId === from.id) {
+          x.referredByPatientId = x.id === target.id ? undefined : target.id;
+          touch(x);
+        }
+      const accounts = s.vipAccounts
+        .filter(
+          (a) => !a.mergedInto && [from.id, target.id].includes(a.patientId),
+        )
+        .sort((a, b) => a.enrolledAt.localeCompare(b.enrolledAt));
+      if (accounts.length) {
+        accounts[0].patientId = target.id;
+        accounts[0].baselineReceiptIds = [
+          ...new Set(accounts.flatMap((a) => a.baselineReceiptIds)),
+        ];
+        touch(accounts[0]);
+        for (const a of accounts.slice(1)) {
+          a.mergedInto = accounts[0].id;
+          touch(a);
+        }
+      }
       patientId = target.id;
       text = `환자 병합: ${String(p.reason)}`;
       break;
@@ -1380,9 +1449,64 @@ export async function applyCommand(
           "잔액이 변경되었습니다. 최신 잔액을 확인한 뒤 다시 기록하세요",
           409,
         );
+      const usingPoints =
+        kind === "receipt"
+          ? p.method === "VIP 포인트"
+          : original?.tender === "points";
+      let pointEntryId: string | undefined;
+      if (usingPoints) {
+        need("money.read");
+        const delta =
+          kind === "receipt"
+            ? -d.amount
+            : kind === "refund"
+              ? d.amount
+              : original!.kind === "receipt"
+                ? d.amount
+                : -d.amount;
+        if (delta < 0)
+          ensure(
+            pointBalance(s, c.patientId) >= -delta,
+            "사용 가능한 VIP 포인트가 부족합니다. 최신 잔액을 확인하세요",
+            409,
+          );
+        if (kind === "receipt")
+          ensure(
+            d.amount <= ledgerAvailable(s, c.id, "receipt"),
+            "미수납 금액을 초과해 포인트를 사용할 수 없습니다",
+          );
+        pointEntryId = cmd.id + "-points";
+        s.pointEntries.push({
+          ...base,
+          id: pointEntryId,
+          patientId: c.patientId,
+          amount: delta,
+          kind:
+            kind === "receipt"
+              ? "use"
+              : kind === "refund"
+                ? "return"
+                : "correction",
+          reason:
+            kind === "receipt"
+              ? "상담 수납에 포인트 사용"
+              : kind === "refund"
+                ? "포인트 수납 환불 · 포인트 반환"
+                : "포인트 수납·환불 정정",
+          actorId: user.id,
+          consultationId: c.id,
+          ledgerId: id,
+        });
+        d.method = "VIP 포인트";
+      } else
+        ensure(
+          d.method !== "VIP 포인트",
+          "현금 수납의 환불은 포인트로 변경할 수 없습니다",
+        );
       s.ledger.push({
         ...base,
         ...d,
+        ...(usingPoints ? { tender: "points" as const, pointEntryId } : {}),
         patientId: c.patientId,
         consultationId: c.id,
         kind,
@@ -1394,6 +1518,89 @@ export async function applyCommand(
         refund: "환불 등록",
         reversal: "금액 기록 정정 취소",
       }[kind];
+      break;
+    }
+    case "vip.policy": {
+      admin();
+      const value = z
+        .object({
+          enabled: z.boolean(),
+          minimumRevenue: amount.refine((x) => x > 0),
+          welcome: amount,
+          birthday: amount,
+          annualThreshold: amount.refine((x) => x > 0),
+          annualReward: amount,
+          referralReward: amount,
+          existingWelcome: z.literal(true),
+        })
+        .parse(p.policy);
+      const old = s.policies[0];
+      if (old) {
+        ensure(
+          cmd.baseRev === old.rev,
+          "VIP 설정이 변경되었습니다. 다시 확인하세요",
+          409,
+        );
+        old.vip = { ...value, startedAt: old.vip?.startedAt || now };
+        touch(old);
+      } else
+        s.policies.push({
+          ...base,
+          id: "grades",
+          grades: [],
+          vip: { ...value, startedAt: now },
+        });
+      text = "VIP 포인트 운영 설정 변경";
+      break;
+    }
+    case "vip.reconcile": {
+      admin();
+      text = "VIP 자동 혜택 확인";
+      break;
+    }
+    case "vip.card": {
+      need("grade.edit");
+      const account = find(s.vipAccounts);
+      ensure(!account.mergedInto, "병합된 VIP 카드입니다");
+      ensure(!account.cardIssuedAt, "이미 카드 발급을 기록했습니다", 409);
+      account.cardIssuedAt = now;
+      account.cardIssuedBy = user.id;
+      touch(account);
+      patientId = account.patientId;
+      text = "VIP 인증 카드 발급 기록";
+      break;
+    }
+    case "points.adjust": {
+      need("ledger.correct");
+      need("money.read");
+      const patient = patientFor(s, String(p.patientId));
+      ensure(
+        patient && !patient.archived && !patient.mergedInto,
+        "환자를 확인하세요",
+      );
+      const delta = z
+        .number()
+        .int()
+        .min(-1_000_000_000)
+        .max(1_000_000_000)
+        .refine((x) => x !== 0)
+        .parse(p.amount);
+      const reason = z.string().trim().min(1).max(1000).parse(p.reason);
+      ensure(
+        p.expectedBalance === pointBalance(s, patient.id),
+        "포인트 잔액이 변경되었습니다. 다시 확인하세요",
+        409,
+      );
+      s.pointEntries.push({
+        ...base,
+        patientId: patient.id,
+        amount: delta,
+        kind: "adjustment",
+        reason,
+        actorId: user.id,
+      });
+      patientId = patient.id;
+      text = "VIP 포인트 수동 조정: " + reason;
       break;
     }
     case "grade.policy": {
@@ -1425,7 +1632,7 @@ export async function applyCommand(
       if (old)
         ensure(cmd.baseRev === old.rev, "등급 기준이 변경되었습니다", 409);
       s.policies = [
-        { ...base, id: "grades", rev: (old?.rev || 0) + 1, grades },
+        { ...old, ...base, id: "grades", rev: (old?.rev || 0) + 1, grades },
       ];
       text = "환자 등급 기준 변경";
       break;
@@ -2271,6 +2478,18 @@ export async function applyCommand(
     default:
       throw new DomainError("지원하지 않는 작업입니다");
   }
+  if (
+    [
+      "patient.create",
+      "patient.update",
+      "patient.archive",
+      "patient.merge",
+      "ledger.create",
+      "vip.policy",
+      "vip.reconcile",
+    ].includes(cmd.type)
+  )
+    reconcileVip(s, now, cmd.id);
   s.events.push({
     ...base,
     id: cmd.id,

@@ -343,3 +343,38 @@ it("includes actual cash for interim consultations without inflating consultatio
     buildAnalytics(s, { from: "2026-02-31", to: "2026-03-31" }),
   ).toThrow();
 });
+
+it("uses points to settle outstanding without adding cash revenue or incentives", () => {
+  const s = fixture();
+  s.ledger.push({
+    ...s.ledger[0],
+    id: "points",
+    amount: 10000,
+    tender: "points",
+    method: "VIP 포인트",
+  });
+  s.ledger.push({
+    ...s.ledger[1],
+    id: "points-return",
+    originalId: "points",
+    amount: 2000,
+    tender: "points",
+    method: "VIP 포인트",
+  });
+  const r = buildAnalytics(s, period);
+  expect(r.totals).toMatchObject({
+    receipts: 18000,
+    refunds: 3000,
+    net: 15000,
+    outstanding: 7000,
+  });
+  expect(
+    incentiveRows(r, {
+      basis: "net",
+      defaultRate: 3,
+      floorZero: false,
+      rates: {},
+    }).reduce((n, x) => n + x.amount, 0),
+  ).toBe(450);
+  expect(ledgerAvailable(s, "consult", "receipt")).toBe(7000);
+});

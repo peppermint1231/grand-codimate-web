@@ -1,3 +1,4 @@
+import { pointBalance } from "../core/vipPoints";
 import { useState } from "react";
 import { activeLedger, ledgerAvailable } from "../core/domain";
 import { money, type State, type Patient } from "../core/model";
@@ -11,6 +12,9 @@ export function LedgerForm({
   patient: Patient;
   send: (...args: any[]) => any;
 }) {
+  const [method, setMethod] = useState("카드");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [kind, setKind] = useState<"receipt" | "refund">("receipt");
   const [selected, setSelected] = useState(""),
     [original, setOriginal] = useState("");
@@ -35,28 +39,54 @@ export function LedgerForm({
     ? original
     : receipts[0]?.id || "";
   const available = ledgerAvailable(s, consultationId, kind, originalId);
+  const originalReceipt = receipts.find((r) => r.id === originalId);
+  const isPoint =
+    kind === "receipt"
+      ? method === "VIP 포인트"
+      : originalReceipt?.tender === "points";
+  const balance = pointBalance(s, p.id);
+  const maximum =
+    kind === "receipt" && isPoint
+      ? Math.min(available, Math.max(0, balance))
+      : available;
   return (
     <form
       className="card"
       onSubmit={async (e) => {
         e.preventDefault();
         const data = Object.fromEntries(new FormData(e.currentTarget));
-        if (
-          await send("ledger.create", {
-            ...data,
-            kind,
-            consultationId,
-            ...(kind === "refund" ? { originalId } : {}),
-            amount: Number(full ? available : amount),
-            fullAmount: full,
-          })
-        ) {
-          setAmount("");
-          setFull(false);
+        setError("");
+        setSaving(true);
+        try {
+          if (
+            await send("ledger.create", {
+              ...data,
+              kind,
+              consultationId,
+              ...(kind === "refund" ? { originalId } : {}),
+              method: isPoint ? "VIP 포인트" : method,
+              amount: Number(full ? maximum : amount),
+              fullAmount: full && (!isPoint || maximum === available),
+            })
+          ) {
+            setAmount("");
+            setFull(false);
+          }
+        } catch (e) {
+          setError(
+            e instanceof Error ? e.message : "수납을 저장하지 못했습니다",
+          );
+        } finally {
+          setSaving(false);
         }
       }}
     >
       <h3>금액 기록</h3>
+      {error && (
+        <p role="alert" className="warning-panel">
+          {error}
+        </p>
+      )}
       <label className="field">
         구분
         <select
@@ -64,6 +94,8 @@ export function LedgerForm({
           value={kind}
           onChange={(e) => {
             setKind(e.target.value as typeof kind);
+            setMethod("카드");
+            setFull(false);
             setAmount("");
           }}
         >
@@ -101,6 +133,8 @@ export function LedgerForm({
             value={originalId}
             onChange={(e) => {
               setOriginal(e.target.value);
+              setMethod("카드");
+              setFull(false);
               setAmount("");
             }}
           >
@@ -109,7 +143,7 @@ export function LedgerForm({
             )}
             {receipts.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.date} · {money(r.amount)} · 환불 가능{" "}
+                {r.date} · {r.method} · {money(r.amount)} · 환불 가능{" "}
                 {money(ledgerAvailable(s, consultationId, "refund", r.id))}
               </option>
             ))}
@@ -123,10 +157,10 @@ export function LedgerForm({
             name="amount"
             type="number"
             min={1}
-            max={kind === "refund" ? available : undefined}
+            max={kind === "refund" || isPoint ? maximum : undefined}
             required
             readOnly={full}
-            value={full ? available : amount}
+            value={full ? maximum : amount}
             onChange={(e) => setAmount(e.target.value)}
           />
         </label>
@@ -134,13 +168,16 @@ export function LedgerForm({
           <input
             type="checkbox"
             checked={full}
-            disabled={!consultationId || available <= 0}
+            disabled={!consultationId || maximum <= 0}
             onChange={(e) => {
               setFull(e.target.checked);
-              setAmount(String(available));
+              setAmount(String(maximum));
             }}
           />
-          전액 {kind === "refund" ? "환불" : "수납"} · {money(available)}
+          {isPoint && kind === "receipt"
+            ? "사용 가능한 포인트 전액"
+            : `전액 ${kind === "refund" ? "환불" : "수납"}`}{" "}
+          · {money(maximum)}
         </label>
         <label className="field">
           처리일
@@ -155,11 +192,22 @@ export function LedgerForm({
         </label>
         <label className="field">
           방법
-          <select name="method">
+          <select
+            aria-label="방법"
+            name="method"
+            value={isPoint && kind === "refund" ? "VIP 포인트" : method}
+            disabled={kind === "refund" && isPoint}
+            onChange={(e) => {
+              setMethod(e.target.value);
+              setFull(false);
+              setAmount("");
+            }}
+          >
             <option>카드</option>
             <option>현금</option>
             <option>계좌이체</option>
             <option>기타</option>
+            {(kind === "receipt" || isPoint) && <option>VIP 포인트</option>}
           </select>
         </label>
         <label className="field">
@@ -167,12 +215,20 @@ export function LedgerForm({
           <input name="memo" required={kind === "refund"} />
         </label>
       </div>
+      {isPoint && (
+        <p className="small">
+          {kind === "refund"
+            ? "현금으로 환불되지 않으며 환자의 포인트로 반환됩니다."
+            : `보유 ${balance.toLocaleString()}P · 1P = 1원 · 미수납 ${available.toLocaleString()}원`}
+        </p>
+      )}
       <button
         className="primary"
         disabled={
+          saving ||
           !consultationId ||
           (kind === "refund" && !originalId) ||
-          (full && available <= 0)
+          (full && maximum <= 0)
         }
       >
         기록 확정

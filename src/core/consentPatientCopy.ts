@@ -1,3 +1,25 @@
+export const packageExpiryClause =
+  "패키지로 계약한 경우 기존 기본 사용기간은 결제일부터 1년이며, 기간 경과 후 잔여 횟수는 소멸됩니다.";
+const legacyPackageExpiryClause =
+  "패키지로 계약한 경우 기존 기본 사용기간은 결제일부터 1년이며, 기간 경과 후 잔여 횟수 이용이 제한될 수 있습니다. 개별 계약의 기간·연장·잔여분 처리와 중도 해지 시 정산 기준은 계약서에서 확인합니다. 사용기간 경과가 모든 잔액의 자동 소멸을 뜻하지는 않습니다.";
+// Match only known wording, allowing the optional editorial word and whitespace.
+// A clinic-specific duration or independently amended condition must not be erased.
+const phrasePattern = (text: string) =>
+  new RegExp(
+    text
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+")
+      .replace("기존\\s+", "(?:기존\\s+)?"),
+    "g",
+  );
+export function correctPackageExpiry(body: string): string {
+  return body
+    .replace(
+      phrasePattern(legacyPackageExpiryClause),
+      () => packageExpiryClause,
+    )
+    .replace(phrasePattern(packageExpiryClause), () => packageExpiryClause);
+}
 // Approved copy edits are exact substitutions, preserving unrelated clinic edits.
 export const patientConsentChecks = [
   "시술 목적·방법·부위와 사용하는 제품 또는 장비에 대해 설명을 들었습니다.",
@@ -160,6 +182,7 @@ const replacedChecks = [
 export function patientConsentBody(body: string): string {
   let next = body;
   for (const [from, to] of edits) next = next.replaceAll(from, () => to);
+  next = correctPackageExpiry(next);
   for (const text of removedParagraphs) {
     next = next
       .split("\n")

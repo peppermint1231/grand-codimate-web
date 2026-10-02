@@ -1,7 +1,7 @@
 {
-  "version": "0.13.9",
-  "versionCode": 62,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.9.apk",
-  "sha256": "fe5cc74b7b870cc62582a4a3eb1c940e893459f8c4df54454f239669d73f2bbe",
-  "notes": "동의서 환자용 문구 정리와 개정 초안. 서명 필수 확인 항목의 모두 동의·부분 선택·전체 해제 지원."
+  "version": "0.13.10",
+  "versionCode": 63,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.13.10.apk",
+  "sha256": "3e552a2083efcc0fc7f009c83a6597e7ccd2f387064bb1b4e63cd0fd3dd842d4",
+  "notes": "패키지 사용기간 조항의 문장 변형으로 발생한 개정 누락 수정. 개정 초안 19종 문구 재확인."
 }

@@ -1,4 +1,8 @@
-import { catalogApplyGuard, catalogApplyGuardSchema } from "./catalogApply";
+import {
+  catalogApplyGuard,
+  catalogApplyGuardSchema,
+  sameCatalogContent,
+} from "./catalogApply";
 import { productReviewIssues } from "./catalogProducts";
 import { insuranceInfoSchema } from "./insuranceCatalog";
 import { supplementDetailedConsentBody } from "./consentDetailedPrecautions";
@@ -1663,12 +1667,22 @@ export async function applyCommand(
       const candidate = structuredClone(p.catalog as Catalog);
       validateCatalog(candidate);
       const guard = catalogApplyGuardSchema.parse(p.guard);
-      ensure(
-        JSON.stringify(guard) ===
-          JSON.stringify(catalogApplyGuard(s, catalogBook(candidate))),
-        "다른 기기에서 단가표가 변경되었습니다. 최신 내용을 확인한 뒤 다시 저장하세요",
-        409,
-      );
+      const actualGuard = catalogApplyGuard(s, catalogBook(candidate));
+      if (JSON.stringify(guard) !== JSON.stringify(actualGuard)) {
+        const current = s.catalogs.find((c) => c.id === actualGuard.workingId);
+        // The previous response may have been lost after commit. Confirm identical
+        // content only; never replace genuinely different edits or a newer draft.
+        if (
+          actualGuard.publishedId !== guard.publishedId &&
+          current?.status === "published" &&
+          sameCatalogContent(current, candidate)
+        )
+          return s;
+        throw new DomainError(
+          "다른 기기에서 단가표가 변경되었습니다. 작성 내용은 유지됩니다. 최신 내용을 확인한 뒤 다시 저장하세요",
+          409,
+        );
+      }
       const problems = candidate.products
         .filter((product) => product.active)
         .flatMap((product) => {

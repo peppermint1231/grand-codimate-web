@@ -36,9 +36,17 @@ it("rejects stale saves after either a publication or an edit, and enforces perm
     "다른 기기",
   );
   const next = await applyCommand(s, catalogAdmin, cmd);
-  await expect(
-    applyCommand(next, catalogAdmin, { ...cmd, id: crypto.randomUUID() }),
-  ).rejects.toThrow("다른 기기");
+  const confirmed = await applyCommand(next, catalogAdmin, {
+    ...cmd,
+    id: crypto.randomUUID(),
+  });
+  expect(confirmed).toEqual(next);
+  const different = structuredClone(cmd);
+  different.id = crypto.randomUUID();
+  different.payload.catalog.products[0].name += " 다름";
+  await expect(applyCommand(next, catalogAdmin, different)).rejects.toThrow(
+    "다른 기기",
+  );
   await expect(
     applyCommand(
       s,

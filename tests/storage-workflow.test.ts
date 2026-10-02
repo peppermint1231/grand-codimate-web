@@ -152,7 +152,7 @@ async function fixture() {
         },
       }),
     );
-  return { db, key, request, cmd, upload, put, files };
+  return { db, key, request, cmd, upload, put, files, clinic };
 }
 it("patient photo names avoid collisions, upload retries are idempotent, and optional PDF-free record retains annotation selection", async () => {
   const f = await fixture();
@@ -610,8 +610,136 @@ it("flushes catalogue changes without loading the entire catalogue history a sec
     query.mock.calls.filter(
       ([sql]) => sql === "SELECT section,value FROM entities",
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   expect(
     f.db.prepare("SELECT id FROM operations WHERE done=0").all(),
   ).toHaveLength(0);
 });
+
+it("bounds catalog saves to current bodies and revision headers even with a large archive", async () => {
+  const f = await fixture();
+  const { threeCatalogs } = await import("./fixtures/catalogs");
+  const { catalogApplyGuard } = await import("../src/core/catalogApply");
+  const { emptyState } = await import("../src/core/model");
+  const catalogs = threeCatalogs();
+  // 60 historical bodies, each with 250 KB of source material. Keep them in SQL,
+  // not in a fixture array, so the test can inspect the command's retained size.
+  for (let i = 0; i < 60; i++) {
+    const c = {
+      ...catalogs[0],
+      id: "archive-" + i,
+      version: "old-" + i,
+      updatedAt: "2020-01-01",
+      publishedAt: "2020-01-01",
+      references: [{ sheet: "원본", rows: [["source-".repeat(35000)]] }],
+    };
+    f.db
+      .prepare("INSERT INTO entities VALUES(?,?,?)")
+      .run("catalogs", c.id, await seal(c, f.key));
+    const r = {
+      id: "revision-" + i,
+      rev: 1,
+      createdAt: "2020-01-01",
+      updatedAt: "2020-01-01",
+      catalogId: c.id,
+      book: "미용",
+      actorId: "test",
+      action: "보관",
+      changes: [],
+      snapshot: c,
+    };
+    f.db
+      .prepare("INSERT INTO entities VALUES(?,?,?)")
+      .run("catalogRevisions", r.id, await seal(r, f.key));
+  }
+  for (const c of catalogs)
+    f.db
+      .prepare("INSERT INTO entities VALUES(?,?,?)")
+      .run("catalogs", c.id, await seal(c, f.key));
+  const c = structuredClone(catalogs[0]);
+  c.status = "draft";
+  c.products[0].name = "변경한 메뉴";
+  const payload = {
+    catalog: c,
+    guard: catalogApplyGuard({ ...emptyState(), catalogs }, "미용"),
+  };
+  const operationId = crypto.randomUUID();
+  const retained = await (f.clinic as any).commandCatalogState({
+    type: "catalog.apply",
+    id: operationId,
+    payload,
+  });
+  expect(retained.catalogs.filter((x: any) => x.products.length)).toHaveLength(
+    3,
+  );
+  expect(
+    retained.catalogRevisions.every((r: any) => !r.snapshot.products),
+  ).toBe(true);
+  expect(retained.patients).toHaveLength(0);
+  expect(JSON.stringify(retained).length).toBeLessThan(100000);
+  const response = await f.cmd(
+    "catalog.apply",
+    payload,
+    "request",
+    undefined,
+    operationId,
+  );
+  expect(response.status, await response.clone().text()).toBe(200);
+  const saved = ((await response.json()) as any).changes.find(
+    (x: any) => x.section === "catalogs",
+  ).value;
+  expect(saved.products[0].name).toBe("변경한 메뉴");
+  const revisionCount = f.db
+    .prepare(
+      "SELECT count(*) AS n FROM entities WHERE section='catalogRevisions'",
+    )
+    .get()!.n;
+  // Simulate losing the acknowledgement: same command receipt, then an old app
+  // retrying identical content with a fresh command ID.
+  const replay = await f.cmd(
+    "catalog.apply",
+    payload,
+    "request",
+    undefined,
+    operationId,
+  );
+  expect(((await replay.json()) as any).replayed).toBe(true);
+  const confirm = await f.cmd("catalog.apply", payload, "new-request");
+  expect(confirm.status, await confirm.clone().text()).toBe(200);
+  expect(
+    ((await confirm.json()) as any).changes.find(
+      (x: any) => x.section === "catalogs",
+    ).id,
+  ).toBe(operationId);
+  expect(
+    f.db
+      .prepare(
+        "SELECT count(*) AS n FROM entities WHERE section='catalogRevisions'",
+      )
+      .get()!.n,
+  ).toBe(revisionCount);
+  const workspace = (await (
+    await f.request("/state?view=workspace")
+  ).json()) as any;
+  expect(
+    workspace.state.catalogs.filter((x: any) => x.products.length),
+  ).toHaveLength(3);
+  const restoreState = await (f.clinic as any).commandCatalogState({
+    id: crypto.randomUUID(),
+    type: "catalog.restore",
+    entityId: saved.id,
+    payload: { revisionId: "revision-5" },
+  });
+  expect(
+    restoreState.catalogRevisions.find((r: any) => r.id === "revision-5")
+      .snapshot.references[0].rows[0][0].length,
+  ).toBeGreaterThan(200000);
+  expect(
+    restoreState.catalogRevisions.filter((r: any) => r.snapshot.products),
+  ).toHaveLength(1);
+  const changed = structuredClone(payload);
+  changed.catalog.products[0].name = "다른 내용";
+  expect((await f.cmd("catalog.apply", changed, "other-request")).status).toBe(
+    409,
+  );
+}, 30000);

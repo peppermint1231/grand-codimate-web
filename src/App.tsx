@@ -1,3 +1,4 @@
+import { CatalogSaveRetry } from "./lib/catalogSaveRetry";
 import { ConsentRecommendations } from "./components/ConsentRecommendations";
 import {
   catalogCategoryView,
@@ -574,8 +575,10 @@ export function App() {
       if (!e.status || e.status >= 500) {
         if (!vaultEnabled())
           throw new Error(
-            e.message +
-              " · 기기 보관을 설정하지 않아 대기열에 저장하지 못했습니다. 화면 내용을 유지하세요.",
+            c.type.startsWith("catalog.")
+              ? "서버 저장 결과를 확인하지 못했습니다. 편집 내용은 이 화면에 유지됩니다. 같은 내용으로 저장을 다시 누르면 기존 작업부터 확인합니다. 기기 보관이 꺼져 있으므로 확인 전에는 화면을 닫거나 새로고침하지 마세요."
+              : e.message +
+                  " · 기기 보관을 설정하지 않아 대기열에 저장하지 못했습니다. 화면 내용을 유지하세요.",
           );
         const queue = [
           ...((await vaultRead<Command[]>("pending")) || pending).filter(
@@ -715,6 +718,7 @@ export function App() {
       document.removeEventListener("visibilitychange", run);
     };
   }, [user?.id, pending.length]);
+  const catalogSaveRetry = useRef(new CatalogSaveRetry());
   const send = (
     type: string,
     payload: Record<string, unknown>,
@@ -722,7 +726,10 @@ export function App() {
     baseRev?: number,
   ) =>
     withProgress("저장 중입니다", async () => {
-      const c = makeCommand(type, payload, entityId, baseRev);
+      const c = catalogSaveRetry.current.get(
+        makeCommand(type, payload, entityId, baseRev),
+        user!.id,
+      );
       const current = stateRef.current;
       const target = current.consultations.find((x) => x.id === entityId);
       if (
@@ -761,7 +768,15 @@ export function App() {
             "기기 저장 자료를 먼저 전송해야 합니다. 연결 상태와 복구 자료를 확인하세요.",
           );
       }
-      return execute(c);
+      try {
+        const ok = await execute(c);
+        if (ok) catalogSaveRetry.current.forget(c.id);
+        return ok;
+      } catch (error) {
+        const status = (error as { status?: number }).status;
+        if (status && status < 500) catalogSaveRetry.current.forget(c.id);
+        throw error;
+      }
     });
   const sync = () =>
     work(async () => {

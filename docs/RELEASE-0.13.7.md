@@ -39,3 +39,10 @@
 추가 브라우저 검증: 1440/768/390px에서 옵션별 멤버십 혜택 저장, 옵션 삭제 취소·마지막 옵션 삭제·되돌리기, 추천 동의서 2개 선택과 개별 체크·서명·다음 양식 이동을 완료했다. 실제 환자 데이터는 사용하지 않았다.
 
 APK 0.13.7 / versionCode 60: 18,371,487 bytes, SHA-256 `0551abe2c41372143e84b5af72ab1410c3cf2be1f40a1a4318bf5732577cf55c`. 웹 빌드 48개 파일과 APK 내부 웹 자산이 바이트 단위로 일치한다.
+
+## 운영 배포 확인
+
+- PR #4 병합: `4c5975ffd214901b7f7b01cfb13bafc7536cf7c0` (기능 커밋 `e4637740f86f25558a21776562dbcc804e944d58`, 로컬 `fd9b32b`). GitHub CI 및 Cloudflare Workers 빌드 성공.
+- 운영 `/api/health` 0.13.7, 웹 자산 48개 전체 일치, 공개 APK 실제 다운로드 SHA-256 일치.
+- 로그인한 운영 브라우저에서 홈페이지 전체 갱신 미리보기 완료: 101개 배너·508개 항목, 소스 요청 112회, 재시도 0회, 156.822초. 신규 168/동일 340/변경 0/이전 항목 제거 후보 77. 적용 명령 0회, 브라우저 오류 0개. SSOT 동기화는 실제로 적용하지 않았다.
+- 기록: `artifacts/deployment-0.13.7.json`, `artifacts/release-0137-assets.json`, `artifacts/homepage-live-0137.json`, `artifacts/consultation-pricing-browser-0137.json`, `artifacts/homepage-resume-browser-0137.json`.

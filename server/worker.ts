@@ -1,3 +1,4 @@
+import { validDay, validRequestedSlot } from "../src/core/appointments";
 import { version as appVersion } from "../package.json";
 import { patientConcerns } from "../src/core/patientDiscovery";
 import {
@@ -149,6 +150,9 @@ export default {
 } satisfies ExportedHandler<Env>;
 export class Clinic extends DurableObject<Env> {
   private queue: Promise<unknown> = Promise.resolve();
+  // A newly issued form on this instance cannot have an unknown remote receipt.
+  // After an isolate restart, fall back to remote recovery for safe retries.
+  private inquiryEpoch = crypto.randomUUID();
   private sql: SqlStorage;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -453,6 +457,9 @@ export class Clinic extends DurableObject<Env> {
         await store.flush();
       } finally {
         const queued =
+          this.sql
+            .exec("SELECT id FROM inquiries WHERE remoteId='' LIMIT 1")
+            .toArray().length ||
           this.sql
             .exec("SELECT id FROM access_log WHERE backedUp=0 LIMIT 1")
             .toArray().length ||
@@ -1054,7 +1061,11 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/public/catalog" && req.method === "GET") {
       const token = await seal(
-        { id: crypto.randomUUID(), expires: Date.now() + 3600_000 },
+        {
+          id: crypto.randomUUID(),
+          expires: Date.now() + 3600_000,
+          epoch: this.inquiryEpoch,
+        },
         this.env.ENCRYPTION_KEY,
       );
       const state = await this.catalogState();
@@ -1062,12 +1073,16 @@ export class Clinic extends DurableObject<Env> {
         products: publicProducts(state),
         categories: publicCategories(state),
         patientConcerns,
+        closedDates:
+          (await this.secret<{ dates: string[] }>("booking-closures"))?.dates ||
+          [],
         token,
       });
     }
     if (path === "/api/public/inquiries" && req.method === "POST") {
       ensure(
-        !(await this.secret("restore-required")),
+        !(await this.secret("restore-required")) &&
+          !this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length,
         "접수 준비 중입니다. 잠시 후 다시 시도하세요",
         503,
       );
@@ -1075,10 +1090,22 @@ export class Clinic extends DurableObject<Env> {
       const text = await req.text();
       ensure(text.length < 64_000, "입력 내용이 너무 깁니다", 413);
       const input = inquiryInput.parse(JSON.parse(text));
-      const ticket = await open<{ id: string; expires: number }>(
-        input.token,
-        this.env.ENCRYPTION_KEY,
-      );
+      if (input.visitType)
+        ensure(
+          validRequestedSlot(
+            input.requestedDate || "",
+            input.requestedTime || "",
+            Date.now(),
+            (await this.secret<{ dates: string[] }>("booking-closures"))
+              ?.dates || [],
+          ),
+          "휴진일 또는 선택할 수 없는 시간입니다. 다른 일정을 선택해주세요",
+        );
+      const ticket = await open<{
+        id: string;
+        expires: number;
+        epoch?: string;
+      }>(input.token, this.env.ENCRYPTION_KEY);
       ensure(
         ticket.expires > Date.now() && /^[\w-]{8,100}$/.test(ticket.id),
         "입력 시간이 만료되었습니다. 새로고침 후 다시 접수하세요",
@@ -1087,14 +1114,16 @@ export class Clinic extends DurableObject<Env> {
       const store = await this.inquiryStore(),
         digest = await sha(JSON.stringify({ ...input, token: undefined }));
       const previous =
-        (await store.get(ticket.id)) || (await store.recover(ticket.id));
+        (await store.get(ticket.id)) ||
+        (ticket.epoch !== this.inquiryEpoch
+          ? await store.recover(ticket.id)
+          : undefined);
       if (previous) {
         ensure(
           previous.digest === digest,
           "이미 접수한 내용입니다. 새 접수를 시작하세요",
           409,
         );
-        await store.save(previous);
         return json({ ok: true, receipt: ticket.id });
       }
       const rateKey =
@@ -1166,32 +1195,60 @@ export class Clinic extends DurableObject<Env> {
         };
       });
       const now = new Date().toISOString();
-      if (!(await this.ctx.storage.getAlarm()))
-        await this.ctx.storage.setAlarm(Date.now() + 3600_000);
-      await store.save({
-        id: ticket.id,
-        createdAt: now,
-        expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString(),
-        status: "new",
-        digest,
-        person: input.person,
-        selections,
-        concerns: input.concerns,
-        concernLabels: chosenCategories.map((c) => c!.name),
-        answerLabels: input.answers.map(
-          (id) =>
-            chosenCategories
-              .flatMap((c) => c!.questions)
-              .find((q) => q.id === id)!.label,
-        ),
-        answers: input.answers,
-        consent: {
-          personal: true,
-          sensitive: true,
-          version: "2026-09-21",
-          at: now,
+      const backupAt = Date.now() + 5_000;
+      const existingAlarm = await this.ctx.storage.getAlarm();
+      if (!existingAlarm || existingAlarm > backupAt)
+        await this.ctx.storage.setAlarm(backupAt);
+      await store.save(
+        {
+          id: ticket.id,
+          createdAt: now,
+          expiresAt: new Date(
+            Math.max(
+              Date.now(),
+              Date.parse((input.requestedDate || "") + "T00:00:00+09:00") || 0,
+            ) +
+              30 * 86400_000,
+          ).toISOString(),
+          status: "new",
+          rev: 1,
+          visitType: input.visitType,
+          requestedDate: input.requestedDate,
+          requestedTime: input.requestedTime,
+          requests: input.requests,
+          ...(input.requestedDate && input.requestedTime
+            ? {
+                schedule: {
+                  date: input.requestedDate,
+                  time: input.requestedTime,
+                  coordinatorId: "",
+                  confirmed: false,
+                  updatedBy: "patient",
+                  updatedAt: now,
+                },
+              }
+            : {}),
+          digest,
+          person: input.person,
+          selections,
+          concerns: input.concerns,
+          concernLabels: chosenCategories.map((c) => c!.name),
+          answerLabels: input.answers.map(
+            (id) =>
+              chosenCategories
+                .flatMap((c) => c!.questions)
+                .find((q) => q.id === id)!.label,
+          ),
+          answers: input.answers,
+          consent: {
+            personal: true,
+            sensitive: true,
+            version: input.visitType ? "2026-10-06" : "2026-09-21",
+            at: now,
+          },
         },
-      });
+        true,
+      );
       return json({ ok: true, receipt: ticket.id });
     }
     const user = await this.user(req);
@@ -1241,8 +1298,10 @@ export class Clinic extends DurableObject<Env> {
       );
       if (req.method === "GET") return json({ job: await store.status() });
       const b = await body();
-      if (b.action === "start")
+      if (b.action === "start") {
+        await (await this.inquiryStore()).flush();
         return json({ job: await store.start(user.id) });
+      }
       ensure(typeof b.id === "string", "복구 작업 ID가 필요합니다");
       if (b.action === "step") return json({ job: await store.step(b.id) });
       if (b.action === "cancel") {
@@ -1411,9 +1470,156 @@ export class Clinic extends DurableObject<Env> {
       );
       return json(await fetchEventSource(url.searchParams));
     }
-    if (path === "/api/inquiries" && req.method === "GET")
-      return json({ inquiries: await (await this.inquiryStore()).list() });
+    if (path === "/api/inquiries" && req.method === "GET") {
+      ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
+      const patients = (await this.state(false, ["patients"])).patients;
+      const appointments = [];
+      for await (const row of this.entityRows("section='consultations'")) {
+        const c = await open<import("../src/core/model").Consultation>(
+          row.value,
+          this.env.ENCRYPTION_KEY,
+        );
+        const patient = patients.find((p) => p.id === c.patientId);
+        if (
+          !c.intakeSource ||
+          !c.appointment ||
+          !patient ||
+          patient.archived ||
+          patient.mergedInto
+        )
+          continue;
+        appointments.push({
+          id: c.id,
+          patientId: c.patientId,
+          name: patient.name,
+          date: c.appointment.slice(0, 10),
+          time: c.appointment.slice(11, 16),
+          coordinatorId: c.ownerId,
+          completed: c.status !== "H",
+          confirmed: c.attendance === "예약" || c.attendance === "방문",
+          cancelled: c.cancelled,
+        });
+      }
+      return json({
+        closures: (await this.secret("booking-closures")) || {
+          rev: 0,
+          dates: [],
+        },
+        inquiries: await (await this.inquiryStore()).list(),
+        appointments,
+      });
+    }
+    if (path === "/api/inquiries/closures" && req.method === "POST") {
+      ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
+      const b = await body();
+      ensure(
+        typeof b.date === "string" &&
+          validDay(b.date) &&
+          ["add", "remove"].includes(b.action),
+        "휴진 날짜를 확인하세요",
+      );
+      const current = (await this.secret<{ rev: number; dates: string[] }>(
+        "booking-closures",
+      )) || { rev: 0, dates: [] };
+      ensure(
+        b.rev === current.rev,
+        "휴진일이 변경되었습니다. 새로고침 후 다시 저장하세요",
+        409,
+      );
+      const dates =
+        b.action === "add"
+          ? [...new Set([...current.dates, b.date])].sort()
+          : current.dates.filter((d) => d !== b.date);
+      ensure(dates.length <= 366, "휴진일은 최대 366일까지 등록할 수 있습니다");
+      const closures = { rev: current.rev + 1, dates };
+      await this.setSecret("booking-closures", closures);
+      await this.auditAccess(user.id, "inquiry.closure." + b.action, b.date);
+      return json({ closures });
+    }
+    if (path === "/api/inquiries/schedule" && req.method === "POST") {
+      ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
+      ensure(
+        !(await this.secret("restore-required")),
+        "복구를 마친 뒤 일정을 변경하세요",
+        409,
+      );
+      const b = await body();
+      ensure(typeof b.id === "string", "접수 ID를 확인하세요");
+      const store = await this.inquiryStore(),
+        record = await store.get(b.id);
+      ensure(
+        record && Date.parse(record.expiresAt) > Date.now(),
+        "접수가 없거나 만료되었습니다",
+        404,
+      );
+      ensure(
+        record.status !== "converted",
+        "이미 상담으로 연결되었습니다. 해당 상담에서 변경하세요",
+        409,
+      );
+      ensure(
+        b.rev === (record.rev || 0),
+        "다른 직원이 변경했습니다. 새로고침 후 다시 확인하세요",
+        409,
+      );
+      ensure(
+        ["save", "confirm", "cancel", "reopen"].includes(b.action),
+        "일정 작업을 확인하세요",
+      );
+      if (b.action !== "cancel") {
+        ensure(
+          typeof b.date === "string" &&
+            typeof b.time === "string" &&
+            validRequestedSlot(
+              b.date,
+              b.time,
+              Date.now(),
+              (await this.secret<{ dates: string[] }>("booking-closures"))
+                ?.dates || [],
+            ),
+          "상담 가능한 날짜와 시간을 선택하세요",
+        );
+        const owner = (await this.state(false, ["users"])).users.find(
+          (u) => u.id === b.coordinatorId && u.active,
+        );
+        ensure(!b.coordinatorId || owner, "활성 상담자를 선택하세요");
+        ensure(
+          b.action !== "confirm" || owner,
+          "일정 확정 전 상담자를 배정하세요",
+        );
+      }
+      const next = {
+        ...record,
+        rev: (record.rev || 0) + 1,
+        status:
+          b.action === "cancel" ? ("cancelled" as const) : ("new" as const),
+        ...(b.action !== "cancel"
+          ? {
+              schedule: {
+                date: b.date,
+                time: b.time,
+                coordinatorId: b.coordinatorId || "",
+                confirmed: b.action === "confirm",
+                updatedBy: user.id,
+                updatedAt: new Date().toISOString(),
+              },
+              expiresAt: new Date(
+                Math.max(Date.now(), Date.parse(b.date + "T00:00:00+09:00")) +
+                  30 * 86400000,
+              ).toISOString(),
+            }
+          : {}),
+      };
+      await store.save(next);
+      await this.auditAccess(
+        user.id,
+        "inquiry.schedule." + b.action,
+        record.id,
+      );
+      return json({ inquiry: next });
+    }
     if (path === "/api/inquiries/convert" && req.method === "POST") {
+      ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
       ensure(
         !(await this.secret("restore-required")),
         "원본에서 재구축한 뒤 접수를 연결하세요",
@@ -1441,6 +1647,11 @@ export class Clinic extends DurableObject<Env> {
         inquiry && Date.parse(inquiry.expiresAt) > Date.now(),
         "접수가 없거나 보관 기간이 만료되었습니다",
         404,
+      );
+      ensure(
+        inquiry.status !== "cancelled",
+        "취소된 요청은 다시 접수한 뒤 상담을 시작하세요",
+        409,
       );
       await this.flush();
       const before = await this.state(),
@@ -1509,6 +1720,12 @@ export class Clinic extends DurableObject<Env> {
           );
         const memo = [
           "맞춤 시술 찾기 접수",
+          inquiry.visitType === "first"
+            ? "처음 방문"
+            : inquiry.visitType === "returning"
+              ? "재방문"
+              : "",
+          inquiry.requests ? "환자 요청사항: " + inquiry.requests : "",
           ...labels,
           ...answers,
           ...inquiry.selections.map(
@@ -1531,6 +1748,30 @@ export class Clinic extends DurableObject<Env> {
             catalogVersion: current.catalogVersion,
           },
         });
+        if (
+          inquiry.schedule?.coordinatorId &&
+          inquiry.schedule.coordinatorId !== user.id
+        ) {
+          after = await applyCommand(after, user, {
+            id: inquiry.id + "-owner",
+            type: "consultation.owner",
+            entityId: consultationId,
+            baseRev: after.consultations.find((c) => c.id === consultationId)!
+              .rev,
+            payload: {
+              ownerId: inquiry.schedule.coordinatorId,
+              reason: "맞춤 시술 찾기 일정 배정",
+            },
+          });
+        }
+        const booked = after.consultations.find(
+          (c) => c.id === consultationId,
+        )!;
+        if (inquiry.schedule) {
+          booked.appointment =
+            inquiry.schedule.date + "T" + inquiry.schedule.time;
+          booked.attendance = inquiry.schedule.confirmed ? "예약" : "미정";
+        }
         after.consultations.find((c) => c.id === consultationId)!.intakeSource =
           {
             receiptId: inquiry.id,
@@ -2273,6 +2514,7 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/restore" && req.method === "POST") {
       executive();
+      await (await this.inquiryStore()).flush();
       ensure(
         this.sql.exec("SELECT id FROM operations WHERE done=0").toArray()
           .length === 0,

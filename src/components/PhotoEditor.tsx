@@ -1,3 +1,5 @@
+import { stylusErasing } from "../core/stylus";
+import { StrokeWidth } from "./StrokeWidth";
 import { useAppBack } from "../lib/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -352,6 +354,10 @@ export function PhotoEditor({
   const canvas = useRef<HTMLCanvasElement>(null),
     image = useRef<HTMLImageElement | null>(null),
     transform = useRef(new DOMMatrix());
+  const [temporaryEraser, setTemporaryEraser] = useState(false);
+  const stylusGesture = useRef(false),
+    stylusBase = useRef<Photo | null>(null),
+    activePen = useRef<number | null>(null);
   const drawing = useRef<Annotation | null>(null),
     pan = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null),
     space = useRef(false),
@@ -533,6 +539,10 @@ export function PhotoEditor({
     setSelectedId(null);
     setTextAnchor(null);
     pointers.current.clear();
+    stylusGesture.current = false;
+    stylusBase.current = null;
+    activePen.current = null;
+    setTemporaryEraser(false);
   }, [photo.id]);
   const commit = (next: Photo) => {
     if (readonly) return;
@@ -775,6 +785,8 @@ export function PhotoEditor({
   };
   const pointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!image.current || frame) return;
+    if (e.pointerType === "touch" && activePen.current !== null) return;
+    if (e.pointerType === "pen") activePen.current = e.pointerId;
     e.preventDefault();
     e.currentTarget
       .closest<HTMLElement>(".photo-editor")
@@ -785,6 +797,9 @@ export function PhotoEditor({
       multi.current = true;
       drawing.current = null;
       erasing.current = null;
+      stylusGesture.current = false;
+      stylusBase.current = null;
+      setTemporaryEraser(false);
       pan.current = null;
       dragging.current = null;
       clickAction.current = null;
@@ -794,6 +809,14 @@ export function PhotoEditor({
     }
     if (multi.current) return;
     primaryPointer.current = e.pointerId;
+    if (!readonly && stylusErasing(e)) {
+      stylusGesture.current = true;
+      stylusBase.current = photo;
+      erasing.current = photo;
+      setTemporaryEraser(true);
+      erase(e);
+      return;
+    }
     if (tool === "pan" || space.current || e.button === 1 || e.button === 2) {
       pan.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
       return;
@@ -875,6 +898,55 @@ export function PhotoEditor({
       return;
     }
     if (primaryPointer.current !== e.pointerId) return;
+    if (
+      !readonly &&
+      e.pointerType === "pen" &&
+      (stylusErasing(e) || stylusGesture.current)
+    ) {
+      if (stylusErasing(e) || tool === "erase") {
+        if (!erasing.current) {
+          const base = stylusBase.current || photo;
+          erasing.current =
+            drawing.current && tool !== "crop"
+              ? { ...base, annotations: [...base.annotations, drawing.current] }
+              : base;
+          drawing.current = null;
+          pan.current = null;
+          dragging.current = null;
+          clickAction.current = null;
+        }
+        stylusGesture.current = true;
+        setTemporaryEraser(stylusErasing(e));
+        erase(e);
+        stylusBase.current = erasing.current;
+        return;
+      }
+      if (erasing.current) {
+        stylusBase.current = erasing.current;
+        erasing.current = null;
+        drawing.current = null;
+        setTemporaryEraser(false);
+      }
+      const base = stylusBase.current || photo;
+      if (["pen", "arrow", "rect", "ellipse", "mosaic"].includes(tool)) {
+        if (!drawing.current)
+          drawing.current = {
+            id: crypto.randomUUID(),
+            tool: tool as Annotation["tool"],
+            color,
+            width,
+            opacity: opacity / 100,
+            dashed,
+            font,
+            authorId: userId,
+            points: [point(e)],
+          };
+        else if (tool === "pen") drawing.current.points.push(point(e));
+        else drawing.current.points = [drawing.current.points[0], point(e)];
+        draw({ ...base, annotations: [...base.annotations, drawing.current] });
+      } else draw(base);
+      return;
+    }
     if (pan.current) {
       const r = e.currentTarget.getBoundingClientRect();
       setOffset({
@@ -942,6 +1014,7 @@ export function PhotoEditor({
     cancelled = false,
   ) => {
     pointers.current.delete(e.pointerId);
+    if (activePen.current === e.pointerId) activePen.current = null;
     if (multi.current) {
       if (pointers.current.size >= 2)
         pinch.current = { ...pair(), zoom: Math.max(1.25, zoom), ...offset };
@@ -963,6 +1036,22 @@ export function PhotoEditor({
     erasing.current = null;
     dragging.current = null;
     clickAction.current = null;
+    setTemporaryEraser(false);
+    if (stylusGesture.current) {
+      const base = erased || stylusBase.current || photo;
+      stylusGesture.current = false;
+      stylusBase.current = null;
+      if (cancelled) {
+        draw();
+        return;
+      }
+      const next = a
+        ? { ...base, annotations: [...base.annotations, a] }
+        : base;
+      if (next !== photo) commit(next);
+      else draw();
+      return;
+    }
     if (cancelled) {
       draw();
       return;
@@ -1104,11 +1193,12 @@ export function PhotoEditor({
             <button
               key={value}
               disabled={!!frame || (readonly && value !== "pan")}
-              aria-pressed={tool === value}
+              aria-pressed={(temporaryEraser ? "erase" : tool) === value}
               aria-label={name}
               title={`${name} (${key})`}
               className={
-                "editor-tool-icon " + (tool === value ? "selected" : "")
+                "editor-tool-icon " +
+                ((temporaryEraser ? "erase" : tool) === value ? "selected" : "")
               }
               onClick={() => {
                 setTool(value);
@@ -1137,17 +1227,13 @@ export function PhotoEditor({
             <option value="dashed">점선</option>
           </select>
         </label>
-        <label>
-          굵기
-          <input
-            aria-label="주석 굵기"
-            type="range"
-            min={1}
-            max={30}
-            value={width}
-            onChange={(e) => setWidth(+e.target.value)}
-          />
-        </label>
+        <StrokeWidth value={width} onChange={setWidth} color={color} />
+        {temporaryEraser && (
+          <span className="stylus-erase-indicator" role="status">
+            <Eraser size={18} />
+            S펜 버튼 · 지우개
+          </span>
+        )}
         <label>
           투명도 {Math.round(100 - opacity)}%
           <input
@@ -1309,17 +1395,12 @@ export function PhotoEditor({
               </label>
               {styleOpen && (
                 <>
-                  <label>
-                    굵기
-                    <input
-                      aria-label="설정 굵기"
-                      type="range"
-                      min={1}
-                      max={30}
-                      value={width}
-                      onChange={(e) => setWidth(+e.target.value)}
-                    />
-                  </label>
+                  <StrokeWidth
+                    value={width}
+                    onChange={setWidth}
+                    color={color}
+                    label="설정 굵기"
+                  />
                   <label>
                     <input
                       type="checkbox"

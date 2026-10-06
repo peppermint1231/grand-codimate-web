@@ -39,7 +39,7 @@ const date = Array.from({ length: 15 }, (_, i) =>
 const browser = await chromium.launch({ args: ["--no-sandbox"] });
 const results: any[] = [];
 try {
-  for (const width of [1440, 768, 390]) {
+  for (const width of process.env.STYLUS_ONLY ? [] : [1440, 768, 390]) {
     const page = await browser.newPage({ viewport: { width, height: 1100 } }),
       errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -399,7 +399,6 @@ try {
   ).toHaveAttribute("aria-pressed", "true");
   await page.waitForTimeout(500);
   await canvas.scrollIntoViewIfNeeded();
-  const b = (await canvas.boundingBox())!;
   const cdp = await page.context().newCDPSession(page);
   const pen = async (
     type: "mousePressed" | "mouseReleased" | "mouseMoved",
@@ -407,8 +406,10 @@ try {
     y: number,
     button: "left" | "right" | "none" = "left",
     buttons = 1,
-  ) =>
-    cdp.send("Input.dispatchMouseEvent", {
+  ) => {
+    if (type === "mousePressed") await canvas.scrollIntoViewIfNeeded();
+    const b = (await canvas.boundingBox())!;
+    return cdp.send("Input.dispatchMouseEvent", {
       type,
       x: b.x + b.width * x,
       y: b.y + b.height * y,
@@ -417,6 +418,56 @@ try {
       pointerType: "pen",
       clickCount: type === "mousePressed" ? 1 : 0,
     });
+  };
+  const nativeButton = (erasing: boolean) =>
+    page.evaluate(
+      (erasing) =>
+        window.dispatchEvent(
+          new CustomEvent("codimate:stylus", { detail: { erasing } }),
+        ),
+      erasing,
+    );
+  const save = () =>
+    page.getByRole("button", { name: "사진 편집 저장", exact: true }).click();
+  const savedIds = () =>
+    page.evaluate(() =>
+      (window as any).__savedPhoto?.annotations.map((a: any) => a.id),
+    );
+  // Reproduce Galaxy Tab: the bridge reports the button, but Pointer Events
+  // still contain only the pen-tip contact bit (buttons=1).
+  await page.getByRole("button", { name: "화살표", exact: true }).click();
+  await nativeButton(true);
+  await pen("mousePressed", 0.5, 0.5, "left", 1);
+  await pen("mouseMoved", 0.5, 0.25, "none", 1);
+  await pen("mouseReleased", 0.5, 0.25, "left", 0);
+  await nativeButton(false);
+  await expect(
+    page.getByRole("button", { name: "화살표", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await save();
+  await expect.poll(savedIds).toEqual(["protected"]);
+  await page.getByRole("button", { name: "실행취소", exact: true }).click();
+  await save();
+  await expect.poll(savedIds).toEqual(["own", "protected"]);
+  await page.getByRole("button", { name: "펜", exact: true }).click();
+  // Also handle a button press/release while the tip stays on the screen.
+  await pen("mousePressed", 0.3, 0.7, "left", 1);
+  await pen("mouseMoved", 0.35, 0.7, "none", 1);
+  await nativeButton(true);
+  await pen("mouseMoved", 0.5, 0.5, "none", 1);
+  await pen("mouseMoved", 0.5, 0.25, "none", 1);
+  await nativeButton(false);
+  await pen("mouseMoved", 0.6, 0.7, "none", 1);
+  await pen("mouseMoved", 0.7, 0.7, "none", 1);
+  await pen("mouseReleased", 0.7, 0.7, "left", 0);
+  await save();
+  const nativeIds = await savedIds();
+  assert.ok(!nativeIds.includes("own"));
+  assert.ok(nativeIds.includes("protected"));
+  assert.equal(nativeIds.length, 3); // protected annotation and two separate pen strokes
+  await page.getByRole("button", { name: "실행취소", exact: true }).click();
+  await save();
+  await expect.poll(savedIds).toEqual(["own", "protected"]);
   await pen("mousePressed", 0.5, 0.5, "right", 2);
   await expect(
     page.getByRole("button", { name: "지우개", exact: true }),
@@ -490,6 +541,9 @@ try {
   });
   results.push({
     nativeStylusBridge: true,
+    nativeOnlyActualErase: true,
+    nativeOnlyMidStrokeAndUndo: true,
+    restoresSelectedTool: true,
     stylusBarrelErase: true,
     releaseRestoresPen: true,
     midStrokeTransition: true,

@@ -11,3 +11,5 @@ Android S펜 버튼의 원시 버튼 비트를 WebView의 보조 버튼으로 �
 검증: 전체 431개 테스트(66개 파일), 웹 빌드, Worker 번들 검사. 1440/768/390px 브라우저에서 배정 항목 표시, 10개 단위 페이지, 상담자 변경, 양쪽 유형 삭제, 마지막 페이지 보정, 연결 진행·오류·재시도, 초진 후보 연동을 확인했습니다. CDP 펜 입력과 Android→편집기 상태 이벤트로 임시 지우개·펜 복귀·도중 전환·작성자 보호를 확인했습니다. 합성 자료로 32MB 초과 설문지 스트리밍, 캐시 무효화, 권한, 저장 대기열 분리, 수정 충돌과 보존 동작을 검증했습니다.
 
 Android 릴리스 빌드(코드 72), v2 서명, APK 내장 웹 파일 48개 일치 검증 완료. APK SHA-256: `e3217a929753900a60132236777a44c6ffa425bc9e993deb4b7ffcafd25e0678`.
+
+운영 확인(2026-10-06): [PR #17](https://github.com/peppermint1231/grand-codimate-web/pull/17), 병합 `d0904a225f8afa6e2a4a0dccf44954742290888a`. PR·브랜치·main 검사 및 Cloudflare Workers Builds 모두 성공(빌드 ID `074ffede-66cc-4dba-a6b5-d237f03e0c55`). 운영 0.18.2 웹 파일 48개가 로컬 빌드와 일치하고 공개 APK 다운로드·SHA-256 검증 완료. 실제 직원 화면에서 배정된 상담을 포함한 요청 목록과 페이지 표시, 런타임 오류 없음 확인. 운영 OneDrive 초진설문지 검색은 7.1초에 성공했으며 해당 검색어 일치 건이 없어 실제 선택 복호화는 합성 암호화 자료 테스트로 확인했습니다. 환자·상담·수납 자료를 생성·변경·삭제하지 않고 확인했습니다. 검증 자료: `artifacts/inquiry-live-0182.json`, `artifacts/release-0182-assets.json`, `artifacts/inquiry-management-browser.json`, `artifacts/booking-workflow-0182.log`.

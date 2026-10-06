@@ -45,6 +45,16 @@ type RequestListRow = {
   inquiry?: Inquiry;
   appointment?: Appointment;
 };
+const requestFilters = ["전체", "배정", "미배정", "완료", "취소"] as const;
+type RequestFilter = (typeof requestFilters)[number];
+const requestStatus = (row: RequestListRow): Exclude<RequestFilter, "전체"> =>
+  row.inquiry?.status === "cancelled" || row.appointment?.cancelled
+    ? "취소"
+    : row.appointment?.completed
+      ? "완료"
+      : row.owner
+        ? "배정"
+        : "미배정";
 const blankPerson = () => ({
   name: "",
   phone: "",
@@ -84,6 +94,7 @@ export function DiscoveryDesk({
     }),
     [closureDate, setClosureDate] = useState("");
   const [listPage, setListPage] = useState(0);
+  const [listFilter, setListFilter] = useState<RequestFilter>("전체");
   const [assigning, setAssigning] = useState<RequestListRow>(),
     [assignOwner, setAssignOwner] = useState("");
   const [manageError, setManageError] = useState("");
@@ -291,7 +302,10 @@ export function DiscoveryDesk({
     (a, b) =>
       b.receivedAt.localeCompare(a.receivedAt) || a.id.localeCompare(b.id),
   );
-  const pageCount = Math.max(1, Math.ceil(requestRows.length / 10));
+  const filteredRows = requestRows.filter(
+    (row) => listFilter === "전체" || requestStatus(row) === listFilter,
+  );
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / 10));
   const visiblePage = Math.min(listPage, pageCount - 1);
   const manage = async (
     row: RequestListRow,
@@ -541,13 +555,38 @@ export function DiscoveryDesk({
           <p className="small">
             미배정·배정·상담 연결·완료 요청을 함께 표시합니다.
           </p>
+          <div
+            className="inquiry-filters"
+            role="group"
+            aria-label="상담 요청 상태 필터"
+          >
+            {requestFilters.map((filter) => (
+              <button
+                type="button"
+                key={filter}
+                aria-pressed={listFilter === filter}
+                onClick={() => {
+                  setListFilter(filter);
+                  setListPage(0);
+                }}
+              >
+                {filter}{" "}
+                <span>
+                  {filter === "전체"
+                    ? requestRows.length
+                    : requestRows.filter((row) => requestStatus(row) === filter)
+                        .length}
+                </span>
+              </button>
+            ))}
+          </div>
           {manageError && !assigning && (
             <p className="error" role="alert">
               {manageError}
             </p>
           )}
           <div className="inquiry-list" aria-label="상담 요청 목록">
-            {requestRows
+            {filteredRows
               .slice(visiblePage * 10, visiblePage * 10 + 10)
               .map((row) => (
                 <article className="inquiry-request-row" key={row.id}>
@@ -627,7 +666,13 @@ export function DiscoveryDesk({
                   </div>
                 </article>
               ))}
-            {!requestRows.length && <p>상담 요청이 없습니다.</p>}
+            {!filteredRows.length && (
+              <p>
+                {listFilter === "전체"
+                  ? "상담 요청이 없습니다."
+                  : `${listFilter} 요청이 없습니다.`}
+              </p>
+            )}
           </div>
           <nav
             className="button-row inquiry-pagination"

@@ -5,6 +5,7 @@ import {
   decryptIntakeRecord,
   parseIntakeRecords,
   intakeRecordKey,
+  readIntakeStream,
 } from "../server/intake";
 import { clinicFixture } from "./fixtures/clinic";
 import { Drive } from "../server/drive";
@@ -163,6 +164,18 @@ describe("intake patient mapping", () => {
 });
 
 describe("authenticated intake integration", () => {
+  it("denies survey search and selection without patient information permission", async () => {
+    const f = await fixture();
+    const restricted = { ...f.staff, permissions: { "patient.edit": false } };
+    await f.add(restricted);
+    expect((await f.request(restricted, "/intake/search?q=시험")).status).toBe(
+      403,
+    );
+    expect(
+      (await f.request(restricted, "/intake/select", { id: "survey" })).status,
+    ).toBe(403);
+    expect(f.requestDrive).not.toHaveBeenCalled();
+  });
   it("requires login and administrator configuration; secrets stay encrypted", async () => {
     const f = await fixture();
     expect(
@@ -338,4 +351,148 @@ describe("authenticated intake integration", () => {
       409,
     );
   });
+});
+
+it("streams an archive larger than 32MB, caches only headers and decrypts only the selected record", async () => {
+  const f = await fixture();
+  await f.configure();
+  const junk = JSON.stringify({
+    recordId: "junk",
+    name: "다른 환자",
+    phone: "01011112222",
+    iv: "nonce",
+    ct: "A".repeat(2 * 1024 * 1024),
+  });
+  f.exists.mockResolvedValue({
+    id: "source-file",
+    name: "records.json",
+    size: 40 * 1024 * 1024,
+    eTag: "v1",
+  });
+  const source = () => {
+    let n = -1;
+    return new Response(
+      new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (n === -1) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                '{"records":[' + JSON.stringify(encrypt()),
+              ),
+            );
+            n++;
+          } else if (n < 18) {
+            controller.enqueue(
+              new TextEncoder().encode(
+                "," + junk.replace('"junk"', '"junk-' + n++ + '"'),
+              ),
+            );
+          } else {
+            controller.enqueue(
+              new TextEncoder().encode('],"deletedKeys":["junk-0"]}'),
+            );
+            controller.close();
+          }
+        },
+      }),
+    );
+  };
+  f.requestDrive.mockImplementation(async () => source());
+  f.requestDrive.mockClear();
+  const search = await f.request(
+    f.staff,
+    "/intake/search?q=0000&name=연동시험",
+  );
+  expect(search.status, await search.clone().text()).toBe(200);
+  const d: any = await search.json();
+  expect(d.rows).toHaveLength(1);
+  expect(JSON.stringify(d)).not.toMatch(/ct|salt|signature|rrn|medications/);
+  await f.request(f.staff, "/intake/search?q=1234");
+  expect(f.requestDrive).toHaveBeenCalledTimes(1);
+  const selected = await f.request(f.staff, "/intake/select", {
+    id: d.rows[0].id,
+  });
+  expect(selected.status, await selected.clone().text()).toBe(200);
+  expect(((await selected.json()) as any).fields).toMatchObject({
+    name: person.name,
+    dob: "1990-02-03",
+    address: person.address,
+  });
+  expect(f.writes).not.toHaveBeenCalled();
+  f.exists.mockResolvedValue({
+    id: "source-file",
+    name: "records.json",
+    size: 200,
+    eTag: "v2",
+  });
+  f.requestDrive.mockResolvedValue(
+    Response.json({ records: [encrypt()], deletedKeys: [person.id] }),
+  );
+  expect(
+    ((await (await f.request(f.staff, "/intake/search?q=1234")).json()) as any)
+      .rows,
+  ).toHaveLength(0);
+}, 15000);
+
+it("does not block consultation requests behind a delayed external survey read", async () => {
+  const f = await fixture();
+  await f.configure();
+  let release!: (r: Response) => void, began!: () => void;
+  const started = new Promise<void>((resolve) => {
+    began = resolve;
+  });
+  f.requestDrive.mockImplementation(() => {
+    began();
+    return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+  });
+  const search = f.request(f.staff, "/intake/search?q=1234");
+  await started;
+  try {
+    const response = await Promise.race([
+      f.request(f.staff, "/inquiries/convert", { id: "no-such-request" }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(Error("blocked by survey read")), 1000),
+      ),
+    ]);
+    expect(response.status).toBe(404);
+  } finally {
+    release(Response.json({ records: [encrypt()] }));
+    await search;
+  }
+});
+
+it("keeps only latest headers, respects trailing tombstones, UTF-8 chunks and rejects truncated archives", async () => {
+  const text = JSON.stringify({
+    records: [
+      { recordId: "a", name: "이전", updatedAt: "1", ct: "private" },
+      { recordId: "a", name: "최근", updatedAt: "2", ct: "private" },
+      { recordId: "b", name: "삭제" },
+    ],
+    deletedKeys: ["b"],
+  });
+  const bytes = new TextEncoder().encode(text);
+  let pos = 0;
+  const rows = await readIntakeStream(
+    new Response(
+      new ReadableStream({
+        pull(c) {
+          if (pos === bytes.length) {
+            c.close();
+            return;
+          }
+          c.enqueue(bytes.slice(pos, pos + 1));
+          pos++;
+        },
+      }),
+    ),
+  );
+  expect(rows).toEqual([{ recordId: "a", name: "최근", updatedAt: "2" }]);
+  await expect(readIntakeStream(new Response('{"records":['))).rejects.toThrow(
+    "파일",
+  );
+  await expect(
+    readIntakeStream(new Response('{"records":{}}')),
+  ).rejects.toThrow("형식");
 });

@@ -75,10 +75,6 @@
   margin-top: 4px;
   opacity: 0.95;
 }
-.inquiry-list {
-  max-height: 65vh;
-  overflow: auto;
-}
 .inquiry-preparation {
   scroll-margin-top: 20px;
 }
@@ -126,9 +122,6 @@
   .inquiry-calendar-event {
     min-height: 44px;
   }
-  .inquiry-list {
-    max-height: 300px;
-  }
 }
 .inquiry-closure-label {
   display: block;
@@ -145,6 +138,10 @@
   flex-wrap: nowrap;
   gap: 6px;
 }
+.inquiry-calendar .section-title > .button-row button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
 .inquiry-calendar .section-title input[type="month"] {
   width: 165px;
   min-width: 130px;
@@ -160,4 +157,60 @@
   color: #52525b;
   background: #e4e4e7;
   border-color: #d4d4d8;
+}
+
+.inquiry-request-row {
+  padding: 12px 0;
+  border-bottom: 1px solid #dce5e1;
+}
+.inquiry-request-open {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 0;
+}
+.inquiry-request-open > span {
+  min-width: 0;
+}
+.inquiry-request-open small {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+}
+.inquiry-owner-tag {
+  display: inline-block;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+.inquiry-request-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+.inquiry-request-actions button {
+  min-height: 40px;
+  padding: 7px 12px;
+}
+.inquiry-pagination {
+  justify-content: space-between;
+  margin-top: 16px;
+  font-size: 13px;
+}
+.inquiry-assignment-dialog {
+  border: 1px solid #dce5e1;
+  border-radius: 16px;
+  width: min(440px, 90vw);
+  padding: 24px;
+  color: #164f4b;
+}
+.inquiry-assignment-dialog::backdrop {
+  background: rgba(15, 30, 30, 0.45);
 }

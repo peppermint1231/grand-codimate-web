@@ -1,6 +1,6 @@
 {
   "name": "codimate",
-  "version": "0.18.1",
+  "version": "0.18.2",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,6 +25,7 @@
     "@hyunbinseo/holidays-kr": "5.2027.2",
     "@noble/hashes": "2.0.1",
     "@pdf-lib/fontkit": "^1.1.1",
+    "@streamparser/json": "0.0.26",
     "cheerio": "1.2.0",
     "exceljs": "^4.4.0",
     "idb": "^8.0.3",

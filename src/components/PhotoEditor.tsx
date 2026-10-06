@@ -355,6 +355,18 @@ export function PhotoEditor({
     image = useRef<HTMLImageElement | null>(null),
     transform = useRef(new DOMMatrix());
   const [temporaryEraser, setTemporaryEraser] = useState(false);
+  const [nativeEraser, setNativeEraser] = useState(false);
+  useEffect(() => {
+    const update = (e: Event) =>
+      setNativeEraser((e as CustomEvent).detail?.erasing === true);
+    const reset = () => setNativeEraser(false);
+    window.addEventListener("codimate:stylus", update);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("codimate:stylus", update);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
   const stylusGesture = useRef(false),
     stylusBase = useRef<Photo | null>(null),
     activePen = useRef<number | null>(null);
@@ -1193,12 +1205,20 @@ export function PhotoEditor({
             <button
               key={value}
               disabled={!!frame || (readonly && value !== "pan")}
-              aria-pressed={(temporaryEraser ? "erase" : tool) === value}
+              aria-pressed={
+                (temporaryEraser || (!readonly && nativeEraser)
+                  ? "erase"
+                  : tool) === value
+              }
               aria-label={name}
               title={`${name} (${key})`}
               className={
                 "editor-tool-icon " +
-                ((temporaryEraser ? "erase" : tool) === value ? "selected" : "")
+                ((temporaryEraser || (!readonly && nativeEraser)
+                  ? "erase"
+                  : tool) === value
+                  ? "selected"
+                  : "")
               }
               onClick={() => {
                 setTool(value);
@@ -1228,7 +1248,7 @@ export function PhotoEditor({
           </select>
         </label>
         <StrokeWidth value={width} onChange={setWidth} color={color} />
-        {temporaryEraser && (
+        {!readonly && (temporaryEraser || nativeEraser) && (
           <span className="stylus-erase-indicator" role="status">
             <Eraser size={18} />
             S펜 버튼 · 지우개

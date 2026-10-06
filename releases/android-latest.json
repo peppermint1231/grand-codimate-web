@@ -1,7 +1,7 @@
 {
-  "version": "0.18.1",
-  "versionCode": 71,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.1.apk",
-  "sha256": "2338d63e15387d8266a308d8b81821e79eb2d0f96d201715ea33d057b094839a",
-  "notes": "상담 캘린더 직원 색상을 대비가 뚜렷한 팔레트로 개선하고 배지 가독성을 높였습니다."
+  "version": "0.18.2",
+  "versionCode": 72,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.2.apk",
+  "sha256": "e3217a929753900a60132236777a44c6ffa425bc9e993deb4b7ffcafd25e0678",
+  "notes": "배정 상담요청 목록·10개씩 보기·상담자 변경·삭제, 대용량 초진설문지 조회와 상담 연결 안내, Android S펜 버튼 지우개 처리를 개선했습니다."
 }

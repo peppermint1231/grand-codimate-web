@@ -693,3 +693,201 @@ it("protects accepted pending inquiries from rebuilds and pauses new intake duri
     409,
   );
 });
+
+it("lists converted assignments and changes owners while request deletion preserves the consultation", async () => {
+  const f = await fixture(),
+    slot = futureSlot();
+  const other = {
+    id: "calendar-other",
+    name: "배정 직원",
+    username: "other",
+    role: "coordinator",
+    permissionLevel: "standard",
+    active: true,
+    permissions: {},
+  };
+  f.db
+    .prepare("INSERT INTO entities VALUES(?,?,?)")
+    .run("users", other.id, await seal(other, f.key));
+  const receipt = (
+    (await (
+      await f.request(
+        "/public/inquiries",
+        { ...f.input, visitType: "first", ...slot },
+        true,
+      )
+    ).json()) as any
+  ).receipt;
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: receipt,
+        rev: 1,
+        action: "assign",
+        ownerId: other.id,
+      })
+    ).status,
+  ).toBe(200);
+  const linked = await f.request("/inquiries/convert", {
+    id: receipt,
+    person: f.input.person,
+    category: "미용",
+  });
+  expect(linked.status, await linked.clone().text()).toBe(200);
+  let list: any = await (await f.request("/inquiries")).json();
+  expect(list.inquiries).toHaveLength(0);
+  expect(list.appointments).toHaveLength(1);
+  const appointment = list.appointments[0];
+  expect(appointment.coordinatorId).toBe(other.id);
+  expect(appointment.canReassign).toBe(true);
+  const account = f.db
+    .prepare("SELECT value FROM secrets WHERE id LIKE 'user:%'")
+    .get() as any;
+  const admin = await open<any>(account.value, f.key);
+  f.db
+    .prepare("UPDATE secrets SET value=? WHERE id=?")
+    .run(
+      await seal({ ...admin, permissionLevel: "standard" }, f.key),
+      "user:" + admin.id,
+    );
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: appointment.id,
+        consultationId: appointment.id,
+        rev: appointment.rev,
+        action: "assign",
+        ownerId: admin.id,
+      })
+    ).status,
+  ).toBe(403);
+  f.db
+    .prepare("UPDATE secrets SET value=? WHERE id=?")
+    .run(account.value, "user:" + admin.id);
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: appointment.id,
+        consultationId: appointment.id,
+        rev: appointment.rev,
+        action: "assign",
+        ownerId: admin.id,
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: appointment.id,
+        consultationId: appointment.id,
+        rev: appointment.rev,
+        action: "delete",
+      })
+    ).status,
+  ).toBe(409);
+  list = await (await f.request("/inquiries")).json();
+  const del = {
+    id: appointment.id,
+    consultationId: appointment.id,
+    rev: list.appointments[0].rev,
+    action: "delete",
+  };
+  expect((await f.request("/inquiries/manage", del)).status).toBe(200);
+  expect((await f.request("/inquiries/manage", del)).status).toBe(200);
+  expect(
+    ((await (await f.request("/inquiries")).json()) as any).appointments,
+  ).toHaveLength(0);
+  const state: any = await (await f.request("/state")).json();
+  expect(state.state.patients).toHaveLength(1);
+  expect(state.state.consultations).toHaveLength(1);
+});
+
+it("connects an inquiry after its event expires without reading catalog revision history", async () => {
+  const f = await fixture();
+  const receipt = (
+    (await (await f.request("/public/inquiries", f.input, true)).json()) as any
+  ).receipt;
+  const row = f.db
+    .prepare("SELECT id,value FROM entities WHERE section='catalogs' LIMIT 1")
+    .get() as any;
+  const catalog = await open<any>(row.value, f.key);
+  const product = catalog.products[0];
+  product.webEvent = {
+    provider: "grand4",
+    eventId: "expired",
+    offerId: "expired",
+    eventName: "기간 종료",
+    url: "https://www.grand4.co.kr",
+    posterUrls: [],
+    period: "종료",
+    endsOn: "2020-01-01",
+    regularPrice: null,
+    salePrice: null,
+    discountRate: null,
+    priceText: "",
+    sourceSignature: "",
+    checkedAt: "",
+  };
+  f.db
+    .prepare("UPDATE entities SET value=? WHERE section='catalogs' AND id=?")
+    .run(await seal(catalog, f.key), row.id);
+  // Unrelated history must never be loaded by conversion.
+  f.db
+    .prepare("INSERT INTO entities VALUES(?,?,?)")
+    .run("catalogRevisions", "unreadable-history", "not-an-encrypted-record");
+  const response = await f.request("/inquiries/convert", {
+    id: receipt,
+    person: f.input.person,
+    category: "미용",
+  });
+  expect(response.status, await response.clone().text()).toBe(200);
+  const linked = (await response.json()) as any;
+  const stored = f.db
+    .prepare(
+      "SELECT value FROM entities WHERE section='consultations' AND id=?",
+    )
+    .get(linked.consultationId) as any;
+  const consultation = await open<any>(stored.value, f.key);
+  expect(
+    consultation.quote.lines.some((line: any) => line.productId === product.id),
+  ).toBe(false);
+  expect(consultation.memo).toContain(product.name);
+});
+it("deletes an unassigned request with revision protection and removes its OneDrive backup", async () => {
+  const f = await fixture();
+  const receipt = (
+    (await (await f.request("/public/inquiries", f.input, true)).json()) as any
+  ).receipt;
+  await f.clinic.alarm();
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: receipt,
+        rev: 0,
+        action: "delete",
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: receipt,
+        rev: 1,
+        action: "delete",
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.request("/inquiries/manage", {
+        id: receipt,
+        rev: 1,
+        action: "delete",
+      })
+    ).status,
+  ).toBe(200);
+  expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(0);
+  expect(
+    [...f.files.keys()].filter((p) => p.includes("/inquiries/")),
+  ).toHaveLength(0);
+});

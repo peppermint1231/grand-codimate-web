@@ -104,7 +104,7 @@ export class Drive {
     const r = await fetch(
       "https://graph.microsoft.com/v1.0/me/drive/root:/" +
         path.split("/").map(encodeURIComponent).join("/") +
-        "?$select=id,name,size,folder",
+        "?$select=id,name,size,folder,eTag",
       { headers: { Authorization: "Bearer " + (await this.token()) } },
     );
     if (r.status === 404) return undefined;
@@ -113,6 +113,7 @@ export class Drive {
       id: string;
       name: string;
       size: number;
+      eTag?: string;
       folder?: object;
     };
   }

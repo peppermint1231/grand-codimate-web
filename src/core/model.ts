@@ -243,6 +243,7 @@ export interface Consultation extends Base {
   priceReasonHistory?: string[];
   intakeSource?: {
     receiptId: string;
+    calendarHidden?: boolean;
     receivedAt: string;
     consentVersion: string;
     personalConsent: boolean;

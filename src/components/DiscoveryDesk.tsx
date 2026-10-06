@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
-import { allowed, catalogBookLabel, type State } from "../core/model";
+import { withProgress, currentProgress } from "../lib/operationProgress";
+import { allowed, age, catalogBookLabel, type State } from "../core/model";
 import type { Inquiry } from "../core/discovery";
 import type {
   IntakeSearchRow,
@@ -17,6 +18,10 @@ import {
 import "./DiscoveryDesk.css";
 type Appointment = {
   id: string;
+  rev?: number;
+  phone?: string;
+  receivedAt?: string;
+  canReassign?: boolean;
   patientId: string;
   name: string;
   date: string;
@@ -25,6 +30,20 @@ type Appointment = {
   completed: boolean;
   confirmed: boolean;
   cancelled: boolean;
+};
+type RequestListRow = {
+  id: string;
+  name: string;
+  phone: string;
+  receivedAt: string;
+  date: string;
+  time: string;
+  owner: string;
+  status: string;
+  rev: number;
+  canReassign: boolean;
+  inquiry?: Inquiry;
+  appointment?: Appointment;
 };
 const blankPerson = () => ({
   name: "",
@@ -64,7 +83,20 @@ export function DiscoveryDesk({
       dates: [],
     }),
     [closureDate, setClosureDate] = useState("");
+  const [listPage, setListPage] = useState(0);
+  const [assigning, setAssigning] = useState<RequestListRow>(),
+    [assignOwner, setAssignOwner] = useState("");
+  const [manageError, setManageError] = useState("");
+  const assignDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (assigning && !assignDialog.current?.open)
+      assignDialog.current?.showModal();
+    if (!assigning) assignDialog.current?.close();
+  }, [assigning]);
   const panel = useRef<HTMLElement>(null);
+  const running = useRef(false);
+  const [connecting, setConnecting] = useState(false),
+    [connectError, setConnectError] = useState("");
   const refresh = async () => {
     const d = await api("/inquiries");
     setInquiries(d.inquiries);
@@ -72,7 +104,8 @@ export function DiscoveryDesk({
     setAppointments(d.appointments || []);
   };
   const run = async (fn: () => Promise<unknown>) => {
-    if (busy) return;
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setError("");
     try {
@@ -80,6 +113,7 @@ export function DiscoveryDesk({
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      running.current = false;
       setBusy(false);
     }
   };
@@ -108,25 +142,20 @@ export function DiscoveryDesk({
           );
         return;
       }
-      const queries = [
-        selected.person.phone.replace(/\D/g, ""),
-        selected.person.name,
-      ].filter((q) => q.length >= 2);
-      const found = await Promise.all(
-        queries.map((q) =>
-          api<{ rows: IntakeSearchRow[] }>(
-            "/intake/search?" + new URLSearchParams({ q, page: "0" }),
-            {},
-            { operation: null },
-          ),
-        ),
+      const phone = selected.person.phone.replace(/\D/g, "");
+      const name = selected.person.name.trim();
+      const found = await api<{ rows: IntakeSearchRow[] }>(
+        "/intake/search?" +
+          new URLSearchParams({
+            q: phone.length >= 4 ? phone : name,
+            ...(name.length >= 2 ? { name } : {}),
+            page: "0",
+          }),
+        {},
+        { operation: null },
       );
       if (live) {
-        setIntakes([
-          ...new Map(
-            found.flatMap((x) => x.rows).map((x) => [x.id, x]),
-          ).values(),
-        ]);
+        setIntakes([...new Map(found.rows.map((x) => [x.id, x])).values()]);
         setIntakeMessage("이름·연락처를 확인한 뒤 연결할 환자를 선택하세요.");
       }
     })().catch((e) => {
@@ -139,6 +168,7 @@ export function DiscoveryDesk({
   }, [selected?.id]);
   const choose = (item: Inquiry) => {
     setSelected(item);
+    setConnectError("");
     setPerson(item.person);
     setPatientId("");
     setDate(item.schedule?.date || item.requestedDate || "");
@@ -217,6 +247,85 @@ export function DiscoveryDesk({
       appointment: a,
     })),
   ];
+  const requestRows: RequestListRow[] = [
+    ...inquiries.map((i) => ({
+      id: i.id,
+      name: i.person.name,
+      phone: i.person.phone,
+      receivedAt: i.createdAt,
+      date: i.schedule?.date || i.requestedDate || "",
+      time: i.schedule?.time || i.requestedTime || "",
+      owner: i.schedule?.coordinatorId || "",
+      status:
+        i.status === "cancelled"
+          ? "취소"
+          : i.schedule?.confirmed
+            ? "확정"
+            : i.schedule?.coordinatorId
+              ? "배정"
+              : "미배정",
+      rev: i.rev || 0,
+      canReassign: true,
+      inquiry: i,
+    })),
+    ...appointments.map((a) => ({
+      id: a.id,
+      name: a.name,
+      phone: a.phone || "",
+      receivedAt: a.receivedAt || "",
+      date: a.date,
+      time: a.time,
+      owner: a.coordinatorId,
+      status: a.cancelled
+        ? "취소"
+        : a.completed
+          ? "상담완료"
+          : a.confirmed
+            ? "확정 · 상담 연결"
+            : "상담 연결",
+      rev: a.rev || 0,
+      canReassign: a.canReassign === true,
+      appointment: a,
+    })),
+  ].sort(
+    (a, b) =>
+      b.receivedAt.localeCompare(a.receivedAt) || a.id.localeCompare(b.id),
+  );
+  const pageCount = Math.max(1, Math.ceil(requestRows.length / 10));
+  const visiblePage = Math.min(listPage, pageCount - 1);
+  const manage = async (
+    row: RequestListRow,
+    action: "assign" | "delete",
+    ownerId?: string,
+  ) => {
+    setManageError("");
+    await run(async () => {
+      try {
+        await withProgress(
+          action === "delete"
+            ? "요청을 삭제하고 있습니다"
+            : "상담자를 변경하고 있습니다",
+          async () => {
+            await api("/inquiries/manage", {
+              method: "POST",
+              body: JSON.stringify({
+                id: row.id,
+                consultationId: row.appointment?.id,
+                rev: row.rev,
+                action,
+                ownerId,
+              }),
+            });
+            if (selected?.id === row.inquiry?.id) setSelected(undefined);
+            setAssigning(undefined);
+            await refresh();
+          },
+        );
+      } catch (e) {
+        setManageError((e as Error).message);
+      }
+    });
+  };
   const candidates = selected
     ? patientCandidates(state.patients, selected.person)
     : [];
@@ -428,40 +537,174 @@ export function DiscoveryDesk({
       </section>
       <div className="detail-grid inquiry-workspace">
         <section className="card">
-          <h3>
-            상담 요청 {inquiries.filter((i) => i.status === "new").length}건
-          </h3>
-          <div className="inquiry-list">
-            {inquiries.map((i) => (
-              <button className="list-row" key={i.id} onClick={() => choose(i)}>
-                <span>
-                  <b>{i.person.name}</b>
-                  <small>
-                    {i.person.phone} ·{" "}
-                    {i.visitType === "first"
-                      ? "처음 방문"
-                      : i.visitType === "returning"
-                        ? "재방문"
-                        : "방문 구분 없음"}
-                  </small>
-                  <small>
-                    {i.schedule?.date || i.requestedDate}{" "}
-                    {i.schedule?.time || i.requestedTime}
-                  </small>
-                </span>
-                <span>
-                  {i.status === "cancelled"
-                    ? "취소"
-                    : i.schedule?.confirmed
-                      ? "확정"
-                      : i.schedule?.coordinatorId
-                        ? "배정"
-                        : "미배정"}
-                </span>
-              </button>
-            ))}
-            {!inquiries.length && <p>새 요청이 없습니다.</p>}
+          <h3>상담 요청 {requestRows.length}건</h3>
+          <p className="small">
+            미배정·배정·상담 연결·완료 요청을 함께 표시합니다.
+          </p>
+          {manageError && !assigning && (
+            <p className="error" role="alert">
+              {manageError}
+            </p>
+          )}
+          <div className="inquiry-list" aria-label="상담 요청 목록">
+            {requestRows
+              .slice(visiblePage * 10, visiblePage * 10 + 10)
+              .map((row) => (
+                <article className="inquiry-request-row" key={row.id}>
+                  <button
+                    className="inquiry-request-open"
+                    disabled={busy}
+                    onClick={() =>
+                      row.appointment
+                        ? work(() =>
+                            openConsult(
+                              row.appointment!.patientId,
+                              row.appointment!.id,
+                            ),
+                          )
+                        : choose(row.inquiry!)
+                    }
+                  >
+                    <span>
+                      <b>{row.name}</b>
+                      <small>{row.phone}</small>
+                      <small>
+                        {row.date ? `${row.date} ${row.time}` : "일정 미정"}
+                      </small>
+                    </span>
+                    <span>
+                      <b
+                        className="inquiry-owner-tag"
+                        style={{
+                          background: row.owner
+                            ? coordinatorColor(
+                                row.owner,
+                                !!row.appointment?.completed,
+                                colorRoster,
+                              )
+                            : "#475569",
+                        }}
+                      >
+                        {row.owner ? staffName(row.owner) : "미배정"}
+                      </b>
+                      <small>{row.status}</small>
+                    </span>
+                  </button>
+                  <div className="inquiry-request-actions">
+                    <button
+                      type="button"
+                      disabled={busy || !row.canReassign}
+                      title={
+                        row.canReassign
+                          ? "상담자 변경"
+                          : "연결된 상담은 담당자 본인 또는 관리자만 변경할 수 있습니다"
+                      }
+                      onClick={() => {
+                        setAssignOwner(row.owner);
+                        setManageError("");
+                        setAssigning(row);
+                      }}
+                    >
+                      상담자 변경
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      className="danger"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            row.appointment
+                              ? `${row.name} 님의 요청을 목록·캘린더에서 삭제할까요? 환자·상담 기록은 유지됩니다.`
+                              : `${row.name} 님의 상담 요청을 삭제할까요? 삭제한 요청은 복구할 수 없습니다.`,
+                          )
+                        )
+                          void manage(row, "delete");
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                </article>
+              ))}
+            {!requestRows.length && <p>상담 요청이 없습니다.</p>}
           </div>
+          <nav
+            className="button-row inquiry-pagination"
+            aria-label="상담 요청 페이지"
+          >
+            <button
+              disabled={visiblePage === 0 || busy}
+              onClick={() => setListPage(visiblePage - 1)}
+            >
+              이전
+            </button>
+            <span aria-live="polite">
+              {visiblePage + 1} / {pageCount} 페이지 · 10개씩
+            </span>
+            <button
+              disabled={visiblePage + 1 >= pageCount || busy}
+              onClick={() => setListPage(visiblePage + 1)}
+            >
+              다음
+            </button>
+          </nav>
+          <dialog
+            ref={assignDialog}
+            className="inquiry-assignment-dialog"
+            aria-label="상담자 변경"
+            onCancel={(e) => {
+              if (busy) e.preventDefault();
+              else setAssigning(undefined);
+            }}
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (assigning) void manage(assigning, "assign", assignOwner);
+              }}
+            >
+              <h3>{assigning?.name} 님의 상담자 변경</h3>
+              <label className="field">
+                상담자
+                <select
+                  aria-label="변경할 상담자"
+                  required
+                  value={assignOwner}
+                  onChange={(e) => setAssignOwner(e.target.value)}
+                >
+                  <option value="">직원 선택</option>
+                  {staff.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {manageError && (
+                <p className="error" role="alert">
+                  {manageError}
+                </p>
+              )}
+              <div className="button-row">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setAssigning(undefined)}
+                >
+                  취소
+                </button>
+                <button
+                  className="primary"
+                  disabled={
+                    busy || !assignOwner || assignOwner === assigning?.owner
+                  }
+                >
+                  {busy ? "변경 중…" : "상담자 변경 저장"}
+                </button>
+              </div>
+            </form>
+          </dialog>
         </section>
         {selected && (
           <section
@@ -585,19 +828,51 @@ export function DiscoveryDesk({
             </fieldset>
             {selected.status !== "cancelled" && (
               <form
+                onInvalidCapture={(e) => {
+                  const input = e.target as HTMLInputElement;
+                  setConnectError(
+                    `${input.closest("label")?.textContent?.trim() || "입력 항목"}을 확인해주세요. 신규 환자는 이름·연락처·생년월일·주소가 필요합니다.`,
+                  );
+                }}
                 onSubmit={(e) => {
                   e.preventDefault();
+                  if (running.current) return;
+                  setConnectError("");
+                  setConnecting(true);
                   void run(async () => {
-                    const d = await api("/inquiries/convert", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        id: selected.id,
-                        patientId: patientId || undefined,
-                        person,
-                        category,
-                      }),
-                    });
-                    await openConsult(d.patientId, d.consultationId);
+                    try {
+                      await withProgress(
+                        "상담을 연결하고 있습니다",
+                        async () => {
+                          currentProgress()?.update({
+                            title: "환자·상담 기록 저장 중입니다",
+                            detail:
+                              "접수 내용을 상담으로 연결하고 있습니다. 중복으로 생성되지 않도록 확인합니다.",
+                          });
+                          const d = await api("/inquiries/convert", {
+                            method: "POST",
+                            body: JSON.stringify({
+                              id: selected.id,
+                              patientId: patientId || undefined,
+                              person,
+                              category,
+                            }),
+                          });
+                          currentProgress()?.update({
+                            title: "상담 화면을 여는 중입니다",
+                            detail: "최신 환자·상담 자료를 불러오고 있습니다.",
+                          });
+                          await openConsult(d.patientId, d.consultationId);
+                        },
+                      );
+                    } catch (e) {
+                      setConnectError(
+                        (e as Error).message ||
+                          "상담을 연결하지 못했습니다. 다시 시도해주세요.",
+                      );
+                    } finally {
+                      setConnecting(false);
+                    }
                   });
                 }}
               >
@@ -730,6 +1005,17 @@ export function DiscoveryDesk({
                       />
                     </label>
                     <label className="field">
+                      나이 (생년월일 기준)
+                      <input
+                        readOnly
+                        value={
+                          person.dob
+                            ? `${age(person.dob)}세`
+                            : "생년월일을 입력해주세요"
+                        }
+                      />
+                    </label>
+                    <label className="field">
                       주소 · 동까지
                       <input
                         required
@@ -770,11 +1056,22 @@ export function DiscoveryDesk({
                   </select>
                 </label>
                 <p className="small">
-                  저장된 담당자·일정을 상담에 연결합니다. 위에서 변경했다면 먼저
+                  이름·연락처·생년월일·주소 등 등록 정보만 불러옵니다. 저장된
+                  담당자·일정을 상담에 연결합니다. 위에서 변경했다면 먼저
                   저장하세요.
                 </p>
-                <button className="primary" disabled={busy}>
-                  상담으로 연결
+                {connectError && (
+                  <p className="error" role="alert">
+                    {connectError}
+                  </p>
+                )}
+                <button
+                  type="submit"
+                  className="primary"
+                  disabled={busy}
+                  aria-busy={connecting}
+                >
+                  {connecting ? "상담 연결 중…" : "상담으로 연결"}
                 </button>
               </form>
             )}

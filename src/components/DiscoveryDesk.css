@@ -5,14 +5,17 @@
 .inquiry-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   margin: 14px 0;
 }
 .inquiry-legend > span {
   color: white;
-  padding: 5px 10px;
-  border-radius: 6px;
-  font-size: 12px;
+  padding: 7px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
 }
 .inquiry-legend small {
   width: 100%;
@@ -146,4 +149,15 @@
   width: 165px;
   min-width: 130px;
   flex: 0 1 165px;
+}
+
+.inquiry-legend > .inquiry-legend-unassigned {
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px dashed #64748b;
+}
+.inquiry-legend > .inquiry-legend-cancelled {
+  color: #52525b;
+  background: #e4e4e7;
+  border-color: #d4d4d8;
 }

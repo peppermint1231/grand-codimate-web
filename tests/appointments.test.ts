@@ -38,8 +38,15 @@ it("ranks returning candidates by phone and name without silently linking or inc
     ),
   ).toEqual(["both", "phone", "name"]);
   expect(patientCandidates(people, { name: "", phone: "" })).toEqual([]);
-  expect(coordinatorColor("one")).not.toBe(coordinatorColor("two"));
-  expect(coordinatorColor("one", true)).toContain("27%");
+  const roster = Array.from({ length: 16 }, (_, i) => "staff-" + i);
+  const colors = roster.map((id) => coordinatorColor(id, false, roster));
+  expect(new Set(colors).size).toBe(roster.length);
+  expect(coordinatorColor("staff-2", false, roster)).toBe(
+    coordinatorColor("staff-2", false, [...roster].reverse()),
+  );
+  expect(coordinatorColor("staff-2", true, roster)).not.toBe(
+    coordinatorColor("staff-2", false, roster),
+  );
 });
 it("recognizes only stylus barrel/eraser buttons, not mouse right-click or ordinary pen pressure", () => {
   expect(stylusErasing({ pointerType: "pen", buttons: 3, button: 2 })).toBe(

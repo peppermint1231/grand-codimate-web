@@ -1,7 +1,7 @@
 {
-  "version": "0.18.0",
-  "versionCode": 70,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.0.apk",
-  "sha256": "31357ff275fe78929ee1283e1447a7a6b3f4d76cd4ca26393935141a16bef1bd",
-  "notes": "환자 맞춤 추천·상담 일정 캘린더, 빠른 상담 접수, 공휴일 휴진, S펜 버튼 지우개 및 굵기 미리보기."
+  "version": "0.18.1",
+  "versionCode": 71,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.1.apk",
+  "sha256": "2338d63e15387d8266a308d8b81821e79eb2d0f96d201715ea33d057b094839a",
+  "notes": "상담 캘린더 직원 색상을 대비가 뚜렷한 팔레트로 개선하고 배지 가독성을 높였습니다."
 }

@@ -163,6 +163,27 @@
   padding: 12px 0;
   border-bottom: 1px solid #dce5e1;
 }
+.inquiry-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 14px 0;
+}
+.inquiry-filters button {
+  min-height: 42px;
+  padding: 7px 12px;
+  white-space: nowrap;
+}
+.inquiry-filters button[aria-pressed="true"] {
+  color: white;
+  background: #155e59;
+  border-color: #155e59;
+}
+.inquiry-filters button span {
+  margin-left: 4px;
+  font-size: 12px;
+  opacity: 0.85;
+}
 .inquiry-request-open {
   display: flex;
   gap: 12px;

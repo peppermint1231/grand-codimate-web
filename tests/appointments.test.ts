@@ -65,6 +65,13 @@ it("recognizes only stylus barrel/eraser buttons, not mouse right-click or ordin
     false,
   );
 });
+it("uses native S-Pen state when WebView omits button bits, without changing touch or mouse input", () => {
+  const pen = { pointerType: "pen", buttons: 1, button: 0 };
+  expect(stylusErasing(pen, true)).toBe(true);
+  expect(stylusErasing(pen, false)).toBe(false);
+  expect(stylusErasing({ ...pen, pointerType: "touch" }, true)).toBe(false);
+  expect(stylusErasing({ ...pen, pointerType: "mouse" }, true)).toBe(false);
+});
 it("blocks Korean public and substitute holidays as well as clinic closures", () => {
   expect(consultationTimes("2026-10-09", now)).toEqual([]);
   expect(consultationTimes("2026-10-05", Date.parse("2026-10-01"))).toEqual([]);

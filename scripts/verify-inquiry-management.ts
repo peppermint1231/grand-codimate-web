@@ -21,7 +21,8 @@ try {
     let inquiries: any[] = Array.from({ length: 13 }, (_, n) => ({
       id: `pending-${n}`,
       rev: 1,
-      status: "new",
+      status: n === 12 ? "cancelled" : "new",
+      schedule: n === 11 ? { coordinatorId: "other" } : undefined,
       visitType: "first",
       createdAt: `2026-10-05T00:00:${String(59 - n * 2).padStart(2, "0")}Z`,
       person: {
@@ -45,9 +46,9 @@ try {
       date: "2026-10-07",
       time: "11:00",
       coordinatorId: "admin",
-      completed: n === 0,
+      completed: n === 0 || n === 12,
       confirmed: true,
-      cancelled: false,
+      cancelled: n === 12,
       canReassign: true,
     }));
     const changes: any[] = [];
@@ -123,6 +124,27 @@ try {
     const rows = page.locator(".inquiry-request-row");
     const nav = page.getByRole("navigation", { name: "상담 요청 페이지" });
     await expect(rows).toHaveCount(10);
+    const filters = page.getByRole("group", { name: "상담 요청 상태 필터" });
+    await expect(
+      filters.getByRole("button", { name: "전체 26", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await filters.getByRole("button", { name: "배정 12", exact: true }).click();
+    await expect(rows).toHaveCount(10);
+    await nav.getByRole("button", { name: "다음" }).click();
+    await expect(rows).toHaveCount(2);
+    await filters
+      .getByRole("button", { name: "미배정 11", exact: true })
+      .click();
+    await expect(rows).toHaveCount(10);
+    await expect(nav).toContainText("1 / 2");
+    await filters.getByRole("button", { name: "완료 1", exact: true }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText("배정시험0");
+    await filters.getByRole("button", { name: "취소 2", exact: true }).click();
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText("미배정시험12");
+    await expect(rows.nth(1)).toContainText("배정시험12");
+    await filters.getByRole("button", { name: "전체 26", exact: true }).click();
     await expect(rows.nth(1)).toContainText("배정시험0");
     await rows.nth(1).locator(".inquiry-request-open").click();
     await expect
@@ -160,6 +182,13 @@ try {
     assert.ok(changes.some((c) => c.action === "delete" && !c.consultationId));
     assert.ok(changes.some((c) => c.action === "delete" && c.consultationId));
     await nav.getByRole("button", { name: "이전" }).click();
+    await filters.getByRole("button", { name: "취소 0", exact: true }).click();
+    await expect(rows).toHaveCount(0);
+    await expect(
+      page.getByText("취소 요청이 없습니다.", { exact: true }),
+    ).toBeVisible();
+    await expect(nav.getByRole("button", { name: "다음" })).toBeDisabled();
+    await filters.getByRole("button", { name: "전체 20", exact: true }).click();
     await rows.first().locator(".inquiry-request-open").click();
     const form = page.getByRole("region", { name: "상담 준비" });
     await form
@@ -188,6 +217,9 @@ try {
       width,
       assignedVisible: true,
       tenPerPage: true,
+      statusFilters: true,
+      defaultAll: true,
+      filteredPaginationAndEmptyState: true,
       reassign: true,
       deleteBoth: true,
       pageClamp: true,

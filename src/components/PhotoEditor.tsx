@@ -356,10 +356,16 @@ export function PhotoEditor({
     transform = useRef(new DOMMatrix());
   const [temporaryEraser, setTemporaryEraser] = useState(false);
   const [nativeEraser, setNativeEraser] = useState(false);
+  const nativeEraserHeld = useRef(false);
   useEffect(() => {
-    const update = (e: Event) =>
-      setNativeEraser((e as CustomEvent).detail?.erasing === true);
-    const reset = () => setNativeEraser(false);
+    const update = (e: Event) => {
+      nativeEraserHeld.current = (e as CustomEvent).detail?.erasing === true;
+      setNativeEraser(nativeEraserHeld.current);
+    };
+    const reset = () => {
+      nativeEraserHeld.current = false;
+      setNativeEraser(false);
+    };
     window.addEventListener("codimate:stylus", update);
     window.addEventListener("blur", reset);
     return () => {
@@ -821,7 +827,7 @@ export function PhotoEditor({
     }
     if (multi.current) return;
     primaryPointer.current = e.pointerId;
-    if (!readonly && stylusErasing(e)) {
+    if (!readonly && stylusErasing(e, nativeEraserHeld.current)) {
       stylusGesture.current = true;
       stylusBase.current = photo;
       erasing.current = photo;
@@ -910,12 +916,13 @@ export function PhotoEditor({
       return;
     }
     if (primaryPointer.current !== e.pointerId) return;
+    const penEraser = stylusErasing(e, nativeEraserHeld.current);
     if (
       !readonly &&
       e.pointerType === "pen" &&
-      (stylusErasing(e) || stylusGesture.current)
+      (penEraser || stylusGesture.current)
     ) {
-      if (stylusErasing(e) || tool === "erase") {
+      if (penEraser || tool === "erase") {
         if (!erasing.current) {
           const base = stylusBase.current || photo;
           erasing.current =
@@ -928,7 +935,7 @@ export function PhotoEditor({
           clickAction.current = null;
         }
         stylusGesture.current = true;
-        setTemporaryEraser(stylusErasing(e));
+        setTemporaryEraser(penEraser);
         erase(e);
         stylusBase.current = erasing.current;
         return;

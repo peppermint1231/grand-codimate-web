@@ -7,6 +7,12 @@ import android.view.KeyEvent;
 public class MainActivity extends BridgeActivity {
   private boolean stylusKeyDown = false;
   private boolean stylusErasing = false;
+  private final java.util.Set<String> stylusEditors = new java.util.HashSet<>();
+
+  public void setStylusEditor(String id, boolean active) {
+    if (active) stylusEditors.add(id);
+    else stylusEditors.remove(id);
+  }
 
   private void publishStylus(boolean held) {
     if (stylusErasing == held) return;
@@ -34,10 +40,11 @@ public class MainActivity extends BridgeActivity {
     if (!isStylus(event)) return super.dispatchTouchEvent(event);
     boolean held = event.getActionMasked() != MotionEvent.ACTION_CANCEL && buttonHeld(event);
     publishStylus(held);
-    if (!held) return super.dispatchTouchEvent(event);
-    // Some WebView versions omit Android's stylus-only 32/64 button masks.
-    // Preserve the pen tool, coordinates and pressure, and also provide the
-    // secondary-button bit that Chromium maps to PointerEvent.buttons=2.
+    if (stylusEditors.isEmpty()) return super.dispatchTouchEvent(event);
+    int buttons = StylusButtons.forWebView(event.getButtonState(), true);
+    if (buttons == event.getButtonState()) return super.dispatchTouchEvent(event);
+    // Do not translate to BUTTON_SECONDARY: Chromium consumes that sequence
+    // as text selection before the canvas receives any Pointer Events.
     int count = event.getPointerCount();
     MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[count];
     MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[count];
@@ -47,7 +54,6 @@ public class MainActivity extends BridgeActivity {
       event.getPointerProperties(i, properties[i]);
       event.getPointerCoords(i, coords[i]);
     }
-    int buttons = (event.getButtonState() & ~(MotionEvent.BUTTON_STYLUS_PRIMARY | MotionEvent.BUTTON_STYLUS_SECONDARY)) | MotionEvent.BUTTON_SECONDARY;
     MotionEvent translated = MotionEvent.obtain(event.getDownTime(), event.getEventTime(), event.getAction(), count,
       properties, coords, event.getMetaState(), buttons, event.getXPrecision(), event.getYPrecision(),
       event.getDeviceId(), event.getEdgeFlags(), event.getSource(), event.getFlags());
@@ -59,6 +65,7 @@ public class MainActivity extends BridgeActivity {
     if (isStylus(event)) {
       if (event.getActionMasked() == MotionEvent.ACTION_HOVER_EXIT) publishStylus(false);
       else publishStylus(buttonHeld(event));
+      if (!stylusEditors.isEmpty() && (event.getActionMasked() == MotionEvent.ACTION_BUTTON_PRESS || event.getActionMasked() == MotionEvent.ACTION_BUTTON_RELEASE)) return true;
     }
     return super.dispatchGenericMotionEvent(event);
   }
@@ -67,6 +74,7 @@ public class MainActivity extends BridgeActivity {
     if (event.getKeyCode() == KeyEvent.KEYCODE_STYLUS_BUTTON_PRIMARY || event.getKeyCode() == KeyEvent.KEYCODE_STYLUS_BUTTON_SECONDARY) {
       stylusKeyDown = event.getAction() == KeyEvent.ACTION_DOWN;
       publishStylus(stylusKeyDown);
+      if (!stylusEditors.isEmpty()) return true;
     }
     return super.dispatchKeyEvent(event);
   }
@@ -82,6 +90,11 @@ public class MainActivity extends BridgeActivity {
     // without touching patient drafts in IndexedDB, localStorage or the Keystore.
     bridgeBuilder.addWebViewListener(new com.getcapacitor.WebViewListener() {
       private boolean checked=false;
+      @Override public void onPageStarted(android.webkit.WebView view) {
+        stylusEditors.clear();
+        stylusKeyDown = false;
+        stylusErasing = false;
+      }
       @Override public void onPageLoaded(android.webkit.WebView view) {
         if(checked) return;
         checked=true;

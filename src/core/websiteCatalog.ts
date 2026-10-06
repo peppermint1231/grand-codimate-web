@@ -1,3 +1,4 @@
+import { syncRecommendationLinks } from "./recommendationLinks";
 import { z } from "zod";
 import {
   catalogBook,
@@ -390,7 +391,9 @@ export function mergeHomepageCatalog(
   result.summary.review = result.catalog.products.filter((p) =>
     p.options.some((o) => o.review),
   ).length;
-  result.catalog = withBeautyRootLabels(result.catalog, beauty);
+  result.catalog = syncRecommendationLinks(
+    withBeautyRootLabels(result.catalog, beauty),
+  ).catalog;
   checkWebsiteListings(result.catalog, pages, now);
   result.catalog.websiteImport!.scope = "all";
   result.catalog.version = "홈페이지 갱신 · " + now.slice(0, 10);

@@ -238,3 +238,75 @@ it("only exposes website prices in the patient API including event metadata", ()
   }
   expect(rows.find((p) => p.book === "이벤트")?.options[0].price).toBe(123456);
 });
+
+it("does not turn recovery adjuncts, pores, or lift toning into unrelated indications", () => {
+  const matches = patientMatches(
+    product(
+      "모공흉터 지우개 패키지",
+      "",
+      "크라이오진정관리 + LED재생레이저 + 수분팩 + 리프토닝",
+    ),
+    [[{ name: "모공·작은흉터·피부결" }]],
+  );
+  const ids = matches.map((m) => m.concernId);
+  expect(ids).toContain("patient:pores");
+  expect(ids).not.toContain("patient:redness");
+  expect(ids).not.toContain("patient:acne");
+  expect(ids).not.toContain("patient:pigment");
+  expect(
+    patientMatches(
+      product("발톱무좀 레이저 프리미엄", "", "루눌라 + 재생레이저"),
+      [],
+    ),
+  ).toEqual([{ concernId: "patient:medical", answerIds: ["nail-health"] }]);
+});
+it("keeps explicit multiple indications and the clinic's approved exceptions", () => {
+  expect(
+    patientMatches(product("슈링크 + 쥬베룩", "탄력·모공 개선"), []).map(
+      (m) => m.concernId,
+    ),
+  ).toEqual(expect.arrayContaining(["patient:lifting", "patient:pores"]));
+  for (const name of ["덱세릴MD크림", "이지듀MD크림", "이지듀MD로션"]) {
+    const ids = patientMatches(product(name), []).flatMap((m) => m.answerIds);
+    expect(ids).toContain("glow");
+    expect(ids).toContain("itch-dermatitis");
+  }
+  const scar = patientMatches(product("나만의 닥터플랜 · 흉터"), []).flatMap(
+    (m) => m.answerIds,
+  );
+  expect(scar).toEqual(expect.arrayContaining(["pitted-scar", "large-scar"]));
+  for (const name of [
+    "LDM (약물 침투) 6분",
+    "오투덤 산소테라피",
+    "스킨 배리어 SOS · 얼굴",
+  ]) {
+    const matches = patientMatches(product(name), [[{ name: "큰흉터" }]]);
+    expect(matches.map((m) => m.concernId)).toEqual([
+      "patient:redness",
+      "patient:booster",
+    ]);
+    expect(matches.flatMap((m) => m.answerIds)).toEqual(
+      expect.arrayContaining(["glow", "sensitive-barrier"]),
+    );
+  }
+});
+it("keeps hair removal anatomy and a selected LDM mode in context", () => {
+  expect(
+    patientMatches(
+      product("수염전체 이중턱 5회", "멜라닌 색소를 흡수해 모근 파괴"),
+      [[{ name: "제모" }]],
+    ).map((m) => m.concernId),
+  ).toEqual(["patient:hair-removal"]);
+  const p = {
+    ...product("LDM(리프팅) 20분", "여드름·홍조·장벽·보습"),
+    webEvent: { offerDescription: "" } as any,
+  };
+  expect(patientMatches(p, []).map((m) => m.concernId)).toEqual([
+    "patient:lifting",
+  ]);
+  expect(
+    patientMatches(product("슈링크 + 리쥬란", "피부 컨디션 개선"), []).map(
+      (m) => m.concernId,
+    ),
+  ).not.toContain("patient:condition");
+});

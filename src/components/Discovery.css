@@ -1170,3 +1170,51 @@
     text-align: left;
   }
 }
+.pd-recommendation-group {
+  margin: 28px 0 36px;
+}
+.pd-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.4em;
+  margin-bottom: 8px;
+}
+.pd-group-title small {
+  font-size: 0.65em;
+  font-weight: 400;
+}
+.pd-event-group > .pd-group-title {
+  color: #9b482c;
+}
+.pd-event-badge {
+  background: #9b482c;
+  color: white;
+  border-radius: 20px;
+  padding: 5px 10px;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+.pd-event-product {
+  border-top: 3px solid #ba7e55;
+}
+.pd-visit-type,
+.pd-request-note {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+}
+.pd-visit-type select,
+.pd-booking-fields select,
+.pd-request-note textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #d7c8b9;
+  border-radius: 12px;
+  background: white;
+  color: #513c2d;
+  font: inherit;
+}
+.pd-booking-fields {
+  margin-top: 22px;
+}

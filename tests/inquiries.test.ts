@@ -1,3 +1,4 @@
+import { closureReason } from "../src/core/appointments";
 import { afterEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { Clinic } from "../server/worker";
@@ -174,20 +175,62 @@ it("requires separate consents and rejects unpublished or stale selections", asy
     ).toBeGreaterThanOrEqual(400);
   expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(0);
 });
-it("reports a remote save failure and retries the same submission without duplicating it", async () => {
+it("acknowledges durable intake without waiting for OneDrive and retries a failed backup without duplicates", async () => {
   const f = await fixture();
+  const exists = vi.spyOn(Drive.prototype, "exists");
+  exists.mockClear();
   f.put.mockRejectedValueOnce(new Error("offline"));
-  expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
-    503,
-  );
   expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
     200,
   );
+  expect(f.put).not.toHaveBeenCalled();
+  expect(exists).not.toHaveBeenCalled();
+  expect(
+    f.db.prepare("SELECT * FROM inquiries WHERE remoteId='' ").all(),
+  ).toHaveLength(1);
+  // The staff list reads the durable receipt immediately, even during an outage.
+  expect(
+    ((await (await f.request("/inquiries")).json()) as any).inquiries,
+  ).toHaveLength(1);
+  expect(f.put).not.toHaveBeenCalled();
+  await expect(f.clinic.alarm()).rejects.toThrow("offline");
+  expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
+    200,
+  );
+  await f.clinic.alarm();
   expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(1);
+  expect(
+    f.db.prepare("SELECT * FROM inquiries WHERE remoteId='' ").all(),
+  ).toHaveLength(0);
   expect(
     [...f.files.keys()].filter((x) => x.includes("/inquiries/")),
   ).toHaveLength(1);
 });
+it("does not call a stalled OneDrive upload on the patient response path", async () => {
+  const f = await fixture();
+  f.put.mockImplementation(() => new Promise(() => {}));
+  const response = await Promise.race([
+    f.request("/public/inquiries", f.input, true),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(Error("blocked on backup")), 1000),
+    ),
+  ]);
+  expect(response.status).toBe(200);
+  expect(f.put).not.toHaveBeenCalled();
+  expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(1);
+});
+it("recovers the same receipt after an isolate restart without reintroducing scrubbed patient details", async () => {
+  const f = await fixture();
+  await f.request("/public/inquiries", f.input, true);
+  await f.clinic.alarm();
+  f.db.prepare("DELETE FROM inquiries").run();
+  (f.clinic as any).inquiryEpoch = "restarted-instance";
+  expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
+    200,
+  );
+  expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(1);
+});
+
 it("converts three books to one consultation atomically, scrubs intake PII and is replay-safe", async () => {
   const f = await fixture();
   const receipt = (
@@ -244,6 +287,7 @@ it("leaves unreviewed interests in the memo and never guesses a cart price", asy
 it("automatically deletes expired intake files and rows by stable OneDrive item ID", async () => {
   const f = await fixture();
   await f.request("/public/inquiries", f.input, true);
+  await f.clinic.alarm();
   f.db.prepare("UPDATE inquiries SET expires=?").run(Date.now() - 1);
   await f.clinic.alarm();
   expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(0);
@@ -275,6 +319,7 @@ it("retries a failed consultation commit without duplicating the patient or cons
 it("restores pending inquiries from encrypted OneDrive files and retains expiry cleanup", async () => {
   const f = await fixture();
   await f.request("/public/inquiries", f.input, true);
+  await f.clinic.alarm();
   const account = f.db
     .prepare("SELECT id,value FROM secrets WHERE id LIKE 'user:%'")
     .get() as any;
@@ -430,5 +475,221 @@ it("accepts unified patient concerns and records detail labels while retaining o
   expect(entry.answerLabels).toContain("잡티·주근깨가 눈에 띄어요");
   expect(new Set(entry.selections.map((s: any) => s.book))).toEqual(
     new Set(["미용", "보험", "이벤트"]),
+  );
+});
+
+function futureSlot() {
+  const start = Date.now();
+  for (let i = 1; i < 10; i++) {
+    const date = new Date(start + i * 86400000 + 9 * 3600000)
+      .toISOString()
+      .slice(0, 10);
+    if (![0, 6].includes(new Date(date).getUTCDay()) && !closureReason(date))
+      return { requestedDate: date, requestedTime: "11:00" };
+  }
+  throw Error("date");
+}
+it("requires new visitor details and valid requested hours while accepting returning visitors without DOB", async () => {
+  const f = await fixture(),
+    slot = futureSlot();
+  for (const changes of [
+    { person: { ...f.input.person, dob: "" } },
+    { person: { ...f.input.person, address: "" } },
+    { requestedTime: "20:00" },
+    { requestedTime: "13:30" },
+  ]) {
+    expect(
+      (
+        await f.request(
+          "/public/inquiries",
+          { ...f.input, visitType: "first", ...slot, ...changes },
+          true,
+        )
+      ).status,
+    ).toBe(400);
+  }
+  const r = await f.request(
+    "/public/inquiries",
+    {
+      ...f.input,
+      visitType: "returning",
+      ...slot,
+      person: { ...f.input.person, dob: "", address: "" },
+      requests: "오후 연락 부탁합니다",
+    },
+    true,
+  );
+  expect(r.status, await r.clone().text()).toBe(200);
+  const d: any = await (await f.request("/inquiries")).json();
+  expect(d.inquiries[0]).toMatchObject({
+    visitType: "returning",
+    requests: "오후 연락 부탁합니다",
+    schedule: {
+      date: slot.requestedDate,
+      time: "11:00",
+      confirmed: false,
+      coordinatorId: "",
+    },
+  });
+});
+it("assigns another coordinator, rejects stale edits, supports cancellation, and carries schedule into a lasting consultation calendar", async () => {
+  const f = await fixture(),
+    slot = futureSlot();
+  const other = {
+    id: "other-coordinator",
+    name: "다른 상담자",
+    username: "other",
+    role: "coordinator",
+    permissionLevel: "standard",
+    active: true,
+    permissions: {},
+  };
+  f.db
+    .prepare("INSERT INTO entities VALUES(?,?,?)")
+    .run("users", other.id, await seal(other, f.key));
+  const r: any = await (
+    await f.request(
+      "/public/inquiries",
+      { ...f.input, visitType: "first", ...slot, requests: "연락 요청" },
+      true,
+    )
+  ).json();
+  const update = {
+    id: r.receipt,
+    rev: 1,
+    date: slot.requestedDate,
+    time: "11:00",
+    coordinatorId: other.id,
+    action: "confirm",
+  };
+  expect(
+    (await f.request("/inquiries/schedule", { ...update, coordinatorId: "" }))
+      .status,
+  ).toBe(400);
+  expect((await f.request("/inquiries/schedule", update)).status).toBe(200);
+  expect((await f.request("/inquiries/schedule", update)).status).toBe(409);
+  expect(
+    (
+      await f.request("/inquiries/schedule", {
+        ...update,
+        rev: 2,
+        action: "cancel",
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.request("/inquiries/convert", {
+        id: r.receipt,
+        person: f.input.person,
+        category: "미용",
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await f.request("/inquiries/schedule", {
+        ...update,
+        rev: 3,
+        action: "confirm",
+      })
+    ).status,
+  ).toBe(200);
+  const converted = await f.request("/inquiries/convert", {
+    id: r.receipt,
+    person: f.input.person,
+    category: "미용",
+  });
+  expect(converted.status, await converted.clone().text()).toBe(200);
+  const d: any = await (await f.request("/inquiries")).json();
+  expect(d.inquiries).toHaveLength(0);
+  expect(d.appointments[0]).toMatchObject({
+    coordinatorId: other.id,
+    date: slot.requestedDate,
+    time: "11:00",
+    completed: false,
+  });
+  const consultation: any = await open(
+    (
+      f.db
+        .prepare("SELECT value FROM entities WHERE section=? AND id=?")
+        .get("consultations", d.appointments[0].id) as any
+    ).value,
+    f.key,
+  );
+  expect(consultation.memo).toContain("연락 요청");
+  expect(consultation.attendance).toBe("예약");
+  consultation.status = "P";
+  f.db
+    .prepare("UPDATE entities SET value=? WHERE section=? AND id=?")
+    .run(await seal(consultation, f.key), "consultations", consultation.id);
+  f.db.prepare("UPDATE inquiries SET expires=?").run(Date.now() - 1);
+  const after: any = await (await f.request("/inquiries")).json();
+  expect(after.appointments[0].completed).toBe(true);
+});
+it("blocks custom closures on the server even when a patient has an older form open", async () => {
+  const f = await fixture(),
+    slot = futureSlot();
+  expect(
+    (
+      await f.request("/inquiries/closures", {
+        date: slot.requestedDate,
+        action: "add",
+        rev: 0,
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.request(
+        "/public/inquiries",
+        { ...f.input, visitType: "first", ...slot },
+        true,
+      )
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await f.request("/inquiries/closures", {
+        date: slot.requestedDate,
+        action: "remove",
+        rev: 0,
+      })
+    ).status,
+  ).toBe(409);
+  expect(
+    (
+      await f.request("/inquiries/closures", {
+        date: slot.requestedDate,
+        action: "remove",
+        rev: 1,
+      })
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.request(
+        "/public/inquiries",
+        { ...f.input, visitType: "first", ...slot },
+        true,
+      )
+    ).status,
+  ).toBe(200);
+});
+
+it("protects accepted pending inquiries from rebuilds and pauses new intake during staged recovery", async () => {
+  const f = await fixture();
+  expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
+    200,
+  );
+  f.put.mockRejectedValue(new Error("backup unavailable"));
+  expect((await f.request("/restore-jobs", { action: "start" })).status).toBe(
+    503,
+  );
+  expect((await f.request("/restore", {})).status).toBe(503);
+  expect(f.db.prepare("SELECT * FROM inquiries").all()).toHaveLength(1);
+  f.db.prepare("INSERT INTO restore_job VALUES(?,?)").run("active", "staged");
+  expect((await f.request("/public/inquiries", f.input, true)).status).toBe(
+    409,
   );
 });

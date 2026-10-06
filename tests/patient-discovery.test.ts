@@ -122,7 +122,7 @@ it("filters by the selected detail and avoids matching unrelated generic devices
   ).toEqual(["리팟 흑자제거"]);
   expect(recommendedProducts(products, "patient:pigment", "moles")).toEqual([]);
 });
-it("deduplicates identical offers across books without combining differing prices", () => {
+it("deduplicates identical website offers without combining differing prices", () => {
   const s = emptyState();
   s.catalogs = threeCatalogs();
   const p = product("리팟 흑자제거");
@@ -131,8 +131,14 @@ it("deduplicates identical offers across books without combining differing price
   });
   const rows = publicProducts(s).map((p) => ({
     ...p,
+    book: "이벤트" as const,
     event: undefined,
-    options: p.options.map((o) => ({ ...o, event: undefined })),
+    options: p.options.map((o) => ({
+      ...o,
+      price: 10000,
+      tax: "exclusive",
+      event: undefined,
+    })),
   }));
   expect(recommendedProducts(rows, "patient:pigment", "spots")).toHaveLength(1);
   rows[1].options[0].price = 123456;
@@ -213,4 +219,22 @@ it("does not collapse different doses or shot counts into a website offer", () =
       (p) => p.book === "미용",
     ),
   ).toBe(true);
+});
+
+it("only exposes website prices in the patient API including event metadata", () => {
+  const s = emptyState();
+  s.catalogs = threeCatalogs();
+  for (const c of s.catalogs) {
+    c.products[0].options[0].price = 123456;
+    c.products[0].options[0].regularPrice = 234567;
+  }
+  const rows = publicProducts(s);
+  for (const p of rows.filter((p) => p.book !== "이벤트")) {
+    expect(p.options[0].price).toBeNull();
+    expect(p.options[0].tax).toBe("unknown");
+    expect(p.event).toBeUndefined();
+    expect(p.options[0].event).toBeUndefined();
+    expect(JSON.stringify(p)).not.toMatch(/123456|234567/);
+  }
+  expect(rows.find((p) => p.book === "이벤트")?.options[0].price).toBe(123456);
 });

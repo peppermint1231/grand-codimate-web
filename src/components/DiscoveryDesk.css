@@ -1,0 +1,149 @@
+.inquiry-calendar .section-title {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.inquiry-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 14px 0;
+}
+.inquiry-legend > span {
+  color: white;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.inquiry-legend small {
+  width: 100%;
+  color: #687c7a;
+}
+.inquiry-calendar-scroll {
+  overflow: auto;
+  max-height: 65vh;
+}
+.inquiry-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(95px, 1fr));
+  min-width: 700px;
+  gap: 3px;
+}
+.inquiry-weekday {
+  text-align: center;
+  padding: 8px;
+  position: sticky;
+  top: 0;
+  background: #f2f6f3;
+  z-index: 1;
+}
+.inquiry-day {
+  min-height: 110px;
+  border: 1px solid #dce5e1;
+  border-radius: 6px;
+  padding: 5px;
+  overflow: hidden;
+}
+.inquiry-day.today {
+  border: 2px solid #155e59;
+}
+.inquiry-day.empty {
+  background: #f7f8f7;
+}
+.inquiry-calendar-event {
+  display: block;
+  width: 100%;
+  color: white !important;
+  margin: 5px 0;
+  padding: 7px !important;
+  text-align: left;
+  border: 0 !important;
+  border-radius: 5px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.inquiry-calendar-event strong,
+.inquiry-calendar-event small {
+  display: block;
+  color: inherit;
+}
+.inquiry-calendar-event small {
+  font-size: 11px;
+  margin-top: 4px;
+  opacity: 0.95;
+}
+.inquiry-list {
+  max-height: 65vh;
+  overflow: auto;
+}
+.inquiry-preparation {
+  scroll-margin-top: 20px;
+}
+.inquiry-preparation fieldset {
+  border: 1px solid #ccdcd6;
+  padding: 15px;
+  border-radius: 10px;
+  margin: 20px 0;
+}
+.inquiry-request-note {
+  background: #f7f1e5;
+  border-radius: 8px;
+  padding: 12px;
+}
+.inquiry-request-note p {
+  white-space: pre-wrap;
+}
+.inquiry-candidates {
+  padding: 14px;
+  background: #f1f6f3;
+  border-radius: 10px;
+  margin: 16px 0;
+}
+.inquiry-candidates button {
+  display: block;
+  text-align: left;
+  width: 100%;
+  margin: 7px 0;
+  white-space: normal;
+}
+.inquiry-candidates small {
+  display: block;
+}
+.inquiry-candidates button[aria-pressed="true"] {
+  border: 2px solid #155e59;
+  background: #dceee7;
+}
+@media (max-width: 850px) {
+  .inquiry-workspace {
+    grid-template-columns: 1fr !important;
+  }
+  .inquiry-calendar {
+    padding: 12px !important;
+  }
+  .inquiry-calendar-event {
+    min-height: 44px;
+  }
+  .inquiry-list {
+    max-height: 300px;
+  }
+}
+.inquiry-closure-label {
+  display: block;
+  color: #aa3b36;
+  font-size: 11px;
+}
+.inquiry-closure-settings {
+  margin: 16px 0;
+  padding: 10px;
+  border: 1px solid #dce5e1;
+  border-radius: 8px;
+}
+.inquiry-calendar .section-title > .button-row {
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.inquiry-calendar .section-title input[type="month"] {
+  width: 165px;
+  min-width: 130px;
+  flex: 0 1 165px;
+}

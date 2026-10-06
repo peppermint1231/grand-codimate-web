@@ -14,7 +14,7 @@ export class Inquiries {
       .toArray()[0];
     return row ? open<Inquiry>(row.value, this.key) : undefined;
   }
-  async save(record: Inquiry) {
+  async save(record: Inquiry, deferBackup = false) {
     const value = await seal(record, this.key);
     this.sql.exec(
       "INSERT OR REPLACE INTO inquiries VALUES(?,?,?,?)",
@@ -23,6 +23,9 @@ export class Inquiries {
       Date.parse(record.expiresAt),
       "",
     );
+    // The encrypted Durable Object row is the durable outbox. The clinic alarm
+    // retries its backup; all inquiry writes and alarms share the clinic queue.
+    if (deferBackup) return;
     const remote = this.drive
       ? await this.drive.put(
           `${this.root}/_codimate/inquiries/${record.id}.enc`,
@@ -43,6 +46,8 @@ export class Inquiries {
     await this.save({
       ...record,
       status: "converted",
+      rev: (record.rev || 0) + 1,
+      requests: "",
       patientId,
       consultationId,
       person: { name: "", phone: "", sex: "U", dob: "", address: "" },
@@ -83,8 +88,6 @@ export class Inquiries {
       await this.save(await open<Inquiry>(row.value, this.key));
   }
   async list() {
-    await this.purge();
-    await this.flush();
     return (
       await Promise.all(
         this.sql
@@ -94,7 +97,11 @@ export class Inquiries {
           .toArray()
           .map((r) => open<Inquiry>(r.value, this.key)),
       )
-    ).filter((record) => record.status === "new");
+    ).filter(
+      (record) =>
+        record.status !== "converted" &&
+        Date.parse(record.expiresAt) > Date.now(),
+    );
   }
   async recover(id: string) {
     if (!this.drive) return;

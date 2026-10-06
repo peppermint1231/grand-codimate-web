@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { validDay, validRequestedSlot } from "../src/core/appointments";
 import { version as appVersion } from "../package.json";
 import { patientConcerns } from "../src/core/patientDiscovery";
@@ -12,7 +13,7 @@ import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
 import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
-import { handleIntake } from "./intake";
+import { handleIntake, IntakeIndex } from "./intake";
 import {
   patientIndex,
   searchPatients,
@@ -33,6 +34,7 @@ import {
 } from "./quoteShares";
 import { validQuoteConsent } from "../src/core/quoteConsent";
 import { fetchEventSource } from "./eventCatalog";
+import { eventAvailability } from "../src/core/eventCatalog";
 import {
   jobRoles,
   permissionLevels,
@@ -150,9 +152,11 @@ export default {
 } satisfies ExportedHandler<Env>;
 export class Clinic extends DurableObject<Env> {
   private queue: Promise<unknown> = Promise.resolve();
+  private intakeReads: Promise<unknown> = Promise.resolve();
   // A newly issued form on this instance cannot have an unknown remote receipt.
   // After an isolate restart, fall back to remote recovery for safe retries.
   private inquiryEpoch = crypto.randomUUID();
+  private intakeIndex = new IntakeIndex();
   private sql: SqlStorage;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -483,12 +487,23 @@ export class Clinic extends DurableObject<Env> {
   }
   private async catalogState() {
     const state = emptyState();
-    for (const row of this.sql
-      .exec<{ value: string }>(
-        "SELECT value FROM entities WHERE section='catalogs'",
-      )
-      .toArray())
-      state.catalogs.push(await open(row.value, this.env.ENCRYPTION_KEY));
+    for await (const row of this.entityRows("section='catalogs'"))
+      state.catalogs.push(
+        lightCatalog(await open(row.value, this.env.ENCRYPTION_KEY), false),
+      );
+    const current = latestCatalogs(state);
+    state.catalogs = [];
+    for (const catalog of current) {
+      const row = this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='catalogs' AND id=?",
+          catalog.id,
+        )
+        .toArray()[0];
+      state.catalogs.push(
+        lightCatalog(await open(row.value, this.env.ENCRYPTION_KEY)),
+      );
+    }
     return state;
   }
   private async persistChanges(
@@ -700,6 +715,13 @@ export class Clinic extends DurableObject<Env> {
     const sourceRequest =
       req.method === "GET" &&
       new URL(req.url).pathname === "/api/catalog/event-source";
+    // A large external survey read must not block consultation writes. Keep
+    // survey reads mutually serialized to bound their streaming-parser memory.
+    const intakeLookup =
+      (req.method === "GET" &&
+        new URL(req.url).pathname === "/api/intake/search") ||
+      (req.method === "POST" &&
+        new URL(req.url).pathname === "/api/intake/select");
     const run = sourceRequest
       ? (async () => {
           const user = await this.user(req);
@@ -710,8 +732,11 @@ export class Clinic extends DurableObject<Env> {
           );
           return json(await fetchEventSource(new URL(req.url).searchParams));
         })()
-      : this.queue.then(() => this.route(req));
-    if (!sourceRequest) this.queue = run.catch(() => undefined);
+      : intakeLookup
+        ? this.intakeReads.then(() => this.route(req))
+        : this.queue.then(() => this.route(req));
+    if (intakeLookup) this.intakeReads = run.catch(() => undefined);
+    else if (!sourceRequest) this.queue = run.catch(() => undefined);
     try {
       return await run;
     } catch (e) {
@@ -1262,6 +1287,7 @@ export class Clinic extends DurableObject<Env> {
         await handleIntake(req, {
           user,
           drive: this.drive(),
+          index: this.intakeIndex,
           getSettings: () => this.secret("intake-settings"),
           saveSettings: (value) => this.setSecret("intake-settings", value),
           patients: async () =>
@@ -1482,7 +1508,7 @@ export class Clinic extends DurableObject<Env> {
         const patient = patients.find((p) => p.id === c.patientId);
         if (
           !c.intakeSource ||
-          !c.appointment ||
+          c.intakeSource.calendarHidden ||
           !patient ||
           patient.archived ||
           patient.mergedInto
@@ -1492,8 +1518,12 @@ export class Clinic extends DurableObject<Env> {
           id: c.id,
           patientId: c.patientId,
           name: patient.name,
-          date: c.appointment.slice(0, 10),
-          time: c.appointment.slice(11, 16),
+          rev: c.rev,
+          phone: patient.phone,
+          receivedAt: c.intakeSource.receivedAt,
+          canReassign: isAdministrator(user) || c.ownerId === user.id,
+          date: c.appointment?.slice(0, 10) || "",
+          time: c.appointment?.slice(11, 16) || "",
           coordinatorId: c.ownerId,
           completed: c.status !== "H",
           confirmed: c.attendance === "예약" || c.attendance === "방문",
@@ -1508,6 +1538,118 @@ export class Clinic extends DurableObject<Env> {
         inquiries: await (await this.inquiryStore()).list(),
         appointments,
       });
+    }
+    if (path === "/api/inquiries/manage" && req.method === "POST") {
+      ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
+      ensure(
+        !(await this.secret("restore-required")),
+        "복구를 마친 뒤 변경하세요",
+        409,
+      );
+      const b = z
+        .object({
+          id: z.string().min(1).max(100),
+          consultationId: z.string().min(1).max(120).optional(),
+          rev: z.number().int().min(0),
+          action: z.enum(["assign", "delete"]),
+          ownerId: z.string().max(100).optional(),
+        })
+        .parse(await body());
+      const store = await this.inquiryStore();
+      if (b.consultationId) {
+        await this.flush();
+        const row = this.sql
+          .exec<{ value: string }>(
+            "SELECT value FROM entities WHERE section='consultations' AND id=?",
+            b.consultationId,
+          )
+          .toArray()[0];
+        ensure(row, "상담 기록을 찾을 수 없습니다", 404);
+        const c = await open<State["consultations"][number]>(
+          row.value,
+          this.env.ENCRYPTION_KEY,
+        );
+        ensure(
+          c.intakeSource,
+          "상담요청에서 연결된 상담만 관리할 수 있습니다",
+          400,
+        );
+        if (b.action === "delete" && c.intakeSource.calendarHidden) {
+          await store.remove(c.intakeSource.receiptId);
+          return json({ ok: true });
+        }
+        ensure(
+          c.rev === b.rev,
+          "상담이 변경되었습니다. 목록을 새로고침해주세요",
+          409,
+        );
+        const before = await this.state(false, ["users"]);
+        before.consultations = [c];
+        let after: State;
+        if (b.action === "assign") {
+          after = await applyCommand(before, user, {
+            id: crypto.randomUUID(),
+            type: "consultation.owner",
+            entityId: c.id,
+            baseRev: c.rev,
+            payload: {
+              ownerId: b.ownerId,
+              reason: "상담요청 목록에서 상담자 변경",
+            },
+          });
+        } else {
+          after = structuredClone(before);
+          const next = after.consultations[0];
+          next.intakeSource!.calendarHidden = true;
+          next.rev++;
+          next.updatedAt = new Date().toISOString();
+        }
+        await this.persistChanges(
+          crypto.randomUUID(),
+          user.id,
+          await sha(JSON.stringify(b)),
+          diffStateChanges(before, after),
+        );
+        if (b.action === "delete") await store.remove(c.intakeSource.receiptId);
+      } else {
+        const record = await store.get(b.id);
+        if (!record && b.action === "delete") return json({ ok: true });
+        ensure(
+          record && record.status !== "converted",
+          "상담으로 연결되었거나 삭제된 요청입니다. 목록을 새로고침해주세요",
+          409,
+        );
+        ensure(
+          (record.rev || 0) === b.rev,
+          "요청이 변경되었습니다. 목록을 새로고침해주세요",
+          409,
+        );
+        if (b.action === "delete") await store.remove(record.id);
+        else {
+          const owner = (await this.state(false, ["users"])).users.find(
+            (u) => u.id === b.ownerId && u.active,
+          );
+          ensure(owner, "활성 직원 계정을 선택하세요");
+          await store.save({
+            ...record,
+            rev: (record.rev || 0) + 1,
+            schedule: {
+              date: record.schedule?.date || record.requestedDate || "",
+              time: record.schedule?.time || record.requestedTime || "",
+              confirmed: record.schedule?.confirmed || false,
+              coordinatorId: owner.id,
+              updatedBy: user.id,
+              updatedAt: new Date().toISOString(),
+            },
+          });
+        }
+      }
+      await this.auditAccess(
+        user.id,
+        "inquiry." + b.action,
+        b.consultationId || b.id,
+      );
+      return json({ ok: true });
     }
     if (path === "/api/inquiries/closures" && req.method === "POST") {
       ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
@@ -1628,9 +1770,18 @@ export class Clinic extends DurableObject<Env> {
       const b = await body();
       ensure(typeof b.id === "string", "접수 ID를 확인하세요");
       await this.flush();
-      const already = (await this.state()).consultations.find(
-        (c) => c.id === "inquiry-" + b.id,
-      );
+      const existing = this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='consultations' AND id=?",
+          "inquiry-" + b.id,
+        )
+        .toArray()[0];
+      const already = existing
+        ? await open<State["consultations"][number]>(
+            existing.value,
+            this.env.ENCRYPTION_KEY,
+          )
+        : undefined;
       if (already) {
         await (
           await this.inquiryStore()
@@ -1653,9 +1804,15 @@ export class Clinic extends DurableObject<Env> {
         "취소된 요청은 다시 접수한 뒤 상담을 시작하세요",
         409,
       );
-      await this.flush();
-      const before = await this.state(),
-        consultationId = "inquiry-" + inquiry.id;
+      const before = await this.state(
+        false,
+        (Object.keys(emptyState()) as (keyof State)[]).filter(
+          (section) =>
+            !["catalogs", "catalogRevisions", "events"].includes(section),
+        ),
+      );
+      before.catalogs = (await this.catalogState()).catalogs;
+      const consultationId = "inquiry-" + inquiry.id;
       let consultation = before.consultations.find(
         (c) => c.id === consultationId,
       );
@@ -1683,7 +1840,10 @@ export class Clinic extends DurableObject<Env> {
               (c) => catalogBook(c) === selection.book,
             ),
             product = catalog?.products.find(
-              (p) => p.id === selection.productId && p.active,
+              (p) =>
+                p.id === selection.productId &&
+                p.active &&
+                (!p.webEvent || eventAvailability(p.webEvent) === "current"),
             ),
             option = product?.options.find(
               (o) =>

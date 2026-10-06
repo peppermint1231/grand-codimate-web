@@ -1,8 +1,14 @@
 import { z } from "zod";
+import { JSONParser, TokenType } from "@streamparser/json";
 import { pbkdf2Async } from "@noble/hashes/pbkdf2.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { DomainError, ensure, sha } from "../src/core/domain";
-import { isAdministrator, type State, type User } from "../src/core/model";
+import {
+  allowed,
+  isAdministrator,
+  type State,
+  type User,
+} from "../src/core/model";
 import { intakeFields, type IntakeSelection } from "../src/core/intake";
 import type { Drive } from "./drive";
 
@@ -138,52 +144,225 @@ export async function decryptIntakeRecord(
   }
 }
 
-async function loadRecords(drive: Drive, folder: string) {
-  const path = `${folder}/data/records.json`;
-  const item = await drive.exists(path);
+// Cache only searchable headers, never encrypted answers or decrypted clinical data.
+export class IntakeIndex {
+  private cached?: { key: string; expires: number; records: RecordItem[] };
+  get(key: string) {
+    return this.cached?.key === key && this.cached.expires > Date.now()
+      ? this.cached.records
+      : undefined;
+  }
+  put(key: string, records: RecordItem[]) {
+    this.cached = { key, expires: Date.now() + 60_000, records };
+  }
+  clear() {
+    this.cached = undefined;
+  }
+}
+const intakeHash = (key: string) =>
+  Buffer.from(sha256(new TextEncoder().encode(key))).toString("hex");
+function intakeHeader(r: RecordItem): RecordItem {
+  const result: RecordItem = {};
+  for (const key of [
+    "recordId",
+    "id",
+    "name",
+    "phone",
+    "createdAt",
+    "updatedAt",
+    "deleted",
+    "deletedAt",
+    "iv",
+    "plain",
+  ])
+    if (r[key] !== undefined) result[key] = r[key];
+  if (r.plain === true && isObject(r.data))
+    result.data = { name: r.data.name, phone: r.data.phone };
+  return result;
+}
+
+// The legacy archive is one JSON file, so it must be scanned on the server.
+// keepStack:false releases each parsed sibling; only headers and the chosen
+// encrypted record survive. No archive-sized JSON string/object is created.
+export async function readIntakeStream(
+  response: Response,
+  selectedId?: string,
+) {
+  ensure(response.body, "초진설문지 파일을 읽을 수 없습니다", 400);
+  const reader = response.body.getReader();
+  const records = new Map<string, RecordItem>(),
+    deleted = new Set<string>();
+  let parser: JSONParser | undefined,
+    prefix = "",
+    depth = 0,
+    rootKey = "";
+  let rootValue = false,
+    envelope = false,
+    sawRecords = false;
+  let received = 0,
+    processed = 0,
+    lastToken = 0,
+    recordStart: number | undefined;
+  let count = 0;
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  const maxEntry = 12 * 1024 * 1024;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.byteLength;
+      ensure(
+        received <= 512 * 1024 * 1024,
+        "초진설문지 보관 파일을 분리해주세요 (512MB 초과)",
+        413,
+      );
+      for (let at = 0; at < value.length; at += 64 * 1024) {
+        const piece = value.subarray(at, at + 64 * 1024);
+        processed += piece.length;
+        let text = decoder.decode(piece, { stream: true });
+        if (!parser) {
+          prefix += text;
+          const first = prefix.trimStart()[0];
+          if (!first) {
+            ensure(prefix.length < 65536, "초진설문지 파일 형식을 확인하세요");
+            continue;
+          }
+          ensure(
+            first === "{" || first === "[",
+            "초진설문지 파일 형식을 확인하세요",
+          );
+          envelope = first === "{";
+          sawRecords = !envelope;
+          parser = new JSONParser({
+            paths: envelope ? ["$.records.*", "$.deletedKeys.*"] : ["$.*"],
+            keepStack: false,
+            stringBufferSize: 64 * 1024,
+          });
+          parser.onToken = ({ token, value, offset }) => {
+            lastToken = offset;
+            if (envelope && depth === 1) {
+              if (rootValue) {
+                if (rootKey === "records") {
+                  ensure(
+                    token === TokenType.LEFT_BRACKET && !sawRecords,
+                    "초진설문지 파일 형식을 확인하세요",
+                  );
+                  sawRecords = true;
+                }
+                rootValue = false;
+              } else if (token === TokenType.STRING) rootKey = String(value);
+              else if (token === TokenType.COLON) rootValue = true;
+            }
+            if (
+              token === TokenType.LEFT_BRACE ||
+              token === TokenType.LEFT_BRACKET
+            ) {
+              if (
+                depth === (envelope ? 2 : 1) &&
+                (!envelope || rootKey === "records")
+              )
+                recordStart = offset;
+              depth++;
+            } else if (
+              token === TokenType.RIGHT_BRACE ||
+              token === TokenType.RIGHT_BRACKET
+            ) {
+              depth--;
+              if (depth === (envelope ? 2 : 1)) recordStart = undefined;
+            }
+          };
+          parser.onValue = ({ value, stack }) => {
+            if (envelope && stack[1]?.key === "deletedKeys") {
+              if (typeof value === "string") deleted.add(value);
+              ensure(
+                deleted.size <= 100000,
+                "초진설문지 삭제 기록이 너무 많습니다",
+                413,
+              );
+              return;
+            }
+            ensure(
+              ++count <= 100000,
+              "초진설문지 기록이 너무 많습니다. 관리자에게 문의하세요",
+              413,
+            );
+            if (!isObject(value)) return;
+            const record = value as RecordItem;
+            const key = intakeRecordKey(record),
+              old = records.get(key);
+            if (
+              !old ||
+              string(record.updatedAt || record.createdAt) >=
+                string(old.updatedAt || old.createdAt)
+            )
+              records.set(
+                key,
+                selectedId === intakeHash(key) ? record : intakeHeader(record),
+              );
+          };
+          text = prefix;
+          prefix = "";
+        }
+        parser.write(text);
+        ensure(
+          processed - (recordStart ?? lastToken) <= maxEntry,
+          "설문지 한 건의 첨부 데이터가 너무 큽니다. 해당 설문지의 사진·서명 용량을 확인해주세요",
+          413,
+        );
+      }
+    }
+    const rest = decoder.decode();
+    if (rest) parser?.write(rest);
+    ensure(parser && sawRecords, "초진설문지 파일 형식을 확인하세요");
+    if (!parser.isEnded) parser.end();
+  } catch (error) {
+    if (error instanceof DomainError) throw error;
+    if (
+      (error as Error).name === "AbortError" ||
+      (error as Error).name === "TimeoutError"
+    )
+      throw new DomainError(
+        "초진설문지 조회가 지연되고 있습니다. 잠시 후 다시 검색해주세요",
+        503,
+      );
+    throw new DomainError("초진설문지 파일을 읽을 수 없습니다", 400);
+  } finally {
+    await reader.cancel().catch(() => {});
+  }
+  return [...records]
+    .filter(([key, r]) => !deleted.has(key) && !r.deleted && !r.deletedAt)
+    .map(([, r]) => r);
+}
+async function loadRecords(
+  drive: Drive,
+  folder: string,
+  index?: IntakeIndex,
+  selectedId?: string,
+) {
+  const item = await drive.exists(`${folder}/data/records.json`);
   ensure(
     item && !item.folder,
     "초진설문지 자료가 없습니다. 같은 OneDrive 계정인지, 설문지가 동기화됐는지 확인하세요",
     404,
   );
-  const limit = 32 * 1024 * 1024;
-  ensure(
-    item.size <= limit,
-    "초진설문지 파일이 너무 큽니다. 관리자에게 문의하세요",
-    413,
-  );
+  const cacheKey = item.eTag ? `${folder}|${item.id}|${item.eTag}` : "";
+  if (!selectedId && cacheKey) {
+    const cached = index?.get(cacheKey);
+    if (cached) return cached;
+  }
   const response = await drive.request(
     `/me/drive/items/${encodeURIComponent(item.id)}/content`,
-    { signal: AbortSignal.timeout(20000) },
+    { signal: AbortSignal.timeout(60000) },
   );
-  const reader = response.body!.getReader();
-  let size = 0,
-    text = "";
-  const decoder = new TextDecoder();
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      size += value.byteLength;
-      ensure(size <= limit, "초진설문지 파일이 너무 큽니다", 413);
-      text += decoder.decode(value, { stream: true });
-    }
-    text += decoder.decode();
-  } finally {
-    await reader.cancel();
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw new DomainError("초진설문지 파일을 읽을 수 없습니다", 400);
-  }
-  return parseIntakeRecords(payload);
+  const records = await readIntakeStream(response, selectedId);
+  if (!selectedId && cacheKey) index?.put(cacheKey, records);
+  return records;
 }
 
 export interface IntakeContext {
   user: User;
   drive: Drive;
+  index?: IntakeIndex;
   getSettings: () => Promise<Settings | undefined>;
   saveSettings: (s: Settings | null) => Promise<void>;
   patients: () => Promise<State["patients"]>;
@@ -226,6 +405,7 @@ export async function handleIntake(
     const input = await body();
     ensure(isObject(input), "요청 형식을 확인하세요");
     if (input.enabled === false) {
+      ctx.index?.clear();
       await ctx.saveSettings(null);
       await ctx.audit("intake.disconnect");
       return { ok: true };
@@ -234,11 +414,20 @@ export async function handleIntake(
     const records = await loadRecords(ctx.drive, next.folder);
     // Validate against an encrypted record without decrypting the entire archive.
     const sample = records.find((r) => r.plain !== true);
-    if (sample) await decryptIntakeRecord(sample, next.password);
+    if (sample) {
+      const id = intakeHash(intakeRecordKey(sample));
+      const full = (
+        await loadRecords(ctx.drive, next.folder, undefined, id)
+      ).find((r) => intakeHash(intakeRecordKey(r)) === id);
+      ensure(full, "초진설문지가 변경되었습니다. 다시 설정해주세요", 409);
+      await decryptIntakeRecord(full, next.password);
+    }
+    ctx.index?.clear();
     await ctx.saveSettings(next);
     await ctx.audit("intake.configure");
     return { ok: true };
   }
+  ensure(allowed(ctx.user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
   ensure(settings, "관리자가 초진설문지 연동을 먼저 설정해 주세요", 409);
   if (path === "/api/intake/search" && req.method === "GET") {
     const q = (url.searchParams.get("q") || "")
@@ -249,7 +438,15 @@ export async function handleIntake(
       q.length >= 2 && q.length <= 80 && (!/^\d+$/.test(q) || q.length >= 4),
       "이름 2자 이상 또는 전화번호 4자리 이상을 입력하세요",
     );
-    const records = (await loadRecords(ctx.drive, settings.folder))
+    const also = (url.searchParams.get("name") || "")
+      .trim()
+      .toLocaleLowerCase()
+      .replace(/\s/g, "");
+    ensure(
+      !also || (also.length >= 2 && also.length <= 80),
+      "이름을 확인하세요",
+    );
+    const records = (await loadRecords(ctx.drive, settings.folder, ctx.index))
       .filter((r) => {
         const source = r.plain === true && isObject(r.data) ? r.data : r;
         return (
@@ -257,6 +454,11 @@ export async function handleIntake(
             .toLocaleLowerCase()
             .replace(/\s/g, "")
             .includes(q) ||
+          (!!also &&
+            string(source.name)
+              .toLocaleLowerCase()
+              .replace(/\s/g, "")
+              .includes(also)) ||
           (/^\d+$/.test(q) &&
             string(source.phone).replace(/\D/g, "").includes(q))
         );
@@ -289,7 +491,12 @@ export async function handleIntake(
       .object({ id: z.string().regex(/^[a-f0-9]{64}$/) })
       .parse(await body());
     let selected: RecordItem | undefined;
-    for (const r of await loadRecords(ctx.drive, settings.folder)) {
+    for (const r of await loadRecords(
+      ctx.drive,
+      settings.folder,
+      undefined,
+      id,
+    )) {
       if ((await sha(intakeRecordKey(r))) === id) {
         selected = r;
         break;

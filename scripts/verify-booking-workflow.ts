@@ -381,6 +381,22 @@ try {
   }, photo);
   const canvas = page.getByLabel("사진 편집 캔버스");
   await expect(canvas).toBeVisible();
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("codimate:stylus", { detail: { erasing: true } }),
+    ),
+  );
+  await expect(
+    page.getByRole("button", { name: "지우개", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new CustomEvent("codimate:stylus", { detail: { erasing: false } }),
+    ),
+  );
+  await expect(
+    page.getByRole("button", { name: "펜", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.waitForTimeout(500);
   await canvas.scrollIntoViewIfNeeded();
   const b = (await canvas.boundingBox())!;
@@ -473,6 +489,7 @@ try {
     fullPage: true,
   });
   results.push({
+    nativeStylusBridge: true,
     stylusBarrelErase: true,
     releaseRestoresPen: true,
     midStrokeTransition: true,

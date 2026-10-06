@@ -186,6 +186,7 @@ export function DiscoveryDesk({
       0,
     ).getDate();
   const staff = state.users.filter((u) => u.active);
+  const colorRoster = state.users.map((u) => u.id);
   const staffName = (id: string) =>
     state.users.find((u) => u.id === id)?.name || "미배정";
   const calendarRows = [
@@ -280,10 +281,13 @@ export function DiscoveryDesk({
           </div>
         </div>
         <div className="inquiry-legend">
-          <span style={{ background: "#4a6178" }}>새 요청·미배정</span>
-          <span style={{ background: "#71717a" }}>취소</span>
+          <span className="inquiry-legend-unassigned">새 요청·미배정</span>
+          <span className="inquiry-legend-cancelled">취소</span>
           {staff.map((u) => (
-            <span key={u.id} style={{ background: coordinatorColor(u.id) }}>
+            <span
+              key={u.id}
+              style={{ background: coordinatorColor(u.id, false, colorRoster) }}
+            >
               {u.name}
             </span>
           ))}
@@ -381,7 +385,11 @@ export function DiscoveryDesk({
                           background: r.cancelled
                             ? "#71717a"
                             : r.confirmed && r.owner
-                              ? coordinatorColor(r.owner, r.completed)
+                              ? coordinatorColor(
+                                  r.owner,
+                                  r.completed,
+                                  colorRoster,
+                                )
                               : "#4a6178",
                         }}
                         onClick={() =>

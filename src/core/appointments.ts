@@ -76,11 +76,46 @@ export function patientCandidates(
     )
     .slice(0, 8);
 }
-export function coordinatorColor(id: string, completed = false) {
+// Deliberately alternate distant hues; hashing hue alone clusters staff colors.
+const coordinatorPalette = [
+  "#2563eb",
+  "#c2410c",
+  "#7c3aed",
+  "#047857",
+  "#be185d",
+  "#0e7490",
+  "#a16207",
+  "#4338ca",
+  "#b91c1c",
+  "#4d7c0f",
+  "#a21caf",
+  "#7c4a2d",
+  "#0369a1",
+  "#9f1239",
+  "#115e59",
+  "#6b21a8",
+];
+export function coordinatorColor(
+  id: string,
+  completed = false,
+  roster: readonly string[] = [],
+) {
+  // Include inactive accounts so toggling activity cannot shift existing colors.
+  // Sorting IDs makes the legend and events consistent across devices/list order.
+  const ids = [...new Set([...roster, id])].sort();
   let hash = 2166136261;
   for (const ch of id) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
-  hash = Math.imul(hash ^ (hash >>> 16), 0x85ebca6b);
-  hash = Math.imul(hash ^ (hash >>> 13), 0xc2b2ae35);
-  hash = (hash ^ (hash >>> 16)) >>> 0;
-  return `hsl(${hash % 360} 55% ${completed ? 27 : 40}%)`;
+  const index = roster.length ? ids.indexOf(id) : hash >>> 0;
+  const color = coordinatorPalette[index % coordinatorPalette.length];
+  if (!completed) return color;
+  return (
+    "#" +
+    [1, 3, 5]
+      .map((i) =>
+        Math.round(parseInt(color.slice(i, i + 2), 16) * 0.65)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")
+  );
 }

@@ -1,4 +1,6 @@
+import { StylusSettings, useStylusButton } from "./StylusSettings";
 import { stylusErasing } from "../core/stylus";
+import { native, NativeClinic } from "../lib/native";
 import { StrokeWidth } from "./StrokeWidth";
 import { useAppBack } from "../lib/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -357,22 +359,33 @@ export function PhotoEditor({
   const [temporaryEraser, setTemporaryEraser] = useState(false);
   const [nativeEraser, setNativeEraser] = useState(false);
   const nativeEraserHeld = useRef(false);
+  const stylusButtonEnabled = useStylusButton();
+  useEffect(() => {
+    if (!native || readonly || !stylusButtonEnabled) return;
+    const id = crypto.randomUUID();
+    void NativeClinic.setStylusEditor({ id, active: true }).catch(() => {});
+    return () => {
+      void NativeClinic.setStylusEditor({ id, active: false }).catch(() => {});
+    };
+  }, [readonly, stylusButtonEnabled]);
   useEffect(() => {
     const update = (e: Event) => {
-      nativeEraserHeld.current = (e as CustomEvent).detail?.erasing === true;
+      nativeEraserHeld.current =
+        stylusButtonEnabled && (e as CustomEvent).detail?.erasing === true;
       setNativeEraser(nativeEraserHeld.current);
     };
     const reset = () => {
       nativeEraserHeld.current = false;
       setNativeEraser(false);
     };
+    reset();
     window.addEventListener("codimate:stylus", update);
     window.addEventListener("blur", reset);
     return () => {
       window.removeEventListener("codimate:stylus", update);
       window.removeEventListener("blur", reset);
     };
-  }, []);
+  }, [stylusButtonEnabled]);
   const stylusGesture = useRef(false),
     stylusBase = useRef<Photo | null>(null),
     activePen = useRef<number | null>(null);
@@ -827,7 +840,11 @@ export function PhotoEditor({
     }
     if (multi.current) return;
     primaryPointer.current = e.pointerId;
-    if (!readonly && stylusErasing(e, nativeEraserHeld.current)) {
+    if (
+      !readonly &&
+      stylusButtonEnabled &&
+      stylusErasing(e, nativeEraserHeld.current)
+    ) {
       stylusGesture.current = true;
       stylusBase.current = photo;
       erasing.current = photo;
@@ -916,7 +933,8 @@ export function PhotoEditor({
       return;
     }
     if (primaryPointer.current !== e.pointerId) return;
-    const penEraser = stylusErasing(e, nativeEraserHeld.current);
+    const penEraser =
+      stylusButtonEnabled && stylusErasing(e, nativeEraserHeld.current);
     if (
       !readonly &&
       e.pointerType === "pen" &&
@@ -1205,6 +1223,7 @@ export function PhotoEditor({
       }}
     >
       {saveContainer && createPortal(saveButton, saveContainer)}
+      {!readonly && <StylusSettings />}
       <div className="editor-tools">
         {toolNames.map(([value, name, key]) => {
           const Icon = toolIcons[value];

@@ -22,13 +22,15 @@
   color: #687c7a;
 }
 .inquiry-calendar-scroll {
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  touch-action: pan-y pinch-zoom;
   max-height: 65vh;
 }
 .inquiry-month-grid {
   display: grid;
-  grid-template-columns: repeat(7, minmax(95px, 1fr));
-  min-width: 700px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  min-width: 0;
   gap: 3px;
 }
 .inquiry-weekday {
@@ -234,4 +236,98 @@
 }
 .inquiry-assignment-dialog::backdrop {
   background: rgba(15, 30, 30, 0.45);
+}
+
+.inquiry-calendar-views {
+  display: flex;
+  gap: 4px;
+}
+.inquiry-calendar-views button {
+  white-space: nowrap;
+}
+.inquiry-calendar-views button[aria-pressed="true"] {
+  background: #155e59;
+  color: white;
+}
+.inquiry-calendar-heading {
+  font-weight: 700;
+  margin: 12px 0;
+}
+.inquiry-calendar-navigation input {
+  width: 160px;
+  min-width: 120px;
+}
+.calendar-day {
+  grid-template-columns: 1fr;
+}
+.calendar-week .inquiry-day {
+  min-height: 180px;
+}
+.calendar-next {
+  animation: calendar-next 200ms ease-out;
+}
+.calendar-prev {
+  animation: calendar-prev 200ms ease-out;
+}
+@keyframes calendar-next {
+  from {
+    opacity: 0.35;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes calendar-prev {
+  from {
+    opacity: 0.35;
+    transform: translateX(-24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@media (max-width: 600px) {
+  .calendar-week {
+    grid-template-columns: 1fr;
+  }
+  .calendar-week .inquiry-day {
+    min-height: 60px;
+  }
+  .calendar-month .inquiry-day {
+    padding: 2px;
+    min-height: 76px;
+  }
+  .calendar-month .inquiry-calendar-event {
+    padding: 4px 2px !important;
+    font-size: 10px;
+  }
+  .calendar-month .inquiry-calendar-event strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .calendar-month .inquiry-calendar-event small {
+    display: none;
+  }
+  .calendar-month .inquiry-closure-label {
+    font-size: 9px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .calendar-next,
+  .calendar-prev {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .calendar-month .calendar-event-time,
+  .calendar-month .calendar-event-name {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

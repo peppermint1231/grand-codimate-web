@@ -244,6 +244,7 @@ try {
         }),
       );
     }, state);
+    await page.getByRole("button", { name: "월별", exact: true }).click();
     await page.getByLabel("캘린더 월").fill(date.slice(0, 7));
     await page
       .locator(".inquiry-calendar-event")
@@ -535,12 +536,34 @@ try {
       page.evaluate(() => (window as any).__savedPhoto.annotations.length),
     )
     .toBe(saved.annotations.length);
+  await page.getByText("S펜 설정", { exact: true }).click();
+  const stylusSetting = page.getByRole("checkbox", {
+    name: "편집기에서 S펜 버튼을 누르는 동안 지우개 사용",
+  });
+  await expect(stylusSetting).toBeChecked();
+  await stylusSetting.uncheck();
+  await nativeButton(true);
+  await expect(
+    page.getByRole("button", { name: "펜", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  assert.equal(
+    await page.evaluate(() => localStorage.getItem("codimate.stylus-button")),
+    "off",
+  );
+  await page.getByRole("button", { name: "지우개", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "지우개", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await nativeButton(false);
+  await stylusSetting.check();
+  await page.getByText("S펜 설정", { exact: true }).click();
   await page.screenshot({
     path: "artifacts/booking-stylus.png",
     fullPage: true,
   });
   results.push({
     nativeStylusBridge: true,
+    savedStylusPreference: true,
     nativeOnlyActualErase: true,
     nativeOnlyMidStrokeAndUndo: true,
     restoresSelectedTool: true,

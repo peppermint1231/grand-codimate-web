@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { withProgress, currentProgress } from "../lib/operationProgress";
+import {
+  calendarDays,
+  calendarSwipe,
+  shiftCalendar,
+  type CalendarView,
+} from "../core/consultationCalendar";
 import { allowed, age, catalogBookLabel, type State } from "../core/model";
 import type { Inquiry } from "../core/discovery";
 import type {
@@ -81,8 +87,12 @@ export function DiscoveryDesk({
     [person, setPerson] = useState(blankPerson),
     [patientId, setPatientId] = useState(""),
     [category, setCategory] = useState<"미용" | "보험">("미용");
-  const [month, setMonth] = useState(seoulToday().slice(0, 7)),
-    [date, setDate] = useState(""),
+  const [calendarView, setCalendarView] = useState<CalendarView>("week"),
+    [calendarDate, setCalendarDate] = useState(seoulToday()),
+    [slideDirection, setSlideDirection] = useState(0);
+  const swipe = useRef<{ id: number; x: number; y: number } | null>(null);
+  const ignoreCalendarClickUntil = useRef(0);
+  const [date, setDate] = useState(""),
     [time, setTime] = useState(""),
     [owner, setOwner] = useState("");
   const [intakes, setIntakes] = useState<IntakeSearchRow[]>([]),
@@ -214,18 +224,18 @@ export function DiscoveryDesk({
       setSelected(d.inquiry);
       await refresh();
     });
-  const shiftMonth = (delta: number) => {
-    const d = new Date(month + "-01T12:00:00Z");
-    d.setUTCMonth(d.getUTCMonth() + delta);
-    setMonth(d.toISOString().slice(0, 7));
+  const moveCalendar = (delta: number) => {
+    setSlideDirection(delta);
+    setCalendarDate((day) => shiftCalendar(day, calendarView, delta));
   };
-  const start = new Date(month + "-01T12:00:00Z"),
-    offset = start.getUTCDay(),
-    days = new Date(
-      start.getUTCFullYear(),
-      start.getUTCMonth() + 1,
-      0,
-    ).getDate();
+  const days = calendarDays(calendarDate, calendarView);
+  const calendarUnit = { month: "월", week: "주", day: "일" }[calendarView];
+  const calendarHeading =
+    calendarView === "month"
+      ? calendarDate.slice(0, 7).replace("-", "년 ") + "월"
+      : calendarView === "week"
+        ? `${days[0]} ~ ${days.at(-1)}`
+        : calendarDate;
   const staff = state.users.filter((u) => u.active);
   const colorRoster = state.users.map((u) => u.id);
   const staffName = (id: string) =>
@@ -385,21 +395,71 @@ export function DiscoveryDesk({
       <section className="card inquiry-calendar" aria-label="상담요청 캘린더">
         <div className="section-title">
           <h2>상담요청 캘린더</h2>
-          <div className="button-row">
-            <button aria-label="이전 달" onClick={() => shiftMonth(-1)}>
+          <div
+            className="inquiry-calendar-views"
+            role="group"
+            aria-label="캘린더 보기"
+          >
+            {(
+              [
+                ["month", "월별"],
+                ["week", "주별"],
+                ["day", "일별"],
+              ] as const
+            ).map(([view, label]) => (
+              <button
+                key={view}
+                aria-pressed={calendarView === view}
+                onClick={() => {
+                  setSlideDirection(0);
+                  setCalendarView(view);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="button-row inquiry-calendar-navigation">
+            <button
+              aria-label={`이전 ${calendarUnit}`}
+              onClick={() => moveCalendar(-1)}
+            >
               ‹
             </button>
             <input
-              aria-label="캘린더 월"
-              type="month"
-              value={month}
-              onChange={(e) => e.target.value && setMonth(e.target.value)}
+              aria-label={
+                calendarView === "month" ? "캘린더 월" : "캘린더 날짜"
+              }
+              type={calendarView === "month" ? "month" : "date"}
+              value={
+                calendarView === "month"
+                  ? calendarDate.slice(0, 7)
+                  : calendarDate
+              }
+              onChange={(e) => {
+                if (e.target.value) {
+                  setSlideDirection(0);
+                  setCalendarDate(
+                    calendarView === "month"
+                      ? e.target.value + "-01"
+                      : e.target.value,
+                  );
+                }
+              }}
             />
-            <button aria-label="다음 달" onClick={() => shiftMonth(1)}>
+            <button
+              aria-label={`다음 ${calendarUnit}`}
+              onClick={() => moveCalendar(1)}
+            >
               ›
             </button>
-            <button onClick={() => setMonth(seoulToday().slice(0, 7))}>
-              이번 달
+            <button
+              onClick={() => {
+                setSlideDirection(0);
+                setCalendarDate(seoulToday());
+              }}
+            >
+              오늘
             </button>
           </div>
         </div>
@@ -472,18 +532,60 @@ export function DiscoveryDesk({
             </div>
           ))}
         </details>
-        <div className="inquiry-calendar-scroll">
-          <div className="inquiry-month-grid">
-            {["일", "월", "화", "수", "목", "금", "토"].map((d) => (
-              <b className="inquiry-weekday" key={d}>
-                {d}
-              </b>
-            ))}
-            {Array.from({ length: offset }, (_, i) => (
-              <div className="inquiry-day empty" key={"empty" + i} />
-            ))}
-            {Array.from({ length: days }, (_, i) => {
-              const day = month + "-" + String(i + 1).padStart(2, "0");
+        <p className="inquiry-calendar-heading" aria-live="polite">
+          {calendarHeading}
+        </p>
+        <div
+          className="inquiry-calendar-scroll"
+          onPointerDown={(e) => {
+            if (e.pointerType !== "touch") return;
+            if (!e.isPrimary) {
+              swipe.current = null;
+              return;
+            }
+            swipe.current = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          }}
+          onPointerMove={(e) => {
+            const s = swipe.current;
+            if (
+              s?.id === e.pointerId &&
+              calendarSwipe(e.clientX - s.x, e.clientY - s.y)
+            )
+              e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerUp={(e) => {
+            const s = swipe.current;
+            swipe.current = null;
+            if (!s || s.id !== e.pointerId) return;
+            const direction = calendarSwipe(e.clientX - s.x, e.clientY - s.y);
+            if (direction) {
+              ignoreCalendarClickUntil.current = Date.now() + 350;
+              moveCalendar(direction);
+            }
+          }}
+          onPointerCancel={() => {
+            swipe.current = null;
+          }}
+          onClickCapture={(e) => {
+            if (Date.now() < ignoreCalendarClickUntil.current) {
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }}
+        >
+          <div
+            key={calendarView + calendarDate}
+            className={`inquiry-month-grid calendar-${calendarView} ${slideDirection > 0 ? "calendar-next" : slideDirection < 0 ? "calendar-prev" : ""}`}
+          >
+            {calendarView === "month" &&
+              ["일", "월", "화", "수", "목", "금", "토"].map((d) => (
+                <b className="inquiry-weekday" key={d}>
+                  {d}
+                </b>
+              ))}
+            {days.map((day, i) => {
+              if (!day)
+                return <div className="inquiry-day empty" key={"empty" + i} />;
               return (
                 <div
                   key={day}
@@ -491,7 +593,11 @@ export function DiscoveryDesk({
                     "inquiry-day" + (day === seoulToday() ? " today" : "")
                   }
                 >
-                  <b>{i + 1}</b>
+                  <b>
+                    {calendarView === "month"
+                      ? Number(day.slice(-2))
+                      : `${Number(day.slice(5, 7))}/${Number(day.slice(-2))} (${["일", "월", "화", "수", "목", "금", "토"][new Date(day + "T12:00:00Z").getUTCDay()]})`}
+                  </b>
                   {closureReason(day, closures.dates) && (
                     <small className="inquiry-closure-label">
                       {closureReason(day, closures.dates)}
@@ -527,7 +633,8 @@ export function DiscoveryDesk({
                         }
                       >
                         <strong>
-                          {r.time} {r.name}
+                          <span className="calendar-event-time">{r.time}</span>{" "}
+                          <span className="calendar-event-name">{r.name}</span>
                         </strong>
                         <small>
                           {r.cancelled

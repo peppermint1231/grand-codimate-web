@@ -1,7 +1,7 @@
 {
-  "version": "0.18.3",
-  "versionCode": 73,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.3.apk",
-  "sha256": "e2e0437af80843ea87e4c2a420a3192f550af6aaec6f49ae98b0d5f3ad71736f",
-  "notes": "S펜 버튼 상태를 실제 주석 지우기에 연결하고, 상담요청에 전체·배정·미배정·완료·취소 필터를 추가했습니다."
+  "version": "0.18.4",
+  "versionCode": 74,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.4.apk",
+  "sha256": "4277815703be9fead0c0b140c65450c6075d01aa1c8d685d7813f94935497d5c",
+  "notes": "S펜 WebView 입력 수정과 기기 설정 안내, 월·주·일 스와이프 캘린더, 주목적 기반 추천 및 공유 폴더 분류를 적용했습니다."
 }

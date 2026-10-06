@@ -3,7 +3,9 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
 export const native = Capacitor.isNativePlatform();
 export const NativeClinic = registerPlugin<{
+  openDeviceSettings(): Promise<void>;
   appInfo(): Promise<{ version: string; versionCode: number }>;
+  setStylusEditor(o: { id: string; active: boolean }): Promise<void>;
   seal(o: { value: string }): Promise<{ value: string }>;
   open(o: { value: string }): Promise<{ value: string }>;
   print(): Promise<void>;

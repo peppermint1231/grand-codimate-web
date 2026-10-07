@@ -91,6 +91,8 @@ export interface Source {
 }
 export interface Option {
   packageSessionCount?: number;
+  /** Explicit option-only schedule or composition, overriding the common schedule. */
+  packageComposition?: string;
   offering?: import("./offerings").Offering;
   /** Health-insurance claim amount for reference, never part of patient payment. */
   healthInsuranceAmount?: number;
@@ -107,6 +109,7 @@ export interface Option {
 }
 export interface Product extends Base {
   packageBySession?: boolean;
+  packageAllowGaps?: boolean;
   descriptionOrigin?: "generated";
   packageScheduleReview?: string;
   insurance?: import("./insuranceCatalog").InsuranceInfo;

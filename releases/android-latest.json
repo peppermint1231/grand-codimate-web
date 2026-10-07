@@ -1,7 +1,7 @@
 {
-  "version": "0.18.5",
-  "versionCode": 75,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.5.apk",
-  "sha256": "dd8847b77d555b325ca417b58ac8568745decd16a4316ad3817f54b325c14734",
-  "notes": "추천기에 단가표 상품 설명을 표시하고 중복 부가세 안내를 제거했습니다. 홈페이지 갱신 시 직접 작성한 설명을 유지합니다."
+  "version": "0.18.6",
+  "versionCode": 76,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.6.apk",
+  "sha256": "0845008ab244d9b518048b90d9a171bf3be9c9cdf7a6e58aa020450cef2fde39",
+  "notes": "옵션별 패키지 구성, 월별 관리와 간격 진료 일정을 지원합니다. 확정된 상품 구성과 통합 옵션을 반영했습니다."
 }

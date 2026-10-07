@@ -144,7 +144,7 @@ it("supports three subfolder levels and rejects cycles, excessive depth and miss
     }),
   ).toThrow("폴더");
 });
-it("public projection hides drafts, internal notes, evidence and unverified prices", () => {
+it("public projection includes patient descriptions and hides drafts, internal composition, evidence and unverified prices", () => {
   const s = emptyState();
   s.catalogs = threeCatalogs();
   s.catalogs[1].products[0].active = false;
@@ -152,6 +152,7 @@ it("public projection hides drafts, internal notes, evidence and unverified pric
   const publicRows = publicProducts(s);
   expect(publicRows).toHaveLength(2);
   expect(publicRows[1].options[0].price).toBeNull();
+  expect(publicRows[0].description).toBe("환자에게 안내할 상품 설명");
   const json = JSON.stringify(publicRows);
   for (const text of ["내부", "비공개", "원본 근거", "sources", "issues"])
     expect(json).not.toContain(text);

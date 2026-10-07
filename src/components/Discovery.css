@@ -1218,3 +1218,32 @@
 .pd-booking-fields {
   margin-top: 22px;
 }
+
+.pd-description .pd-product-copy { white-space: pre-line; overflow-wrap: anywhere; }
+.pd-copy-collapsed { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.pd-copy-toggle { background: transparent; color: var(--pd-ink); border: 0; padding: 4px 0; text-decoration: underline; font-size: .77em; min-height: 36px; }
+
+.pd-product h3.pd-product-title {
+  font-family: inherit;
+  font-size: 1.28em;
+  font-weight: 800;
+  color: #30251d;
+  line-height: 1.5;
+  letter-spacing: -.025em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  margin: 12px 0;
+}
+.pd-copy-label { font-size: .8em; font-weight: 700; color: #665244; }
+.pd-option-group { border: 1px solid #e3d5c5; border-radius: 10px; margin: 10px 0; overflow: hidden; }
+.pd-option-group .pd-option { border: 0; border-radius: 0; margin: 0; width: 100%; }
+.pd-package-composition { border-top: 1px solid #e3d5c5; padding: 0 12px; background: #faf6ee; }
+.pd-package-composition summary { min-height: 44px; display: flex; align-items: center; font-weight: 700; cursor: pointer; }
+.pd-package-composition p { white-space: pre-line; font-size: .9em; line-height: 1.8; color: #49392e; overflow-wrap: anywhere; }
+.pd-product .pd-product-copy { font-size: .92em; color: #625247; line-height: 1.85; }
+.pd-package-help { font-size: .85em; color: #625247; line-height: 1.7; }
+.pd-schedule ol { list-style: none; padding: 0; margin: 8px 0; }
+.pd-schedule li { display: grid; grid-template-columns: 55px minmax(0,1fr); gap: 10px; padding: 12px 0; border-bottom: 1px solid #eadfd1; font-size: .88em; line-height: 1.8; }
+.pd-schedule li strong { color: #775135; }
+.pd-schedule li span { color: #49392e; overflow-wrap: anywhere; }
+.pd-schedule > small { display: block; font-size: .76em; line-height: 1.6; color: #736253; margin: 12px 0; }

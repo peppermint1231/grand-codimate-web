@@ -15,3 +15,7 @@ S펜: Chromium의 StylusTextSelector는 native button=2/32의 펜 DOWN을 텍스
 검증: 전체 439개 테스트(68개 파일), Android native 버튼 테스트 2개. 1440/768/390px에서 실제 CDP 터치 스와이프·세로 스크롤 구분, 월/주/일 전환, 상담 열기, 요청 상태 필터·10건 페이지·담당자 변경·삭제와 예약 전환을 확인했습니다. 네이티브 지우개 신호+일반 pen 좌표로 실제 주석 삭제, 접촉 중 버튼 전환, 실행취소, 작성자 보호, 선택 도구 복귀, S펜 설정 저장을 브라우저에서 확인했습니다. 실제 Galaxy Tab은 없어 OS 에어 액션 우선순위와 물리 S펜 동작은 실기기 검증이 필요합니다. 병렬 Android 빌드 중 기존 암호화 업로드 테스트 1개가 5초 제한에 걸렸으나, 빌드 종료 후 워커 2개로 전체 439개가 통과했습니다.
 
 최종 릴리스 APK: 버전 코드 74, 18,411,931바이트, 내장 웹 파일 48개 일치, v2 서명 확인. SHA-256: `4277815703be9fead0c0b140c65450c6075d01aa1c8d685d7813f94935497d5c`.
+
+운영 반영(2026-10-06): [PR #19](https://github.com/peppermint1231/grand-codimate-web/pull/19), main 병합 `c9dbeed0a7bce16766b2f546a280c145f737e179`. PR·브랜치·main 검사 및 Cloudflare Workers Builds 성공. 운영 웹 파일 48개와 APK 다운로드 해시가 로컬 릴리스와 일치합니다. 실제 직원 캘린더의 주별 기본값·월/주/일 전환과 페이지 오류 없음을 확인했습니다.
+
+기존 게시본 ID·리비전·전체 내용을 재조회해 점검 스냅샷과 동일함을 확인한 뒤 `catalog.folders.commit`으로 새 버전을 저장했습니다. 이력 복원 가능한 기존 게시본은 유지합니다. 미용: `94a164f8-c311-4c8b-84c6-3b890a4baf09` (131링크 / 176상품), 보험: `c487fceb-cb96-417a-9a79-393ee990ebdc` (6링크 / 10상품), 홈페이지: `43736718-2e92-471b-956b-8f11774c7fb3` (124링크 / 194상품). 저장 후 각 전체 상품과 폴더가 검증본과 같음을 확인했습니다. 실제 공개 추천기 응답 926개의 고민·세부 답변 연결이 점검 결과와 모두 일치하며, 미용·보험 가격 비공개도 확인했습니다. 기록: `artifacts/recommendation-links-applied.json`, `artifacts/recommendations-live-0184.json`, `artifacts/calendar-live-0184.json`, `artifacts/release-0184-assets.json`.

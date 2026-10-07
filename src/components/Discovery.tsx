@@ -1,3 +1,5 @@
+import { PackageComposition } from "./PackageComposition";
+import { ProductDescription } from "./ProductDescription";
 import "./Discovery.css";
 import {
   patientConcerns,
@@ -621,12 +623,13 @@ export function Discovery() {
                                   </span>
                                 )}
                               </div>
-                              <h3>{p.name}</h3>
-                              <p className="pd-product-copy">
-                                {answer
-                                  ? `‘${answer.label}’ 선택에 연결된 상담 후보예요.`
-                                  : `${concern.name} 고민으로 상담할 수 있는 시술이에요.`}
-                              </p>
+                              <h3 className="pd-product-title">{p.name}</h3>
+                              {p.options.some((o) => o.packageComposition) && (
+                                <span className="pd-copy-label">
+                                  공통 상품 설명
+                                </span>
+                              )}
+                              <ProductDescription description={p.description} />
                               {p.event?.period && (
                                 <p className="pd-period">
                                   안내 기간 {p.event.period}
@@ -655,7 +658,10 @@ export function Discovery() {
                                 <details
                                   className="pd-options"
                                   open={
-                                    p.options.length === 1 ? true : undefined
+                                    p.options.length === 1 ||
+                                    p.options.some((o) => o.packageComposition)
+                                      ? true
+                                      : undefined
                                   }
                                 >
                                   <summary>
@@ -664,6 +670,15 @@ export function Discovery() {
                                       : "시술 구성 보기"}{" "}
                                     <ChevronRight size={18} />
                                   </summary>
+                                  {p.options.some(
+                                    (o) => o.packageComposition,
+                                  ) && (
+                                    <p className="pd-package-help">
+                                      회차별 구성을 비교한 뒤 원하는 옵션을
+                                      담아주세요. 선택 후 상담에서 최종 결정할
+                                      수 있습니다.
+                                    </p>
+                                  )}
                                   {p.options.map((o) => {
                                     const picked = selected.some(
                                       (s) =>
@@ -672,52 +687,66 @@ export function Discovery() {
                                         s.optionId === o.id,
                                     );
                                     return (
-                                      <button
+                                      <div
                                         key={o.id}
-                                        aria-pressed={picked}
-                                        className={
-                                          "pd-option" +
-                                          (picked ? " selected" : "")
-                                        }
-                                        onClick={() => toggle(p, o.id)}
+                                        className="pd-option-group"
                                       >
-                                        <span>
-                                          <strong>{o.label}</strong>
-                                          <small>{o.unit}</small>
-                                        </span>
-                                        <span className="pd-option-price">
-                                          {p.book !== "이벤트" ? (
-                                            "맞춤 상담 후 안내"
-                                          ) : o.price === null ? (
-                                            "맞춤 상담 후 안내"
-                                          ) : o.event ? (
-                                            <EventPrice {...o.event} />
-                                          ) : (
-                                            money(o.price)
-                                          )}
-                                          <small>
-                                            {p.book !== "이벤트"
-                                              ? ""
-                                              : o.tax === "inclusive"
-                                                ? "부가세 포함"
-                                                : o.tax === "exclusive"
-                                                  ? "부가세 별도"
-                                                  : o.tax === "exempt"
-                                                    ? "면세"
-                                                    : ""}
-                                          </small>
-                                        </span>
-                                        <span className="pd-pick-label">
-                                          {picked ? (
-                                            <>
-                                              <Check size={16} />
-                                              담았어요
-                                            </>
-                                          ) : (
-                                            "관심 담기"
-                                          )}
-                                        </span>
-                                      </button>
+                                        <button
+                                          aria-pressed={picked}
+                                          className={
+                                            "pd-option" +
+                                            (picked ? " selected" : "")
+                                          }
+                                          onClick={() => toggle(p, o.id)}
+                                        >
+                                          <span>
+                                            <strong>{o.label}</strong>
+                                            <small>{o.unit}</small>
+                                          </span>
+                                          <span className="pd-option-price">
+                                            {p.book !== "이벤트" ? (
+                                              "맞춤 상담 후 안내"
+                                            ) : o.price === null ? (
+                                              "맞춤 상담 후 안내"
+                                            ) : o.event ? (
+                                              <EventPrice {...o.event} />
+                                            ) : (
+                                              money(o.price)
+                                            )}
+                                            <small>
+                                              {p.book !== "이벤트"
+                                                ? ""
+                                                : o.tax === "inclusive"
+                                                  ? "부가세 포함"
+                                                  : o.tax === "exclusive"
+                                                    ? "부가세 별도"
+                                                    : o.tax === "exempt"
+                                                      ? "면세"
+                                                      : ""}
+                                            </small>
+                                          </span>
+                                          <span className="pd-pick-label">
+                                            {picked ? (
+                                              <>
+                                                <Check size={16} />
+                                                담았어요
+                                              </>
+                                            ) : (
+                                              "관심 담기"
+                                            )}
+                                          </span>
+                                        </button>
+                                        {o.packageComposition && (
+                                          <details className="pd-package-composition">
+                                            <summary>
+                                              {o.label} 패키지 구성 보기
+                                            </summary>
+                                            <PackageComposition
+                                              text={o.packageComposition}
+                                            />
+                                          </details>
+                                        )}
+                                      </div>
                                     );
                                   })}
                                 </details>

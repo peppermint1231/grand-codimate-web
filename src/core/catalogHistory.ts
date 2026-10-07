@@ -90,7 +90,8 @@ export function catalogChanges(
       old.composition !== p.composition ||
       old.packageBySession !== p.packageBySession ||
       old.packageAllowGaps !== p.packageAllowGaps ||
-      old.category !== p.category
+      old.category !== p.category ||
+      old.productType !== p.productType
     )
       changes.push(`상품 설명·구성·분류 수정: ${p.name}`);
     for (const o of old.options)
@@ -102,6 +103,8 @@ export function catalogChanges(
         changes.push(`옵션 추가: ${p.name} / ${o.label}`);
         continue;
       }
+      if (JSON.stringify(prev.packagePlan) !== JSON.stringify(o.packagePlan))
+        changes.push(`패키지 블록·가격 구성 변경: ${p.name} / ${o.label}`);
       if (prev.packageComposition !== o.packageComposition)
         changes.push(`옵션별 구성 변경: ${p.name} / ${o.label}`);
       if (prev.packageSessionCount !== o.packageSessionCount)

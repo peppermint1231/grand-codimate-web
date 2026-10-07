@@ -1,3 +1,6 @@
+import { AddressSearch } from "./AddressSearch";
+import { BookingPicker } from "./BookingPicker";
+import { formatMobilePhone, formatBirthDate } from "../core/phone";
 import { PackageComposition } from "./PackageComposition";
 import { ProductDescription } from "./ProductDescription";
 import "./Discovery.css";
@@ -36,11 +39,7 @@ import {
 } from "lucide-react";
 import { api } from "../lib/api";
 import { catalogBookLabel, money, type State } from "../core/model";
-import {
-  consultationTimes,
-  seoulToday,
-  closureReason,
-} from "../core/appointments";
+import { validRequestedSlot } from "../core/appointments";
 import type { Inquiry, PublicProduct } from "../core/discovery";
 const blankPerson = () => ({
   name: "",
@@ -209,6 +208,29 @@ export function Discovery() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (busy) return;
+    if (
+      !validRequestedSlot(requestedDate, requestedTime, Date.now(), closedDates)
+    ) {
+      setError("달력에서 상담 희망일과 시간을 선택해주세요.");
+      return;
+    }
+    if (
+      visitType === "first" &&
+      (!person.address || !["M", "F"].includes(person.sex) || !person.dob)
+    ) {
+      setError("처음 방문은 성별·생년월일·주소 검색을 모두 완료해주세요.");
+      return;
+    }
+    if (
+      visitType === "first" &&
+      (!/^\d{4}-\d{2}-\d{2}$/.test(person.dob) ||
+        !Number.isFinite(Date.parse(person.dob)) ||
+        new Date(person.dob).toISOString().slice(0, 10) !== person.dob ||
+        person.dob > new Date().toISOString().slice(0, 10))
+    ) {
+      setError("생년월일을 YYYY-MM-DD 형식의 올바른 날짜로 입력해주세요.");
+      return;
+    }
     const current = epoch.current;
     setBusy(true);
     setError("");
@@ -227,7 +249,10 @@ export function Discovery() {
         method: "POST",
         body: JSON.stringify({
           token,
-          person,
+          person:
+            visitType === "returning"
+              ? { ...blankPerson(), name: person.name, phone: person.phone }
+              : person,
           visitType,
           requestedDate,
           requestedTime,
@@ -784,16 +809,6 @@ export function Discovery() {
                     )}
                   </div>
                 )}
-                <div className="pd-bottom">
-                  <div>
-                    <strong>관심 시술 {selected.length}개</strong>
-                    <small>고민만으로도 상담할 수 있어요.</small>
-                  </div>
-                  <button onClick={() => go(0)}>다른 고민도 찾기</button>
-                  <button className="pd-primary" onClick={() => go(3)}>
-                    상담으로 이어가기 <ChevronRight size={19} />
-                  </button>
-                </div>
               </section>
             )}
             {step === 3 && (
@@ -876,102 +891,82 @@ export function Discovery() {
                       required
                       type="tel"
                       autoComplete="off"
-                      maxLength={15}
+                      inputMode="numeric"
+                      maxLength={13}
                       placeholder="010-0000-0000"
                       value={person.phone}
                       onChange={(e) =>
-                        setPerson({ ...person, phone: e.target.value })
+                        setPerson({
+                          ...person,
+                          phone: formatMobilePhone(e.target.value),
+                        })
                       }
                     />
                   </label>
                 </div>
-                <div className="pd-optional">
-                  <div className="pd-fields">
-                    <label>
-                      성별
-                      <select
-                        value={person.sex}
-                        onChange={(e) =>
-                          setPerson({
-                            ...person,
-                            sex: e.target.value as typeof person.sex,
-                          })
-                        }
-                      >
-                        <option value="U">선택 안 함</option>
-                        <option value="F">여성</option>
-                        <option value="M">남성</option>
-                      </select>
-                    </label>
-                    <label>
-                      생년월일 {visitType === "first" && <span>필수</span>}
-                      <input
-                        required={visitType === "first"}
-                        type="date"
-                        max={new Date().toISOString().slice(0, 10)}
-                        value={person.dob}
-                        onChange={(e) =>
-                          setPerson({ ...person, dob: e.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      주소 · 동까지 {visitType === "first" && <span>필수</span>}
-                      <input
-                        required={visitType === "first"}
-                        placeholder="예: 춘천시 퇴계동"
-                        autoComplete="off"
-                        maxLength={160}
-                        value={person.address}
-                        onChange={(e) =>
-                          setPerson({ ...person, address: e.target.value })
-                        }
-                      />
-                    </label>
+                {visitType === "first" && (
+                  <div className="pd-optional">
+                    <div className="pd-fields">
+                      <label>
+                        성별 <span>필수</span>
+                        <select
+                          aria-label="성별 필수"
+                          required
+                          value={person.sex === "U" ? "" : person.sex}
+                          onChange={(e) =>
+                            setPerson({
+                              ...person,
+                              sex: e.target.value as typeof person.sex,
+                            })
+                          }
+                        >
+                          <option value="">선택해주세요</option>
+                          <option value="F">여성</option>
+                          <option value="M">남성</option>
+                        </select>
+                      </label>
+                      <label>
+                        생년월일 {visitType === "first" && <span>필수</span>}
+                        <input
+                          required={visitType === "first"}
+                          type="text"
+                          inputMode="numeric"
+                          placeholder="YYYY-MM-DD (예: 1985-03-12)"
+                          pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}"
+                          maxLength={10}
+                          value={person.dob}
+                          onChange={(e) =>
+                            setPerson({
+                              ...person,
+                              dob: formatBirthDate(e.target.value),
+                            })
+                          }
+                        />
+                      </label>
+                      <div className="pd-address-field">
+                        <strong>
+                          주소 · 동/읍/면 <small>필수</small>
+                        </strong>
+                        <AddressSearch
+                          searchOnly
+                          value={person.address}
+                          onChange={(address) =>
+                            setPerson({ ...person, address })
+                          }
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="pd-fields pd-booking-fields">
-                  <label>
-                    상담 희망일 <span>필수</span>
-                    <input
-                      type="date"
-                      required
-                      min={seoulToday()}
-                      max={seoulToday(Date.now() + 90 * 86400000)}
-                      value={requestedDate}
-                      onChange={(e) => {
-                        setRequestedDate(e.target.value);
-                        setRequestedTime("");
-                      }}
-                    />
-                  </label>
-                  <label>
-                    상담 희망 시간 <span>필수</span>
-                    <select
-                      required
-                      value={requestedTime}
-                      onChange={(e) => setRequestedTime(e.target.value)}
-                    >
-                      <option value="">시간 선택</option>
-                      {consultationTimes(
-                        requestedDate,
-                        Date.now(),
-                        closedDates,
-                      ).map((t) => (
-                        <option key={t}>{t}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                {requestedDate &&
-                  !consultationTimes(requestedDate, Date.now(), closedDates)
-                    .length && (
-                    <p role="status">
-                      {closureReason(requestedDate, closedDates) ||
-                        "선택 가능한 시간이 없어요."}{" "}
-                      다른 날짜를 골라주세요.
-                    </p>
-                  )}
+                )}
+                <BookingPicker
+                  date={requestedDate}
+                  time={requestedTime}
+                  closedDates={closedDates}
+                  onChange={(date, time) => {
+                    setRequestedDate(date);
+                    setRequestedTime(time);
+                  }}
+                />
                 <p className="pd-muted">
                   평일 10:00~19:00(13:00~14:00 제외), 토요일 09:00~14:00.
                   일요일·공휴일은 휴진입니다. 희망 일정이며 병원에서 연락드린 뒤
@@ -1039,6 +1034,53 @@ export function Discovery() {
             )}
           </>
         )}
+        {!receipt &&
+          !loading &&
+          step < 3 &&
+          (selected.length > 0 || step === 2) && (
+            <div className="pd-bottom pd-cart-floating">
+              <details>
+                <summary>관심 시술 {selected.length}개 · 목록 보기</summary>
+                <div className="pd-cart-items">
+                  {selected.map((item) => {
+                    const p = products.find(
+                        (p) =>
+                          p.id === item.productId &&
+                          p.catalogVersion === item.catalogVersion,
+                      ),
+                      o = p?.options.find((o) => o.id === item.optionId);
+                    return (
+                      <div
+                        key={
+                          item.catalogVersion + item.productId + item.optionId
+                        }
+                      >
+                        <span>
+                          {p?.name} · {o?.label}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={(p?.name || "") + " 관심 목록에서 삭제"}
+                          onClick={() =>
+                            setSelected(selected.filter((s) => s !== item))
+                          }
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {!selected.length && <p>고민만으로도 상담할 수 있어요.</p>}
+                </div>
+              </details>
+              {step !== 0 && (
+                <button onClick={() => go(0)}>다른 고민도 찾기</button>
+              )}
+              <button className="pd-primary" onClick={() => go(3)}>
+                상담으로 이어가기 <ChevronRight size={19} />
+              </button>
+            </div>
+          )}
         <footer className="pd-footer">
           <b>그랜드아름다운의원</b>
           <span>고민을 듣고, 나에게 맞는 방향을 함께 찾습니다.</span>

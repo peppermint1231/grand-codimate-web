@@ -1,3 +1,4 @@
+import { packagePlanSchema } from "./packageBuilder";
 import { parsePackageSchedule, optionSessionCount } from "./packageSchedule";
 import { gradeBenefitsSchema, reconcileGradeBenefits } from "./gradeBenefits";
 import {
@@ -598,6 +599,8 @@ export function validateCatalog(c: Catalog, posting = false) {
         "이벤트 원문 정보를 확인하세요",
       );
     }
+    if (p.productType !== undefined)
+      z.enum(["single", "package", "membership", "block"]).parse(p.productType);
     if (p.packageBySession !== undefined) z.boolean().parse(p.packageBySession);
     if (p.packageAllowGaps !== undefined) z.boolean().parse(p.packageAllowGaps);
     if (p.descriptionOrigin !== undefined)
@@ -614,6 +617,13 @@ export function validateCatalog(c: Catalog, posting = false) {
       );
     ensure(Array.isArray(p.options), "옵션이 필요합니다");
     for (const o of p.options) {
+      if (o.packagePlan) {
+        const checked = packagePlanSchema.safeParse(o.packagePlan);
+        ensure(
+          checked.success,
+          `${p.name} · ${o.label}: ${checked.success ? "" : checked.error.issues.map((i) => i.message).join(" / ")}`,
+        );
+      }
       if (o.packageSessionCount !== undefined)
         z.number().int().min(1).max(1000).parse(o.packageSessionCount);
       if (o.packageComposition !== undefined)

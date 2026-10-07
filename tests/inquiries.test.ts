@@ -493,6 +493,8 @@ it("requires new visitor details and valid requested hours while accepting retur
   const f = await fixture(),
     slot = futureSlot();
   for (const changes of [
+    { person: { ...f.input.person, sex: "U" } },
+    { person: { ...f.input.person, dob: "1985-02-30" } },
     { person: { ...f.input.person, dob: "" } },
     { person: { ...f.input.person, address: "" } },
     { requestedTime: "20:00" },

@@ -60,8 +60,10 @@ function loadPostcode() {
 export function AddressSearch({
   value,
   onChange,
+  searchOnly = false,
 }: {
   value: string;
+  searchOnly?: boolean;
   onChange: (s: string) => void;
 }) {
   const [opened, setOpened] = useState(false),
@@ -99,8 +101,14 @@ export function AddressSearch({
         <input
           aria-label="주소 (동까지)"
           required
+          readOnly={searchOnly}
+          onClick={() => searchOnly && setOpened(true)}
           value={value}
-          placeholder="주소 검색 또는 동·읍·면 입력"
+          placeholder={
+            searchOnly
+              ? "주소 검색으로 동·읍·면 선택"
+              : "주소 검색 또는 동·읍·면 입력"
+          }
           onChange={(e) => onChange(e.target.value)}
         />
         <button type="button" onClick={() => setOpened(true)}>
@@ -133,7 +141,13 @@ export function AddressSearch({
               {!ready && !error && (
                 <p role="status">주소 검색을 불러오는 중…</p>
               )}
-              {error && <p role="alert">{error}</p>}
+              {error && (
+                <p role="alert">
+                  {searchOnly
+                    ? "주소 검색 연결을 확인한 뒤 닫고 다시 시도해주세요."
+                    : error}
+                </p>
+              )}
               <div
                 ref={ref}
                 style={{ height: "min(65vh, 520px)", minHeight: 320 }}

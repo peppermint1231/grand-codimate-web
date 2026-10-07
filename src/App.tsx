@@ -1,3 +1,7 @@
+import { productType,productTypeLabels,type ProductType } from "./core/productType";
+import { PackageBuilder } from "./components/PackageBuilder";
+import { packageOption, type PackagePlan } from "./core/packageBuilder";
+import { ProductWizard } from "./components/ProductWizard";
 import { optionPackageComposition, optionSessionCount } from "./core/packageSchedule";
 import { GradeSettings } from "./components/GradeSettings";
 import { ConsultationOwner } from "./components/ConsultationOwner";
@@ -5210,6 +5214,9 @@ function CatalogView({
   const [bulkIds, setBulkIds] = useState<string[]>([]),
     [paste, setPaste] = useState("");
   const [deletingProducts, setDeletingProducts] = useState<string[]>([]);
+  const [creatingProduct, setCreatingProduct] = useState(false);
+  const [typeFilter,setTypeFilter] = useState<"all"|ProductType>("all");
+  const [editingPackage, setEditingPackage] = useState<{optionId:string;plan:PackagePlan}>();
   const latest = latestCatalog(s, book);
   const current =
     folderDraft ||
@@ -5261,7 +5268,7 @@ function CatalogView({
           search,
           searchScope,
         ) &&
-        matchesCatalogProductFilter(p, reviewFilter),
+        matchesCatalogProductFilter(p, reviewFilter) && (typeFilter==="all" || productType(p)===typeFilter),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
   const editable =
@@ -5897,6 +5904,7 @@ function CatalogView({
               <option value="folder">폴더명만</option>
               <option value="product">상품명만</option>
             </select>
+            <select aria-label="상품 타입 필터" value={typeFilter} onChange={e=>{setTypeFilter(e.target.value as typeof typeFilter);setBulkIds([]);}}><option value="all">모든 타입</option>{Object.entries(productTypeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
             <select
               aria-label="상품 필터"
               value={reviewFilter}
@@ -6170,29 +6178,7 @@ function CatalogView({
               <button
                 {...catalogCommand("productNew")}
                 disabled={!catalogNodes(current).length}
-                onClick={() => {
-                  const targetFolder = category || catalogNodes(current)[0]?.id;
-                  if (!targetFolder) return;
-                  const now = new Date().toISOString(),
-                    p: Product = {
-                      id: crypto.randomUUID(),
-                      rev: 1,
-                      createdAt: now,
-                      updatedAt: now,
-                      category: folderPath(current, targetFolder)
-                        .map((x) => x.name)
-                        .join(" / "),
-                      folderId: sourceFolderId(current, targetFolder),
-                      name: "새 상품",
-                      description: "",
-                      composition: "",
-                      active: false,
-                      sources: [],
-                      options: [],
-                    };
-                  setDraft({ ...current, products: [...current.products, p] });
-                  setSelected(p.id);
-                }}
+                onClick={() => setCreatingProduct(true)}
               >
                 상품 추가
               </button>
@@ -6203,7 +6189,9 @@ function CatalogView({
           )}
         </div>
       </div>
-      {product && (
+      {creatingProduct && current && editable && <Modal title="새 상품 만들기" close={()=>{if(window.confirm("작성 중인 상품을 취소할까요?"))setCreatingProduct(false);}}><ProductWizard catalog={current} catalogs={[...latestCatalogs(s).filter(c=>catalogBook(c)!==book),current]} initialFolder={category} onAddBlock={p=>setDraft({...current,products:[...current.products,p]})} onCancel={()=>{if(window.confirm("작성 중인 상품을 취소할까요?"))setCreatingProduct(false);}} onCreate={p=>{setDraft({...current,products:[...current.products,p]});setCreatingProduct(false);setSelected(p.id);}}/></Modal>}
+      {editingPackage && product && current && <Modal title="패키지 블록 구성 편집" close={()=>setEditingPackage(undefined)}><PackageBuilder catalogs={[...latestCatalogs(s).filter(c=>catalogBook(c)!==book),current]} value={editingPackage.plan} onAddBlock={p=>setDraft({...current,products:[...current.products,p]})} blockCatalog={current} onChange={plan=>setEditingPackage({...editingPackage,plan})}/><button className="primary" onClick={()=>work(async()=>{const updated=packageOption(editingPackage.plan,product.options.find(o=>o.id===editingPackage.optionId)!);change({...product,options:product.options.map(o=>o.id===updated.id?updated:o)});setEditingPackage(undefined);})}>구성·가격 적용</button></Modal>}
+      {product && !editingPackage && (
         <Modal title="상품·옵션 편집" close={() => setSelected("")}>
           <div data-catalog-product-editor>
             {editable && <CatalogEditActions actions={edits} />}
@@ -6241,7 +6229,7 @@ function CatalogView({
                   : undefined
               }
             />
-            <div className="form-grid">
+            <div className="form-grid catalog-product-basics">
               <Field label="상품명">
                 <input
                   disabled={!editable}
@@ -6249,6 +6237,7 @@ function CatalogView({
                   onChange={(e) => change({ ...product, name: e.target.value })}
                 />
               </Field>
+              <Field label="상품 타입"><select disabled={!editable} value={productType(product)} onChange={e=>change({...product,productType:e.target.value as ProductType,...(e.target.value==="block"?{publicVisible:false}:{})})}>{Object.entries(productTypeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
               <Field label="소속 폴더">
                 <select
                   disabled={!editable}
@@ -6377,6 +6366,7 @@ function CatalogView({
                     </button>
                   )}
                 </div>
+                {o.packagePlan && editable && <button className="package-edit-button" onClick={()=>setEditingPackage({optionId:o.id,plan:structuredClone(o.packagePlan!)})}>블록·회차·할인 구성 편집</button>}
                 <Field label="옵션">
                   <input
                     disabled={!editable}

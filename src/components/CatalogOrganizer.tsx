@@ -1,3 +1,4 @@
+import { productType, productTypeLabels } from "../core/productType";
 import { offeringSummary } from "../core/offerings";
 import { CatalogBulkEdit } from "./CatalogBulkEdit";
 import { PhotoModal } from "./PhotoBoard";
@@ -358,7 +359,16 @@ export function CatalogProductRows({
                   className="catalog-product-title"
                   onClick={() => onEdit(p.id)}
                 >
-                  <b>{p.name}</b>
+                  <b>
+                    {productType(p) !== "single" && (
+                      <span
+                        className={"product-type-badge type-" + productType(p)}
+                      >
+                        [{productTypeLabels[productType(p)]}]
+                      </span>
+                    )}{" "}
+                    {p.name}
+                  </b>
                   <small>
                     옵션 {p.options.length}개 ·{" "}
                     {p.active ? "판매 활성" : "판매 비활성"}

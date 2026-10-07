@@ -1,7 +1,7 @@
 {
-  "version": "0.18.6",
-  "versionCode": 76,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.6.apk",
-  "sha256": "0845008ab244d9b518048b90d9a171bf3be9c9cdf7a6e58aa020450cef2fde39",
-  "notes": "옵션별 패키지 구성, 월별 관리와 간격 진료 일정을 지원합니다. 확정된 상품 구성과 통합 옵션을 반영했습니다."
+  "version": "0.18.7",
+  "versionCode": 77,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.7.apk",
+  "sha256": "afababede5e6411b5acc078b849618e166dffb14fedfcdf30057e8085d09584e",
+  "notes": "상담 신청 입력과 달력을 개선하고 상품 단계별 생성, 타입 필터, 패키지 블록 구성과 할인 계산을 추가했습니다."
 }

@@ -92,7 +92,10 @@ export function publicProducts(state: State): PublicProduct[] {
     .flatMap((c) =>
       c.products
         .filter(
-          (p) => p.publicVisible && eventAvailability(p.webEvent) === "current",
+          (p) =>
+            p.productType !== "block" &&
+            p.publicVisible &&
+            eventAvailability(p.webEvent) === "current",
         )
         .map((p) => ({
           id: p.id,
@@ -235,6 +238,12 @@ export const inquiryInput = z
         message: "상담 가능한 날짜와 시간을 선택해주세요",
       });
     if (v.visitType === "first") {
+      if (v.person.sex === "U")
+        ctx.addIssue({
+          code: "custom",
+          path: ["person", "sex"],
+          message: "처음 방문은 성별을 선택해주세요",
+        });
       if (!v.person.dob)
         ctx.addIssue({
           code: "custom",

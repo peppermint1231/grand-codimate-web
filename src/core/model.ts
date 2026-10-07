@@ -90,6 +90,7 @@ export interface Source {
   text: string;
 }
 export interface Option {
+  packagePlan?: import("./packageBuilder").PackagePlan;
   packageSessionCount?: number;
   /** Explicit option-only schedule or composition, overriding the common schedule. */
   packageComposition?: string;
@@ -108,6 +109,7 @@ export interface Option {
   unit: string;
 }
 export interface Product extends Base {
+  productType?: import("./productType").ProductType;
   packageBySession?: boolean;
   packageAllowGaps?: boolean;
   descriptionOrigin?: "generated";

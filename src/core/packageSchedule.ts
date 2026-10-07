@@ -83,13 +83,24 @@ export function optionPackageComposition(
     Product,
     "composition" | "packageBySession" | "packageAllowGaps"
   >,
-  option: Pick<Option, "label" | "packageSessionCount" | "packageComposition">,
+  option: Pick<
+    Option,
+    "label" | "packageSessionCount" | "packageComposition" | "packagePlan"
+  >,
 ) {
   if (option.packageComposition?.trim()) {
     const schedule = parsePackageSchedule(
       option.packageComposition,
       !!product.packageAllowGaps,
     );
+    if (schedule && option.packagePlan)
+      return (
+        formatPackageSchedule(schedule).split("\n\n구성별 포함 회차")[0] +
+        "\n\n구성별 포함 회차\n" +
+        option.packagePlan.blocks
+          .map((b) => `${b.name} · ${b.quantity}${b.unit}`)
+          .join("\n")
+      );
     return schedule
       ? formatPackageSchedule(schedule)
       : option.packageComposition.trim();

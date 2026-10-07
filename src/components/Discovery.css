@@ -1247,3 +1247,22 @@
 .pd-schedule li strong { color: #775135; }
 .pd-schedule li span { color: #49392e; overflow-wrap: anywhere; }
 .pd-schedule > small { display: block; font-size: .76em; line-height: 1.6; color: #736253; margin: 12px 0; }
+.pd-cart-floating { z-index: 25; }
+.pd-cart-floating > details { flex: 1; min-width: 0; }
+.pd-cart-floating summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.pd-cart-items { max-height: 35vh; overflow: auto; }
+.pd-cart-items > div { display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid #ded1c1; padding:8px 0; }
+.pd-cart-items span { overflow-wrap:anywhere; }
+.pd-booking { max-width: 620px; margin:24px 0; border:1px solid #ddcdbb; padding:18px; border-radius:16px; background:#fffdf9; }
+.pd-calendar-heading { display:flex; align-items:center; justify-content:space-between; }
+.pd-calendar-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; text-align:center; margin:12px 0 24px; }
+.pd-calendar-grid > small { padding:8px 0; }
+.pd-calendar-grid button { min-width:0; min-height:48px; padding:5px 0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.pd-calendar-grid button small { font-size:10px; }
+.pd-calendar-grid button:disabled { opacity:.4; }
+.pd-time-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(76px,1fr)); gap:8px; }
+.pd-booking button[aria-pressed=true] { color:white; background:#64452e; border-color:#64452e; }
+.pd-address-field { grid-column:1/-1; }
+.pd-address-field .address-input { margin-top:8px; }
+.pd-cart-floating { position:fixed; bottom:max(16px,env(safe-area-inset-bottom)); left:50%; transform:translateX(-50%); width:calc(100% - 32px); max-width:1100px; margin:0; box-sizing:border-box; }
+.patient-discovery:has(.pd-cart-floating) .pd-shell { padding-bottom:180px; }

@@ -500,3 +500,46 @@ it("preserves active unchanged homepage items but leaves new, changed and manual
       .every((p) => !p.active),
   ).toBe(true);
 });
+
+it("keeps edited patient copy during homepage refresh while refreshing untouched source copy", () => {
+  const { beauty, page } = fixture();
+  page.description = "*VAT별도";
+  const first = mergeHomepageCatalog(beauty, undefined, [page], now).catalog;
+  expect(first.products[0].description).toBe("설명");
+  const changed = structuredClone(page);
+  changed.offers[0].description = "갱신된 홈페이지 설명";
+  changed.offers[0].price = 20000;
+  const refreshed = mergeHomepageCatalog(beauty, first, [changed], now).catalog;
+  expect(refreshed.products[0].description).toBe("갱신된 홈페이지 설명");
+  first.products[0].description = "직접 작성한 환자용 설명";
+  const custom = mergeHomepageCatalog(beauty, first, [changed], now).catalog;
+  expect(custom.products[0].description).toBe("직접 작성한 환자용 설명");
+  expect(custom.products[0].options[0].price).toBe(20000);
+});
+
+it("automatically cleans VAT, drafts missing copy and extracts safe option schedules on homepage refresh", () => {
+  const { beauty, page } = fixture();
+  page.description = "*VAT별도";
+  page.offers[0].description = "";
+  page.offers[0].name = "[EVENT] 슈링크 300샷";
+  const first = mergeHomepageCatalog(beauty, undefined, [page], now).catalog;
+  expect(first.products[0].description).toContain("슈링크");
+  expect(first.products[0].descriptionOrigin).toBe("generated");
+  expect(first.products[0].description).not.toContain("VAT");
+  const next = structuredClone(page);
+  next.offers[0].name = "기미토닝 5회";
+  next.offers[0].description = Array.from(
+    { length: 10 },
+    (_, i) => `${i + 1}주차 기미토닝 + LED`,
+  ).join("\n");
+  const second = mergeHomepageCatalog(beauty, first, [next], now).catalog;
+  expect(second.products[0].packageBySession).toBe(true);
+  expect(second.products[0].options[0].packageSessionCount).toBe(5);
+  expect(second.products[0].description).not.toContain("슈링크");
+  expect(second.products[0].description).not.toContain("10주차");
+  const bad = structuredClone(next);
+  bad.offers[0].name = "기미토닝 15회";
+  const third = mergeHomepageCatalog(beauty, second, [bad], now).catalog;
+  expect(third.products[0].packageBySession).toBe(false);
+  expect(third.products[0].packageScheduleReview).toBeTruthy();
+});

@@ -1,3 +1,4 @@
+import { parsePackageSchedule, optionSessionCount } from "./packageSchedule";
 import { gradeBenefitsSchema, reconcileGradeBenefits } from "./gradeBenefits";
 import {
   pointAllocations,
@@ -597,8 +598,18 @@ export function validateCatalog(c: Catalog, posting = false) {
         "이벤트 원문 정보를 확인하세요",
       );
     }
+    if (p.packageBySession !== undefined) z.boolean().parse(p.packageBySession);
+    if (p.descriptionOrigin !== undefined) z.literal("generated").parse(p.descriptionOrigin);
+    if (p.packageScheduleReview !== undefined) z.string().max(500).parse(p.packageScheduleReview);
+    const schedule = p.packageBySession ? parsePackageSchedule(p.composition) : undefined;
+    if (p.packageBySession) ensure(schedule, `${p.name}: 회차별 구성은 1주차 또는 1회차부터 빠짐없이 순서대로 입력하세요.`);
     ensure(Array.isArray(p.options), "옵션이 필요합니다");
     for (const o of p.options) {
+      if (o.packageSessionCount !== undefined) z.number().int().min(1).max(1000).parse(o.packageSessionCount);
+      if (p.packageBySession) {
+        const count = optionSessionCount(o);
+        ensure(count && count <= schedule!.rows.length, `${p.name} · ${o.label}: 옵션 회차 수 또는 공통 회차별 구성을 확인하세요.`);
+      }
       if (o.offering) {
         const errors = offeringErrors(o.offering);
         ensure(!errors.length, `${p.name} · ${o.label}: ${errors.join(" / ")}`);

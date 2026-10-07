@@ -144,12 +144,12 @@ it("deduplicates identical website offers without combining differing prices", (
   rows[1].options[0].price = 123456;
   expect(recommendedProducts(rows, "patient:pigment", "spots")).toHaveLength(2);
 });
-it("returns only matching metadata, not internal descriptions or source material", () => {
+it("exposes the configured patient description but not composition or source material", () => {
   const s = emptyState();
   s.catalogs = threeCatalogs();
   s.catalogs[0].products[0] = product(
     "기미 상담",
-    "내부 기록: 기미 관리",
+    "기미 관리 상품 설명",
     "비공개 구성",
   );
   const rows = publicProducts(s),
@@ -157,7 +157,7 @@ it("returns only matching metadata, not internal descriptions or source material
   expect(rows[0].matches?.some((m) => m.concernId === "patient:pigment")).toBe(
     true,
   );
-  expect(json).not.toContain("내부 기록");
+  expect(rows[0].description).toBe("기미 관리 상품 설명");
   expect(json).not.toContain("비공개 구성");
 });
 

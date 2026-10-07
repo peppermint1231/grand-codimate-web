@@ -1,3 +1,5 @@
+import { optionPackageComposition } from "./packageSchedule";
+import { publicDescription } from "./publicDescription";
 import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
 import { eventOptionPrices } from "./eventPrices";
 import { withBeautyRootLabels } from "./catalogClassification";
@@ -20,6 +22,7 @@ import {
   productFolderPaths,
 } from "./catalogFolders";
 export interface PublicOption {
+  packageComposition?: string;
   event?: ReturnType<typeof eventOptionPrices>;
   id: string;
   label: string;
@@ -28,6 +31,7 @@ export interface PublicOption {
   tax: string;
 }
 export interface PublicProduct {
+  description?: string;
   matches?: { concernId: string; answerIds: string[] }[];
   event?: Pick<
     EventOriginInfo,
@@ -93,6 +97,7 @@ export function publicProducts(state: State): PublicProduct[] {
         .map((p) => ({
           id: p.id,
           name: p.name,
+          description: publicDescription(p.description, catalogBook(c)),
           matches: patientMatches(p, productFolderPaths(c, p)),
           ...(catalogBook(c) === "이벤트" &&
           p.active &&
@@ -117,6 +122,14 @@ export function publicProducts(state: State): PublicProduct[] {
             path.map((f) => ({ id: f.id, name: f.name, color: f.color })),
           ),
           options: p.options.map((o) => ({
+            ...(optionPackageComposition(p, o)
+              ? {
+                  packageComposition: publicDescription(
+                    optionPackageComposition(p, o)!,
+                    catalogBook(c),
+                  ),
+                }
+              : {}),
             ...(catalogBook(c) === "이벤트" &&
             p.active &&
             o.tax !== "unknown" &&

@@ -1,7 +1,7 @@
 {
-  "version": "0.18.4",
-  "versionCode": 74,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.4.apk",
-  "sha256": "4277815703be9fead0c0b140c65450c6075d01aa1c8d685d7813f94935497d5c",
-  "notes": "S펜 WebView 입력 수정과 기기 설정 안내, 월·주·일 스와이프 캘린더, 주목적 기반 추천 및 공유 폴더 분류를 적용했습니다."
+  "version": "0.18.5",
+  "versionCode": 75,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.5.apk",
+  "sha256": "4109b0404d51cd9f8584e7a3f3c0d93d1e5ddae44509aa258c42eedfb9a749ef",
+  "notes": "추천기에 단가표 상품 설명을 표시하고 중복 부가세 안내를 제거했습니다. 홈페이지 갱신 시 직접 작성한 설명을 유지합니다."
 }

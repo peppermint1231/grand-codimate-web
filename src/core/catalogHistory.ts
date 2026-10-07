@@ -88,6 +88,7 @@ export function catalogChanges(
     if (
       old.description !== p.description ||
       old.composition !== p.composition ||
+      old.packageBySession !== p.packageBySession ||
       old.category !== p.category
     )
       changes.push(`상품 설명·구성·분류 수정: ${p.name}`);
@@ -100,6 +101,8 @@ export function catalogChanges(
         changes.push(`옵션 추가: ${p.name} / ${o.label}`);
         continue;
       }
+      if (prev.packageSessionCount !== o.packageSessionCount)
+        changes.push(`옵션 회차 수 변경: ${p.name} / ${o.label}`);
       if (JSON.stringify(prev.offering) !== JSON.stringify(o.offering))
         changes.push(`옵션 패키지·멤버십 구성 변경: ${p.name} / ${o.label}`);
       if (prev.priceKind !== o.priceKind)

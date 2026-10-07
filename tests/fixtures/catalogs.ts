@@ -29,7 +29,7 @@ export const threeCatalogs = (): Catalog[] =>
         category: "원본 분류",
         folderId: i === 1 ? "medical" : "pigment",
         name: `시험 ${book} 상품`,
-        description: "공개하면 안 되는 내부 설명",
+        description: "환자에게 안내할 상품 설명",
         composition: "내부 구성 검토",
         active: true,
         publicVisible: true,

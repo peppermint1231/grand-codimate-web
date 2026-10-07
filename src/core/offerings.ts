@@ -1,3 +1,4 @@
+import { optionPackageComposition } from "./packageSchedule";
 import { z } from "zod";
 import type { Product, Option } from "./model";
 const untouchedItem = (item: any) =>
@@ -48,7 +49,13 @@ export function offeringSummary(offering?: Offering) {
     .join("\n");
 }
 export const productComposition = (product: Product, option?: Option) =>
-  [product.composition, offeringSummary(option?.offering || product.offering)]
+  [
+    option && product.packageBySession
+      ? optionPackageComposition(product, option) ||
+        "회차별 구성은 상담 시 확인해주세요."
+      : product.composition,
+    offeringSummary(option?.offering || product.offering),
+  ]
     .filter(Boolean)
     .join("\n\n");
 

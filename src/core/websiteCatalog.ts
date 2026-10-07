@@ -1,3 +1,8 @@
+import { homepagePatientContent } from "./homepagePatientContent";
+import {
+  cleanProductDescription,
+  editedWebsiteDescription,
+} from "./productDescription";
 import { syncRecommendationLinks } from "./recommendationLinks";
 import { z } from "zod";
 import {
@@ -329,12 +334,22 @@ export function mergeHomepageCatalog(
   const retained = new Set<string>();
   result.summary.added = result.summary.changed = result.summary.unchanged = 0;
   for (const product of result.catalog.products) {
+    product.description = cleanProductDescription(product.description);
     const info = product.webEvent!;
     const old = oldBySource.get(info.eventId + ":" + info.offerId);
     if (!old) {
       result.summary.added++;
       continue;
     }
+    const editedDescription = editedWebsiteDescription(
+      old.description,
+      old.webEvent?.sourceSignature,
+    );
+    if (
+      editedDescription !== undefined &&
+      old.descriptionOrigin !== "generated"
+    )
+      product.description = editedDescription;
     retained.add(old.id);
     product.id = old.id;
     product.createdAt = old.createdAt;
@@ -372,6 +387,7 @@ export function mergeHomepageCatalog(
       product.active = old.active && eventAvailability(info, now) === "current";
     } else result.summary.changed++;
   }
+  result.catalog.products = result.catalog.products.map(homepagePatientContent);
   result.summary.missing = (base?.products || []).filter(
     (p) => !retained.has(p.id),
   ).length;

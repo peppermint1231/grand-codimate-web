@@ -1,3 +1,4 @@
+import { optionPackageComposition, optionSessionCount } from "./core/packageSchedule";
 import { GradeSettings } from "./components/GradeSettings";
 import { ConsultationOwner } from "./components/ConsultationOwner";
 import { ReferralPicker } from "./components/ReferralPicker";
@@ -4068,7 +4069,7 @@ function ConsultationView({
                       <details>
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
-                        <p>{productComposition(p)}</p>
+                        {p.packageBySession ? p.options.map(o=><details key={o.id}><summary>{o.label} 패키지 구성</summary><p style={{whiteSpace:"pre-line"}}>{productComposition(p,o)}</p></details>) : <p>{productComposition(p)}</p>}
                         {p.insurance?.note && <p>{p.insurance.note}</p>}
                       </details>
                       {p.options.map((o) => (
@@ -6277,23 +6278,28 @@ function CatalogView({
                 onChange={change}
               />
             )}
+            {product.descriptionOrigin === "generated" && <p className="small">자동 작성한 설명입니다. 실제 시술 목적·구성을 확인하고 수정할 수 있습니다.</p>}
+            {product.packageScheduleReview && <p className="error">회차 구성 확인: {product.packageScheduleReview}</p>}
             <Field label="설명">
               <textarea
                 disabled={!editable}
                 value={product.description}
                 onChange={(e) =>
-                  change({ ...product, description: e.target.value })
+                  change({ ...product, description: e.target.value, descriptionOrigin: undefined })
                 }
               />
+              <small>맞춤 시술 찾기에서 환자에게 보이는 설명입니다. 미용·보험의 금액 표기는 공개 화면에서 ‘맞춤 상담 후 안내’로 표시합니다.</small>
             </Field>
             <OfferingEditor
               offering={product.offering}
               disabled={!editable}
               onChange={(offering) => change({ ...product, offering })}
             />
+            <label className="check"><input type="checkbox" disabled={!editable} checked={!!product.packageBySession} onChange={e=>change({...product,packageBySession:e.target.checked})}/>옵션 회차에 맞춰 패키지 구성 표시</label>
             <Field label="패키지·회차별 구성">
               <textarea
                 disabled={!editable}
+                placeholder="1주차 시술 A + 관리 B\n2주차 시술 A + 관리 C"
                 value={product.composition}
                 onChange={(e) =>
                   change({ ...product, composition: e.target.value })
@@ -6543,6 +6549,10 @@ function CatalogView({
                     <option value="exempt">면세</option>
                   </select>
                 </Field>
+                {product.packageBySession && <>
+                  <Field label="패키지 회차 수"><input type="number" min="1" max="1000" disabled={!editable} value={o.packageSessionCount ?? optionSessionCount(o) ?? ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageSessionCount:e.target.value?Number(e.target.value):undefined}:x)})}/></Field>
+                  <details><summary>{optionSessionCount(o) || "선택"}회차 패키지 구성 미리보기</summary><p style={{whiteSpace:"pre-line"}}>{optionPackageComposition(product,o) || "회차 수와 1회차부터의 공통 구성을 확인하세요."}</p></details>
+                </>}
                 <OfferingEditor
                   offering={o.offering}
                   option
@@ -6558,8 +6568,7 @@ function CatalogView({
                 />
                 <p className="small">
                   등급별 혜택은 옵션별 구성에 입력하세요. 옵션별 구성을 지정하면
-                  상품의 공통 멤버십 구성 대신 사용됩니다. 설명·회차별 구성
-                  문구는 공통으로 표시됩니다.
+                  상품의 공통 멤버십 구성 대신 사용됩니다. 회차별 구성 자동 표시를 켜면 공통 구성에서 해당 옵션의 회차까지만 안내합니다.
                 </p>
                 {!!o.issues.length && (
                   <p className="small">

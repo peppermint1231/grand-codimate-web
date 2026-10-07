@@ -109,3 +109,49 @@ it("shows the selected total block quantities rather than counting visits as uni
     `${b.name} · 3회`,
   );
 });
+it("preserves session order through moves and saved patient composition", async () => {
+  const { movePackagePlacement } = await import("../src/core/packageBuilder");
+  const c = threeCatalogs()[0];
+  c.products[0].productType = "block";
+  const base = packageBlocks([c])[0];
+  const plan: PackagePlan = {
+    durationDays: 30,
+    sessions: 2,
+    discountType: "amount",
+    discountValue: 0,
+    blocks: [
+      { ...base, id: "a", name: "토닝", quantity: 2 },
+      { ...base, id: "b", name: "진정관리", quantity: 2 },
+    ],
+    placements: [
+      { id: "a1", blockId: "a", session: 1 },
+      { id: "b1", blockId: "b", session: 1 },
+      { id: "a2", blockId: "a", session: 2 },
+      { id: "b2", blockId: "b", session: 2 },
+    ],
+  };
+  plan.placements = movePackagePlacement(plan.placements, "b1", 1, "a1");
+  expect(
+    plan.placements.filter((p) => p.session === 1).map((p) => p.id),
+  ).toEqual(["b1", "a1"]);
+  expect(packageOption(plan, c.products[0].options[0]).packageComposition).toBe(
+    "1회차 진정관리 + 토닝\n2회차 토닝 + 진정관리",
+  );
+  plan.placements = movePackagePlacement(plan.placements, "a1", 2, "b2");
+  expect(
+    plan.placements.filter((p) => p.session === 2).map((p) => p.id),
+  ).toEqual(["a2", "a1", "b2"]);
+  plan.placements = movePackagePlacement(plan.placements, "a2", 2);
+  expect(
+    plan.placements.filter((p) => p.session === 2).map((p) => p.id),
+  ).toEqual(["a1", "b2", "a2"]);
+  const saved = packageOption(plan, c.products[0].options[0]);
+  expect(saved.packageComposition).toBe(
+    "1회차 진정관리\n2회차 토닝 + 진정관리 + 토닝",
+  );
+  expect(saved.packagePlan?.placements).toEqual(plan.placements);
+  expect(saved.price).toBe(40000);
+  expect(movePackagePlacement(plan.placements, "b2", 2, "b2")).toEqual(
+    plan.placements,
+  );
+});

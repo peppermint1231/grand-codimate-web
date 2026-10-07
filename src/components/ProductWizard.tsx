@@ -301,7 +301,7 @@ export function ProductWizard({
           {resolve().map((o) => (
             <div className="wizard-option" key={o.id}>
               <strong>
-                {o.label} · {money(o.price || 0)}원 (
+                {o.label} · {money(o.price || 0)} (
                 {o.tax === "exclusive"
                   ? "부가세 별도"
                   : o.tax === "exempt"
@@ -311,8 +311,8 @@ export function ProductWizard({
               </strong>
               {o.regularPrice !== undefined && (
                 <p>
-                  블록 합계 {money(o.regularPrice || 0)}원 → 판매가{" "}
-                  {money(o.price || 0)}원
+                  블록 합계 {money(o.regularPrice || 0)} → 판매가{" "}
+                  {money(o.price || 0)}
                 </p>
               )}
               {o.packageComposition && <pre>{o.packageComposition}</pre>}

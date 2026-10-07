@@ -72,11 +72,12 @@ try {
     await card.getByText("5회 패키지 구성 보기", { exact: true }).click();
     const five = card.locator(".pd-package-composition").first();
     await expect(five).toContainText("5주차");
+    await expect(five.locator("li")).toHaveCount(5);
+    await expect(five.getByText("구성 합계 확인",{exact:true})).toBeVisible();
     await expect(five).not.toContainText("6주차");
     await card.getByText("10회 패키지 구성 보기", { exact: true }).click();
-    await expect(card.locator(".pd-package-composition").nth(1)).toContainText(
-      "10주차",
-    );
+    await expect(card.locator(".pd-package-composition").nth(1)).toContainText("10주차");
+    await expect(card.locator(".pd-package-composition").nth(1).locator("li")).toHaveCount(10);
     assert.ok(
       await card
         .locator("h3")

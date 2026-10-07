@@ -2,6 +2,6 @@
   "version": "0.18.5",
   "versionCode": 75,
   "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.5.apk",
-  "sha256": "4109b0404d51cd9f8584e7a3f3c0d93d1e5ddae44509aa258c42eedfb9a749ef",
+  "sha256": "dd8847b77d555b325ca417b58ac8568745decd16a4316ad3817f54b325c14734",
   "notes": "추천기에 단가표 상품 설명을 표시하고 중복 부가세 안내를 제거했습니다. 홈페이지 갱신 시 직접 작성한 설명을 유지합니다."
 }

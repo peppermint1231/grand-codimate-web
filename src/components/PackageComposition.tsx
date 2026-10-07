@@ -1,5 +1,5 @@
 export function PackageComposition({ text }: { text: string }) {
-  const [schedule, totals] = text.split("\n\n구성별 포함 회차\n");
+  const [schedule, totals] = text.split(/\n+구성별 포함 회차\n/);
   return (
     <div className="pd-schedule">
       <ol>

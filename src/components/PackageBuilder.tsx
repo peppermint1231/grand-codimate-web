@@ -1,10 +1,11 @@
 import { productType } from "../core/productType";
 import { catalogNodes, folderPath } from "../core/catalogFolders";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Catalog, Product, Option } from "../core/model";
 import { money } from "../core/model";
 import {
   balancePackage,
+  movePackagePlacement,
   packageBlocks,
   packageTotal,
   packageSale,
@@ -34,7 +35,11 @@ export function PackageBuilder({
   const [category, setCategory] = useState(""),
     [search, setSearch] = useState("");
   const [limit, setLimit] = useState(60),
-    [hovered, setHovered] = useState<number>();
+    [hovered, setHovered] = useState<{ session: number; beforeId?: string }>();
+  const pointer = useRef<{ x: number; y: number; moved: boolean } | undefined>(
+    undefined,
+  );
+  const nativeDrag = useRef(false);
   const [newBlock, setNewBlock] = useState({
       name: "",
       label: "1회",
@@ -71,12 +76,27 @@ export function PackageBuilder({
   );
   const update = (patch: Partial<PackagePlan>) =>
     onChange({ ...value, ...patch });
-  const move = (id: string, session: number) =>
+  const move = (id: string, session: number, beforeId?: string) =>
     update({
-      placements: value.placements.map((x) =>
-        x.id === id ? { ...x, session } : x,
-      ),
+      placements: movePackagePlacement(value.placements, id, session, beforeId),
     });
+  const dropTarget = (clientX: number, clientY: number) => {
+    const section = document
+      .elementFromPoint(clientX, clientY)
+      ?.closest<HTMLElement>("[data-package-session]");
+    if (!section) return;
+    const rows = [
+      ...section.querySelectorAll<HTMLElement>("[data-placement-id]"),
+    ];
+    const before = rows.find((row) => {
+      const rect = row.getBoundingClientRect();
+      return clientY < rect.top + rect.height / 2;
+    });
+    return {
+      session: Number(section.dataset.packageSession),
+      beforeId: before?.dataset.placementId,
+    };
+  };
   const quantity = (id: string, n: number) => {
     const next = value.blocks.map((b) =>
       b.id === id
@@ -98,8 +118,9 @@ export function PackageBuilder({
     update({
       blocks: next,
       placements: [
-        ...value.placements.filter((x) => x.blockId !== id),
-        ...old.slice(0, block.quantity),
+        ...value.placements.filter(
+          (x) => x.blockId !== id || old.indexOf(x) < block.quantity,
+        ),
         ...Array.from(
           { length: Math.max(0, block.quantity - old.length) },
           () => ({ id: crypto.randomUUID(), blockId: id, session: 0 }),
@@ -399,7 +420,7 @@ export function PackageBuilder({
               {b.name}
               <small>{b.category}</small>
             </span>
-            <b>{money(packageTotal([b]))}원 +</b>
+            <b>{money(packageTotal([b]))} +</b>
           </button>
         ))}
         {available.length > limit && (
@@ -420,7 +441,7 @@ export function PackageBuilder({
           <span>
             {b.name}
             <small>
-              1단위 {money(packageTotal([{ ...b, quantity: 1 }]))}원 ·{" "}
+              1단위 {money(packageTotal([{ ...b, quantity: 1 }]))} ·{" "}
               {b.tax === "exempt" ? "면세" : "부가세 별도"}
             </small>
           </span>
@@ -460,22 +481,28 @@ export function PackageBuilder({
       </button>
       <p className="small">
         수량을 고르게 나눕니다. 시술 순서·간격은 직접 확인하세요. ↕ 손잡이를
-        끌거나 ‘이동할 회차’를 선택해 조정할 수 있습니다.
+        끌어 회차와 순서를 바꾸거나 ‘이동할 회차’를 선택하세요. 손잡이에 초점을
+        둔 뒤 Alt+↑/↓로도 순서를 바꿀 수 있습니다.
       </p>
       <div className="package-sessions">
         {Array.from({ length: value.sessions + 1 }, (_, session) => (
           <section
             key={session}
             data-package-session={session}
-            className={hovered === session ? "package-drop-target" : ""}
+            className={
+              hovered?.session === session
+                ? `package-drop-target ${!hovered.beforeId ? "package-drop-end" : ""}`
+                : ""
+            }
             onDragOver={(e) => {
               e.preventDefault();
-              setHovered(session);
+              setHovered(dropTarget(e.clientX, e.clientY));
             }}
             onDrop={(e) => {
               e.preventDefault();
               const id = e.dataTransfer.getData("application/codimate-package");
-              if (id) move(id, session);
+              const target = dropTarget(e.clientX, e.clientY);
+              if (id && target) move(id, target.session, target.beforeId);
               setHovered(undefined);
             }}
           >
@@ -488,47 +515,83 @@ export function PackageBuilder({
             {value.placements
               .filter((x) => x.session === session)
               .map((x) => (
-                <div className="package-chip" key={x.id}>
+                <div
+                  className={`package-chip ${hovered?.beforeId === x.id ? "package-drop-before" : ""}`}
+                  key={x.id}
+                  data-placement-id={x.id}
+                >
                   <button
                     type="button"
                     className="package-drag"
                     aria-label="블록 이동 손잡이"
                     draggable
-                    onDragStart={(e) =>
+                    title="끌어서 이동 · Alt+↑/↓로 순서 변경"
+                    onKeyDown={(e) => {
+                      if (
+                        !e.altKey ||
+                        !["ArrowUp", "ArrowDown"].includes(e.key)
+                      )
+                        return;
+                      e.preventDefault();
+                      const rows = value.placements.filter(
+                        (p) => p.session === session,
+                      );
+                      const index = rows.findIndex((p) => p.id === x.id);
+                      if (e.key === "ArrowUp" && index > 0)
+                        move(x.id, session, rows[index - 1].id);
+                      if (e.key === "ArrowDown" && index < rows.length - 1)
+                        move(x.id, session, rows[index + 2]?.id);
+                    }}
+                    onDragStart={(e) => {
+                      nativeDrag.current = true;
+                      e.dataTransfer.effectAllowed = "move";
                       e.dataTransfer.setData(
                         "application/codimate-package",
                         x.id,
-                      )
-                    }
-                    onDragEnd={() => setHovered(undefined)}
-                    onPointerMove={(e) => {
-                      if (e.buttons) {
-                        const target = document
-                          .elementFromPoint(e.clientX, e.clientY)
-                          ?.closest<HTMLElement>("[data-package-session]");
-                        setHovered(
-                          target
-                            ? Number(target.dataset.packageSession)
-                            : undefined,
-                        );
-                      }
+                      );
                     }}
-                    onPointerCancel={() => setHovered(undefined)}
+                    onDragEnd={() => {
+                      nativeDrag.current = false;
+                      pointer.current = undefined;
+                      setHovered(undefined);
+                    }}
+                    onPointerMove={(e) => {
+                      const start = pointer.current;
+                      if (!start || nativeDrag.current) return;
+                      start.moved ||=
+                        Math.hypot(e.clientX - start.x, e.clientY - start.y) >
+                        6;
+                      if (start.moved)
+                        setHovered(dropTarget(e.clientX, e.clientY));
+                    }}
+                    onPointerCancel={() => {
+                      pointer.current = undefined;
+                      setHovered(undefined);
+                    }}
                     onPointerDown={(e) => {
+                      if (e.button !== 0) return;
+                      nativeDrag.current = false;
+                      pointer.current = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        moved: false,
+                      };
                       e.currentTarget.setPointerCapture(e.pointerId);
                     }}
                     onPointerUp={(e) => {
-                      const target = document
-                        .elementFromPoint(e.clientX, e.clientY)
-                        ?.closest<HTMLElement>("[data-package-session]");
-                      if (target)
-                        move(x.id, Number(target.dataset.packageSession));
+                      if (pointer.current?.moved && !nativeDrag.current) {
+                        const target = dropTarget(e.clientX, e.clientY);
+                        if (target) move(x.id, target.session, target.beforeId);
+                      }
+                      pointer.current = undefined;
                       setHovered(undefined);
                     }}
                   >
                     ↕
                   </button>
-                  <span>
+                  <span
+                    title={value.blocks.find((b) => b.id === x.blockId)?.name}
+                  >
                     {value.blocks.find((b) => b.id === x.blockId)?.name}
                   </span>
                   <select
@@ -549,7 +612,7 @@ export function PackageBuilder({
       </div>
       <h4>④ 패키지 가격 정하기</h4>
       <p>
-        블록 합계 <strong>{money(packageTotal(value.blocks))}원</strong>{" "}
+        블록 합계 <strong>{money(packageTotal(value.blocks))}</strong>{" "}
         <small>면세 항목은 그대로, 과세 항목은 부가세 별도 금액으로 합산</small>
       </p>
       <div className="form-grid">
@@ -589,7 +652,7 @@ export function PackageBuilder({
         value.blocks.every((b) => b.tax === "exempt")
           ? "면세"
           : "부가세 별도"}
-        ) <strong>{money(packageSale(value))}원</strong>
+        ) <strong>{money(packageSale(value))}</strong>
       </p>
     </div>
   );

@@ -154,16 +154,45 @@ export function balancePackage(
   }
   return result;
 }
+/** Array order is the saved treatment order within each session. */
+export function movePackagePlacement(
+  placements: PackagePlan["placements"],
+  id: string,
+  session: number,
+  beforeId?: string,
+): PackagePlan["placements"] {
+  const source = placements.find((p) => p.id === id);
+  if (!source || beforeId === id) return placements;
+  const rest = placements.filter((p) => p.id !== id);
+  let index = beforeId
+    ? rest.findIndex((p) => p.id === beforeId && p.session === session)
+    : -1;
+  if (index < 0) {
+    index = rest.reduce(
+      (last, p, i) => (p.session === session ? i + 1 : last),
+      0,
+    );
+    if (index === 0) index = rest.length;
+  }
+  rest.splice(index, 0, { ...source, session });
+  return rest;
+}
 export function packageOption(plan: PackagePlan, option: Option): Option {
   packagePlanSchema.parse(plan);
   const rows = Array.from({ length: plan.sessions }, (_, i) => {
     const assigned = plan.placements.filter((x) => x.session === i + 1);
     return (
       `${i + 1}회차 ` +
-      plan.blocks
-        .flatMap((b) => {
-          const qty = assigned.filter((x) => x.blockId === b.id).length;
-          return qty ? [b.name + (qty > 1 ? ` × ${qty}${b.unit}` : "")] : [];
+      assigned
+        .reduce<{ blockId: string; quantity: number }[]>((runs, p) => {
+          const last = runs.at(-1);
+          if (last?.blockId === p.blockId) last.quantity++;
+          else runs.push({ blockId: p.blockId, quantity: 1 });
+          return runs;
+        }, [])
+        .map(({ blockId, quantity }) => {
+          const b = plan.blocks.find((block) => block.id === blockId)!;
+          return b.name + (quantity > 1 ? ` × ${quantity}${b.unit}` : "");
         })
         .join(" + ")
     );

@@ -1,7 +1,7 @@
 {
-  "version": "0.18.7",
-  "versionCode": 77,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.7.apk",
-  "sha256": "afababede5e6411b5acc078b849618e166dffb14fedfcdf30057e8085d09584e",
-  "notes": "상담 신청 입력과 달력을 개선하고 상품 단계별 생성, 타입 필터, 패키지 블록 구성과 할인 계산을 추가했습니다."
+  "version": "0.18.8",
+  "versionCode": 78,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.8.apk",
+  "sha256": "b85789139226e91b6a1de49dd4480be2f808223fcfcbcfd91bdeaa9b805c862a",
+  "notes": "패키지 블록을 한 줄로 표시하고 회차 안 순서 이동과 금액의 중복 원 표시를 수정했습니다."
 }

@@ -218,8 +218,65 @@ try {
     await wizard.getByRole("button", { name: "블록 등록하고 담기" }).click();
     await expect(wizard.locator(".package-quantity")).toHaveCount(2);
     await wizard.getByRole("button", { name: "균형 있게 자동 배치" }).click();
+    const firstSession = wizard.locator('[data-package-session="1"]');
+    const chips = firstSession.locator(".package-chip");
+    await expect(chips).toHaveCount(2);
+    const originalOrder = await chips.locator("span").allTextContents();
+    await chips
+      .nth(1)
+      .locator(".package-drag")
+      .dragTo(chips.nth(0), { targetPosition: { x: 20, y: 3 } });
+    await expect(chips.nth(0).locator("span")).toHaveText(originalOrder[1]);
+    // Keyboard ordering provides a non-drag alternative and preserves focus.
+    await chips.nth(0).locator(".package-drag").focus();
+    await page.keyboard.press("Alt+ArrowDown");
+    await expect(chips.nth(0).locator("span")).toHaveText(originalOrder[0]);
+    // Touch/pen path uses pointer capture, separately from native HTML dragging.
+    await chips.nth(1).locator(".package-drag").scrollIntoViewIfNeeded();
+    const targetBox = await chips.nth(0).boundingBox();
+    const handle = chips.nth(1).locator(".package-drag");
+    const handleBox = await handle.boundingBox();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: handleBox!.x + 10, y: handleBox!.y + 10 }],
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: targetBox!.x + 20, y: targetBox!.y + 3 }],
+    });
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await cdp.detach();
+    await expect(chips.nth(0).locator("span")).toHaveText(originalOrder[1]);
+    const geometry = await wizard.locator(".package-chip").evaluateAll((rows) =>
+      rows.map((row) => {
+        const box = row.getBoundingClientRect();
+        const elements = [...row.children].map((e) =>
+          e.getBoundingClientRect(),
+        );
+        return {
+          height: box.height,
+          oneRow: elements.every(
+            (r) =>
+              Math.abs((r.top + r.bottom) / 2 - (box.top + box.bottom) / 2) < 2,
+          ),
+          fits: row.scrollWidth <= row.clientWidth,
+        };
+      }),
+    );
+    assert(
+      geometry.every((g) => g.height <= 52 && g.oneRow && g.fits),
+      JSON.stringify(geometry),
+    );
+    assert(!(await wizard.innerText()).includes("원원"));
+    await firstSession.screenshot({
+      path: `artifacts/package-rows-0188-${width}.png`,
+    });
     await page.screenshot({
-      path: `artifacts/package-builder-0187-${width}.png`,
+      path: `artifacts/package-builder-0188-${width}.png`,
       fullPage: true,
     });
     await wizard
@@ -248,6 +305,9 @@ try {
     assert.equal(saved.options[0].price, 22500);
     assert.equal(saved.options[0].tax, "exclusive");
     assert.equal(saved.options[0].packagePlan!.placements.length, 3);
+    assert(
+      saved.options[0].packageComposition!.startsWith("1회차 새 진정관리 블록"),
+    );
     assert.equal(saved.productType, "package");
     await page
       .getByLabel("상품 타입 필터", { exact: true })

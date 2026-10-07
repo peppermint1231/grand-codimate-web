@@ -59,3 +59,91 @@ it("uses the same scoped schedule in public cards and new cart/quote snapshots, 
   o.packageSessionCount = 15;
   expect(() => validateCatalog(c, true)).toThrow(/회차/);
 });
+it("keeps confirmed interval weeks while limiting by visits, and excludes frequency from totals", () => {
+  const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24];
+  const p = {
+    packageBySession: true,
+    packageAllowGaps: true,
+    composition: numbers
+      .map(
+        (n) =>
+          `${n}주차 / ${n <= 8 ? "주 1회" : n <= 16 ? "2주 간격" : "월 1회"} / 눈가·목 LDM + LED`,
+      )
+      .join("\n"),
+  };
+  for (const [months, visits, last] of [
+    [2, 8, 8],
+    [4, 12, 16],
+    [6, 14, 24],
+  ]) {
+    const text = optionPackageComposition(p, {
+      label: `${months}개월`,
+      packageSessionCount: visits,
+    })!;
+    const [schedule, totals] = text.split("구성별 포함 회차");
+    expect(schedule.trim().split("\n")).toHaveLength(visits);
+    expect(schedule.trim().split("\n").at(-1)).toContain(`${last}주차`);
+    expect(totals).toContain(`눈가·목 LDM · ${visits}회차`);
+    expect(totals).not.toMatch(/주 1회|2주 간격|월 1회/);
+  }
+  expect(parsePackageSchedule(p.composition)).toBeUndefined();
+  expect(
+    parsePackageSchedule("1주차 A\n3주차 B\n2주차 C", true),
+  ).toBeUndefined();
+});
+it("supports monthly repetitions and independent four/eight-week schedules", () => {
+  const p = {
+    packageBySession: true,
+    composition: Array.from(
+      { length: 6 },
+      (_, i) => `${i + 1}개월차 관리${(i % 3) + 1}`,
+    ).join("\n"),
+  };
+  expect(
+    optionPackageComposition(p, { label: "3개월", packageSessionCount: 3 }),
+  ).not.toContain("4개월차");
+  expect(
+    optionPackageComposition(p, { label: "6개월", packageSessionCount: 6 }),
+  ).toContain("6개월차 관리3");
+  const four = {
+    label: "4주",
+    packageComposition: Array.from(
+      { length: 4 },
+      (_, i) => `${i + 1}주차 관리A`,
+    ).join("\n"),
+  };
+  const eight = {
+    label: "8주",
+    packageComposition: Array.from(
+      { length: 8 },
+      (_, i) => `${i + 1}주차 관리B`,
+    ).join("\n"),
+  };
+  expect(optionPackageComposition(p, four)).toContain("1주차 관리A");
+  expect(optionPackageComposition(p, eight)).toContain("1주차 관리B");
+  expect(
+    optionPackageComposition(p, {
+      label: "집중관리",
+      packageComposition: "흑자 제거 + 색소케어주사 2회",
+    }),
+  ).toBe("흑자 제거 + 색소케어주사 2회");
+});
+it("validates option overrides and publishes them even without automatic common slicing", () => {
+  const s = emptyState();
+  s.catalogs = threeCatalogs();
+  const c = s.catalogs[0],
+    p = c.products[0],
+    o = p.options[0];
+  p.packageBySession = false;
+  o.label = "2회";
+  o.packageComposition = "1회차 관리A\n2회차 관리B";
+  validateCatalog(c, true);
+  expect(publicProducts(s)[0].options[0].packageComposition).toContain(
+    "2회차 관리B",
+  );
+  expect(productComposition(p, o)).toContain("2회차 관리B");
+  o.packageComposition = "1회차 관리A\n3회차 관리B";
+  expect(() => validateCatalog(c, true)).toThrow(/회차 순서/);
+  o.packageComposition = "1회차 관리A";
+  expect(() => validateCatalog(c, true)).toThrow(/회차 수/);
+});

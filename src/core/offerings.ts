@@ -50,7 +50,7 @@ export function offeringSummary(offering?: Offering) {
 }
 export const productComposition = (product: Product, option?: Option) =>
   [
-    option && product.packageBySession
+    option && (product.packageBySession || option.packageComposition?.trim())
       ? optionPackageComposition(product, option) ||
         "회차별 구성은 상담 시 확인해주세요."
       : product.composition,

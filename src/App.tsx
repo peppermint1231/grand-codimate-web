@@ -4069,7 +4069,7 @@ function ConsultationView({
                       <details>
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
-                        {p.packageBySession ? p.options.map(o=><details key={o.id}><summary>{o.label} 패키지 구성</summary><p style={{whiteSpace:"pre-line"}}>{productComposition(p,o)}</p></details>) : <p>{productComposition(p)}</p>}
+                        {(p.packageBySession || p.options.some(o=>o.packageComposition)) ? p.options.map(o=><details key={o.id}><summary>{o.label} 패키지 구성</summary><p style={{whiteSpace:"pre-line"}}>{productComposition(p,o)}</p></details>) : <p>{productComposition(p)}</p>}
                         {p.insurance?.note && <p>{p.insurance.note}</p>}
                       </details>
                       {p.options.map((o) => (
@@ -6296,6 +6296,7 @@ function CatalogView({
               onChange={(offering) => change({ ...product, offering })}
             />
             <label className="check"><input type="checkbox" disabled={!editable} checked={!!product.packageBySession} onChange={e=>change({...product,packageBySession:e.target.checked})}/>옵션 회차에 맞춰 패키지 구성 표시</label>
+            {product.packageBySession && <label className="check"><input type="checkbox" disabled={!editable} checked={!!product.packageAllowGaps} onChange={e=>change({...product,packageAllowGaps:e.target.checked})}/>간격 진료 일정: 8·10·12주차처럼 주차 건너뛰기 허용</label>}
             <Field label="패키지·회차별 구성">
               <textarea
                 disabled={!editable}
@@ -6549,8 +6550,9 @@ function CatalogView({
                     <option value="exempt">면세</option>
                   </select>
                 </Field>
-                {product.packageBySession && <>
-                  <Field label="패키지 회차 수"><input type="number" min="1" max="1000" disabled={!editable} value={o.packageSessionCount ?? optionSessionCount(o) ?? ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageSessionCount:e.target.value?Number(e.target.value):undefined}:x)})}/></Field>
+                <Field label="이 옵션만의 구성 (선택)"><textarea disabled={!editable} placeholder="공통 구성과 다를 때 입력하세요. 비워두면 공통 구성의 해당 회차까지 표시합니다." value={o.packageComposition || ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageComposition:e.target.value || undefined}:x)})}/></Field>
+                {(product.packageBySession || o.packageComposition) && <>
+                  <Field label="패키지 방문 횟수"><input type="number" min="1" max="1000" disabled={!editable} value={o.packageSessionCount ?? optionSessionCount(o) ?? ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageSessionCount:e.target.value?Number(e.target.value):undefined}:x)})}/></Field>
                   <details><summary>{optionSessionCount(o) || "선택"}회차 패키지 구성 미리보기</summary><p style={{whiteSpace:"pre-line"}}>{optionPackageComposition(product,o) || "회차 수와 1회차부터의 공통 구성을 확인하세요."}</p></details>
                 </>}
                 <OfferingEditor

@@ -1644,7 +1644,7 @@ export function App() {
             state={state}
             openExisting={(id) => {
               void work(async () => {
-                await refresh();
+                await refresh(false, id);
                 setModal("");
                 setPatientId(id);
               });
@@ -3592,7 +3592,7 @@ function ConsultationView({
           </h1>
           <p>
             {consultationKind(c)} · {c.category} · {sexLabel(c.patient.sex)} ·{" "}
-            {age(c.patient.dob)}세 · {c.createdAt.slice(0, 10)}
+            {c.patient.dob ? `${age(c.patient.dob)}세` : "생년월일 미입력"} · {c.createdAt.slice(0, 10)}
           </p>
           <ConsultationOwner
             state={s}

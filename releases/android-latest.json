@@ -2,6 +2,6 @@
   "version": "0.18.9",
   "versionCode": 79,
   "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.9.apk",
-  "sha256": "7a362fc7fb4e12303dedc637c77c49f67cf48b7d1031d57a2c7cdde52c69ca8f",
+  "sha256": "96842b14b7fd3ecc7f810f26fc28c049badd7bda69022d2eeb9a93df18d9d37a",
   "notes": "베가스 환자 가져오기, 대용량 환자 검색, 동·읍·면 지역 통계를 지원합니다."
 }

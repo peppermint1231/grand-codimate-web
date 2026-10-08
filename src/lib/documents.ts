@@ -48,7 +48,7 @@ export function documentName(c: Consultation, u: User, status = c.status) {
     })
       .format(d)
       .replace(/[^\d]/g, "");
-  return `${status}_${parts.slice(0, 6)}_${parts.slice(6, 10)}_${c.patient.sex}${age(c.patient.dob, new Date(c.createdAt))}${c.patient.name}_${u.name}.pdf`;
+  return `${status}_${parts.slice(0, 6)}_${parts.slice(6, 10)}_${c.patient.sex}${c.patient.dob ? age(c.patient.dob, new Date(c.createdAt)) : "나이미입력"}${c.patient.name}_${u.name}.pdf`;
 }
 export async function consultationPDF(
   c: Consultation,
@@ -143,7 +143,7 @@ export async function consultationPDF(
   write("시술 상담 견적 · 병원 보관용", 22);
   write(`상담번호 ${c.id}`);
   write(
-    `${c.patient.name} · ${age(c.patient.dob, new Date(c.createdAt))}세 · ${c.category} · ${c.status === "P" ? "성공" : c.status === "F" ? "실패" : "보류"}`,
+    `${c.patient.name} · ${c.patient.dob ? `${age(c.patient.dob, new Date(c.createdAt))}세` : "생년월일 미입력"} · ${c.category} · ${c.status === "P" ? "성공" : c.status === "F" ? "실패" : "보류"}`,
   );
   write(`연락처 ${c.patient.phone} / 주소 ${c.patient.address}`);
   write(

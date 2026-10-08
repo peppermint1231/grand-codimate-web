@@ -153,7 +153,7 @@ export class IntakeIndex {
       : undefined;
   }
   put(key: string, records: RecordItem[]) {
-    this.cached = { key, expires: Date.now() + 60_000, records };
+    this.cached = { key, expires: Date.now() + 15 * 60_000, records };
   }
   clear() {
     this.cached = undefined;
@@ -161,8 +161,17 @@ export class IntakeIndex {
 }
 const intakeHash = (key: string) =>
   Buffer.from(sha256(new TextEncoder().encode(key))).toString("hex");
-function intakeHeader(r: RecordItem): RecordItem {
-  const result: RecordItem = {};
+function statisticsFingerprint(r: RecordItem) {
+  return intakeHash(
+    r.plain === true && isObject(r.data)
+      ? JSON.stringify(intakeFields(r.data))
+      : [r.salt, r.iv, r.ct, r.createdAt, r.updatedAt].join("|"),
+  );
+}
+function intakeHeader(r: RecordItem, stats = true): RecordItem {
+  const result: RecordItem = stats
+    ? { statsFingerprint: statisticsFingerprint(r) }
+    : {};
   for (const key of [
     "recordId",
     "id",
@@ -196,6 +205,8 @@ export async function readIntakeStream(
     prefix = "",
     depth = 0,
     rootKey = "";
+  let spanStart = 0,
+    spanLength = 0;
   let rootValue = false,
     envelope = false,
     sawRecords = false;
@@ -268,7 +279,13 @@ export async function readIntakeStream(
               token === TokenType.RIGHT_BRACKET
             ) {
               depth--;
-              if (depth === (envelope ? 2 : 1)) recordStart = undefined;
+              if (depth === (envelope ? 2 : 1)) {
+                if (recordStart !== undefined) {
+                  spanStart = recordStart;
+                  spanLength = offset - recordStart + 1;
+                }
+                recordStart = undefined;
+              }
             }
           };
           parser.onValue = ({ value, stack }) => {
@@ -303,7 +320,11 @@ export async function readIntakeStream(
                     : selectedId?.has(intakeHash(key))
                 )
                   ? record
-                  : intakeHeader(record),
+                  : {
+                      ...intakeHeader(record, !selectedId),
+                      rangeStart: spanStart,
+                      rangeLength: spanLength,
+                    },
               );
           };
           text = prefix;
@@ -559,6 +580,8 @@ export async function intakeMarketingBatch(
   index: IntakeIndex,
   offset: number,
   expectedTag: string,
+  known: (id: string, fingerprint: string, tag: string) => boolean = () =>
+    false,
 ) {
   const item = await drive.exists(`${settings.folder}/data/records.json`);
   ensure(item && !item.folder, "초진설문지 자료가 없습니다", 404);
@@ -573,12 +596,26 @@ export async function intakeMarketingBatch(
     .map((r) => ({
       id: intakeHash(intakeRecordKey(r)),
       at: string(r.createdAt),
+      fingerprint: string(r.statsFingerprint) || statisticsFingerprint(r),
+      rangeStart: Number(r.rangeStart),
+      rangeLength: Number(r.rangeLength),
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
-  const selected = entries.slice(offset, offset + 12),
-    ids = new Set(selected.map((r) => r.id));
+  const selected: typeof entries = [],
+    unchanged: typeof entries = [];
+  let cursor = offset;
+  for (const entry of entries.slice(offset, offset + 200)) {
+    if (known(entry.id, entry.fingerprint, tag)) unchanged.push(entry);
+    else {
+      if (selected.length >= 12) break;
+      selected.push(entry);
+    }
+    cursor++;
+  }
+  const ids = new Set(selected.map((r) => r.id));
   const full = ids.size
-    ? await loadRecords(drive, settings.folder, undefined, ids)
+    ? (await intakeRanges(drive, item.id, selected)) ||
+      (await loadRecords(drive, settings.folder, undefined, ids))
     : [];
   const rows = [];
   for (const r of full) {
@@ -587,7 +624,12 @@ export async function intakeMarketingBatch(
     const fields = intakeFields(
       await decryptIntakeRecord(r, settings.password),
     );
-    rows.push({ id, fields, at: selected.find((x) => x.id === id)!.at });
+    rows.push({
+      id,
+      fields,
+      at: selected.find((x) => x.id === id)!.at,
+      fingerprint: selected.find((x) => x.id === id)!.fingerprint,
+    });
   }
   ensure(
     rows.length === selected.length,
@@ -602,9 +644,76 @@ export async function intakeMarketingBatch(
   );
   return {
     rows,
+    unchanged,
     tag,
     total: entries.length,
-    cursor: offset + selected.length,
-    done: offset + selected.length >= entries.length,
+    cursor,
+    done: cursor >= entries.length,
   };
+}
+
+/** Download only selected JSON records. Microsoft requires Range on the preauthenticated download URL. */
+export async function intakeRanges(
+  drive: Drive,
+  itemId: string,
+  selected: {
+    id: string;
+    fingerprint: string;
+    rangeStart: number;
+    rangeLength: number;
+  }[],
+): Promise<RecordItem[] | undefined> {
+  if (!selected.length) return [];
+  if (
+    selected.some(
+      (r) =>
+        !Number.isSafeInteger(r.rangeStart) ||
+        r.rangeStart < 0 ||
+        !Number.isSafeInteger(r.rangeLength) ||
+        r.rangeLength < 2,
+    ) ||
+    selected.reduce((n, r) => n + r.rangeLength, 0) > 24 * 1024 * 1024
+  )
+    return;
+  try {
+    const meta = (await (
+      await drive.request(
+        `/me/drive/items/${encodeURIComponent(itemId)}?$select=id,@microsoft.graph.downloadUrl`,
+      )
+    ).json()) as RecordItem;
+    const url = meta["@microsoft.graph.downloadUrl"];
+    if (typeof url !== "string" || !url.startsWith("https://")) return;
+    const results = await Promise.allSettled(
+      selected.map(async (entry) => {
+        const end = entry.rangeStart + entry.rangeLength - 1;
+        const response = await fetch(url, {
+          headers: { Range: `bytes=${entry.rangeStart}-${end}` },
+          signal: AbortSignal.timeout(20000),
+        });
+        if (
+          response.status !== 206 ||
+          !response.headers
+            .get("content-range")
+            ?.startsWith(`bytes ${entry.rangeStart}-${end}/`)
+        ) {
+          await response.body?.cancel();
+          throw Error("range unavailable");
+        }
+        const raw = await response.arrayBuffer();
+        if (raw.byteLength !== entry.rangeLength) throw Error("range length");
+        const record = JSON.parse(new TextDecoder().decode(raw));
+        if (
+          !isObject(record) ||
+          intakeHash(intakeRecordKey(record)) !== entry.id ||
+          statisticsFingerprint(record) !== entry.fingerprint
+        )
+          throw Error("range content");
+        return record;
+      }),
+    );
+    if (results.some((r) => r.status === "rejected")) return;
+    return results.map((r) => (r as PromiseFulfilledResult<RecordItem>).value);
+  } catch {
+    return;
+  }
 }

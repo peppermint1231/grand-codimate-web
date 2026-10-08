@@ -6,6 +6,7 @@ import {
   parseIntakeRecords,
   intakeRecordKey,
   readIntakeStream,
+  intakeRanges,
 } from "../server/intake";
 import { clinicFixture } from "./fixtures/clinic";
 import { Drive } from "../server/drive";
@@ -488,7 +489,26 @@ it("keeps only latest headers, respects trailing tombstones, UTF-8 chunks and re
       }),
     ),
   );
-  expect(rows).toEqual([{ recordId: "a", name: "최근", updatedAt: "2" }]);
+  expect(rows).toEqual([
+    {
+      recordId: "a",
+      name: "최근",
+      updatedAt: "2",
+      statsFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      rangeStart: expect.any(Number),
+      rangeLength: expect.any(Number),
+    },
+  ]);
+  expect(
+    JSON.parse(
+      new TextDecoder().decode(
+        bytes.slice(
+          rows[0].rangeStart,
+          rows[0].rangeStart + rows[0].rangeLength,
+        ),
+      ),
+    ).name,
+  ).toBe("최근");
   await expect(readIntakeStream(new Response('{"records":['))).rejects.toThrow(
     "파일",
   );
@@ -591,5 +611,73 @@ it("includes unregistered questionnaires in deduplicated analytics with bounded 
     await f.request(f.admin, "/analytics?from=2026-09-01&to=2026-09-30")
   ).json()) as any;
   expect(after.audience.total).toBe(1);
+  f.exists.mockResolvedValue({
+    id: "source-file",
+    name: "records.json",
+    size: 1000,
+    eTag: "version-3",
+  });
+  f.requestDrive.mockClear();
+  expect((await f.request(f.admin, "/intake/analytics-sync", {})).status).toBe(
+    200,
+  );
+  expect(f.requestDrive).toHaveBeenCalledTimes(1); // Headers only: unchanged answers are not fetched/decrypted again.
   expect(f.writes).not.toHaveBeenCalled();
+});
+
+it("reads exact UTF-8 JSON record ranges without full-file or authorization-header transfer and falls back on ignored ranges", async () => {
+  const records = [
+    {
+      recordId: "range-a",
+      plain: true,
+      data: {
+        name: "가나다",
+        phone: "01012345678",
+        address: "춘천시 석사동",
+        consultType: "미용시술 상담 희망",
+      },
+    },
+    {
+      recordId: "range-b",
+      plain: true,
+      data: {
+        name: "홍길동",
+        phone: "01087654321",
+        address: "춘천시 퇴계동",
+        consultType: "피부질환 진료만 희망",
+      },
+    },
+  ];
+  const text = JSON.stringify({ records }),
+    bytes = new TextEncoder().encode(text);
+  const headers = await readIntakeStream(new Response(text));
+  const selected = await Promise.all(
+    headers.map(async (h) => ({
+      id: await sha(intakeRecordKey(h)),
+      fingerprint: h.statsFingerprint,
+      rangeStart: h.rangeStart,
+      rangeLength: h.rangeLength,
+    })),
+  );
+  const drive = {
+    request: async () =>
+      Response.json({
+        "@microsoft.graph.downloadUrl": "https://download.example.test/source",
+      }),
+  } as any;
+  const fetched = vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (_url, init) => {
+      const h = new Headers(init?.headers);
+      expect(h.has("Authorization")).toBe(false);
+      const [start, end] = h.get("Range")!.match(/\d+/g)!.map(Number);
+      return new Response(bytes.slice(start, end + 1), {
+        status: 206,
+        headers: { "Content-Range": `bytes ${start}-${end}/${bytes.length}` },
+      });
+    });
+  expect(await intakeRanges(drive, "source", selected)).toEqual(records);
+  expect(fetched).toHaveBeenCalledTimes(2);
+  fetched.mockImplementation(async () => new Response(text));
+  expect(await intakeRanges(drive, "source", selected)).toBeUndefined();
 });

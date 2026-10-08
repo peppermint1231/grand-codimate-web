@@ -725,18 +725,39 @@ export class PatientDirectory {
       "UPDATE patient_intake_job SET tag='',cursor=0,done=0 WHERE id=1",
     );
   }
+  knownIntake(id: string, fingerprint: string, tag: string) {
+    const row = this.rows(
+      "SELECT s.seen,f.fingerprint FROM patient_intake_stats s LEFT JOIN patient_intake_fingerprints f ON f.id=s.id WHERE s.id=?",
+      "survey:" + id,
+    )[0];
+    return !!row && (row.seen === tag || row.fingerprint === fingerprint);
+  }
   applyIntake(batch: {
     rows: {
       id: string;
       fields: import("../src/core/intake").IntakeFields;
       at: string;
+      fingerprint?: string;
     }[];
+    unchanged?: { id: string; fingerprint: string }[];
     tag: string;
     cursor: number;
     total: number;
     done: boolean;
   }) {
     this.transaction(() => {
+      for (const r of batch.unchanged || []) {
+        this.sql.exec(
+          "UPDATE patient_intake_stats SET seen=? WHERE id=?",
+          batch.tag,
+          "survey:" + r.id,
+        );
+        this.sql.exec(
+          "INSERT OR REPLACE INTO patient_intake_fingerprints VALUES(?,?)",
+          "survey:" + r.id,
+          r.fingerprint,
+        );
+      }
       for (const row of batch.rows) {
         const p = {
           ...row.fields,
@@ -765,6 +786,12 @@ export class PatientDirectory {
           grade: "미분류",
         };
         this.marketing.update(p.id, identity, summary);
+        if (row.fingerprint)
+          this.sql.exec(
+            "INSERT OR REPLACE INTO patient_intake_fingerprints VALUES(?,?)",
+            p.id,
+            row.fingerprint,
+          );
         const old = this.rows(
           "SELECT kind FROM patient_intake_stats WHERE id=?",
           p.id,
@@ -812,6 +839,10 @@ export class PatientDirectory {
       for (const r of stale) {
         this.marketing.update(r.id, "", undefined);
         this.sql.exec("DELETE FROM patient_intake_stats WHERE id=?", r.id);
+        this.sql.exec(
+          "DELETE FROM patient_intake_fingerprints WHERE id=?",
+          r.id,
+        );
         this.sql.exec(
           "UPDATE patient_intake_counts SET n=n-1 WHERE kind=?",
           r.kind,

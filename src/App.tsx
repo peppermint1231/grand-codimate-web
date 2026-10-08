@@ -1,3 +1,4 @@
+import { ProcedureSearch } from "./components/ProcedureSearch";
 import { usePatientLookup } from "./hooks/usePatientLookup";
 import { regionLabel } from "./core/addressRegion";
 import {
@@ -2781,8 +2782,9 @@ function PatientDetail({
         <details className="card">
           <summary>베가스에서 가져온 참고정보</summary>
           <p className="small">
-            원본 환자목록의 누적 정보입니다. 코디메이트 수납·환불·직원
-            실적·포인트에는 합산하지 않습니다.
+            원본 환자목록의 누적 정보입니다. 코디메이트 수납·환불·직원 실적에는
+            합산하지 않으며 VIP 자격 판정에 반영합니다. 연간 추가 적립은
+            이관일부터의 새 수납을 기준으로 합니다.
           </p>
           <p>
             최초일 {p.external.firstVisit || "미기재"} · 최근일{" "}
@@ -3264,7 +3266,10 @@ function ConsultationView({
   useAppBack(directOpinionOpen, () => setDirectOpinionOpen(false), 85);
   const [exportFiles, setExportFiles] = useState<ExportDocument[]>([]);
   const [exportMessage, setExportMessage] = useState("");
-  const exportContent = JSON.stringify({ draft, theme: quoteThemeId });
+  const exportContent = useMemo(
+    () => JSON.stringify({ draft, theme: quoteThemeId }),
+    [draft, quoteThemeId],
+  );
   useEffect(() => {
     setExportFiles([]);
     setExportMessage("");
@@ -3322,33 +3327,66 @@ function ConsultationView({
   );
   const [categoryMode, setCategoryMode] =
     useState<CatalogCategoryMode>("concern");
-  const categoryCatalog = catalog && catalogCategoryView(catalog, categoryMode);
-  const categoryProducts = new Map(
-    categoryCatalog?.products.map((p) => [p.id, p]),
+  const categoryCatalog = useMemo(
+    () => catalog && catalogCategoryView(catalog, categoryMode),
+    [catalog, categoryMode],
   );
-  const availableProducts = (catalog?.products || []).filter((p) => p.active);
-  const query = search.trim().toLocaleLowerCase();
-  const products = availableProducts.filter(
-    (p) =>
-      (!category ||
-        (categoryCatalog &&
-          inFolder(
-            categoryCatalog,
-            categoryProducts.get(p.id) || p,
-            category,
-          ))) &&
-      [
-        p.name,
-        p.category,
-        query && categoryCatalog
-          ? folderPath(categoryCatalog, categoryProducts.get(p.id)?.folderId)
-              .map((f) => f.name)
-              .join(" ")
-          : "",
-        p.description,
-        p.composition,
-        ...p.options.map((o) => o.label),
-      ].some((text) => text.toLocaleLowerCase().includes(query)),
+  const categoryProducts = useMemo(
+    () => new Map(categoryCatalog?.products.map((p) => [p.id, p])),
+    [categoryCatalog],
+  );
+  const availableProducts = useMemo(
+    () => (catalog?.products || []).filter((p) => p.active),
+    [catalog],
+  );
+  const productSearchText = useMemo(
+    () =>
+      new Map(
+        availableProducts.map((p) => [
+          p.id,
+          [
+            p.name,
+            p.category,
+            categoryCatalog
+              ? folderPath(
+                  categoryCatalog,
+                  categoryProducts.get(p.id)?.folderId,
+                )
+                  .map((f) => f.name)
+                  .join(" ")
+              : "",
+            p.description,
+            p.composition,
+            ...p.options.map((o) => o.label),
+          ]
+            .join(" ")
+            .normalize("NFKC")
+            .toLocaleLowerCase(),
+        ]),
+      ),
+    [availableProducts, categoryCatalog, categoryProducts],
+  );
+  const categoryFilteredProducts = useMemo(
+    () =>
+      availableProducts.filter(
+        (p) =>
+          !category ||
+          (categoryCatalog &&
+            inFolder(
+              categoryCatalog,
+              categoryProducts.get(p.id) || p,
+              category,
+            )),
+      ),
+    [availableProducts, category, categoryCatalog, categoryProducts],
+  );
+  const query = search.trim().normalize("NFKC").toLocaleLowerCase();
+  const products = useMemo(
+    () =>
+      categoryFilteredProducts.filter((p) =>
+        productSearchText.get(p.id)?.includes(query),
+      ),
+    [categoryFilteredProducts, productSearchText, query],
   );
   useEffect(() => {
     setProductLimit(70);
@@ -3366,7 +3404,10 @@ function ConsultationView({
   } catch (e) {
     quoteError = (e as Error).message;
   }
-  const dirty = JSON.stringify(draft) !== JSON.stringify(c);
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(c),
+    [draft, c],
+  );
   const validationError =
     quoteError ||
     ((quote.discountTotal > catalogDiscount(quote.lines) ||
@@ -3592,7 +3633,8 @@ function ConsultationView({
           </h1>
           <p>
             {consultationKind(c)} · {c.category} · {sexLabel(c.patient.sex)} ·{" "}
-            {c.patient.dob ? `${age(c.patient.dob)}세` : "생년월일 미입력"} · {c.createdAt.slice(0, 10)}
+            {c.patient.dob ? `${age(c.patient.dob)}세` : "생년월일 미입력"} ·{" "}
+            {c.createdAt.slice(0, 10)}
           </p>
           <ConsultationOwner
             state={s}
@@ -4046,12 +4088,7 @@ function ConsultationView({
                     </div>
                     <div className="search">
                       <Search size={18} />
-                      <input
-                        aria-label="시술 검색"
-                        placeholder="시술 검색"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
+                      <ProcedureSearch value={search} onSearch={setSearch} />
                     </div>
                     <select
                       aria-label="시술 카테고리"

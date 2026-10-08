@@ -124,7 +124,23 @@ export function firstVipQualification(
             ? -1
             : 1),
     );
-  let net = 0;
+  const patient = s.patients.find((p) => p.id === patientId);
+  const imported =
+    patient?.external?.source === "vegas" && patient.createdAt <= at
+      ? patient
+      : undefined;
+  // The imported balance establishes eligibility only. It is neither a receipt nor annual spend.
+  const opening = imported?.external?.totalPaid || 0;
+  if (imported && opening >= vipPolicy(s).minimumRevenue)
+    return {
+      enrolledAt: imported.createdAt,
+      baselineReceiptIds: rows
+        .filter(
+          (r) => r.createdAt <= imported.createdAt && r.kind === "receipt",
+        )
+        .map((r) => r.id),
+    };
+  let net = opening;
   const baselineReceiptIds: string[] = [];
   for (const row of rows) {
     net += row.kind === "receipt" ? row.amount : -row.amount;
@@ -134,7 +150,9 @@ export function firstVipQualification(
         enrolledAt:
           seoulDay(row.createdAt) === row.date
             ? row.createdAt
-            : row.date + "T00:00:00+09:00",
+            : imported && row.date < seoulDay(imported.createdAt)
+              ? imported.createdAt
+              : row.date + "T00:00:00+09:00",
         baselineReceiptIds,
       };
   }

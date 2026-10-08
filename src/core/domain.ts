@@ -829,6 +829,7 @@ export async function applyCommand(
           storageName: safeName(`${row.number}${row.sex}${row.name}`),
         });
       }
+      reconcileVip(s, now, cmd.id);
       text = `베가스 환자 ${imported.length}명 가져오기`;
       break;
     }

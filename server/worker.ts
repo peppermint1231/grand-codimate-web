@@ -2652,7 +2652,7 @@ export class Clinic extends DurableObject<Env> {
       const before = cmd.type.startsWith("catalog.")
         ? await this.commandCatalogState(cmd)
         : cmd.type === "patient.import"
-          ? await this.state(false, [])
+          ? await this.state(false, ["policies"])
           : await this.state(false);
       if (cmd.type === "patient.import") {
         const ids = Array.isArray(cmd.payload.rows)

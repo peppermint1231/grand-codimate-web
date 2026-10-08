@@ -198,7 +198,85 @@ it("keeps directory outside workspace, pages/searches it, replays import safely,
     // Simulate DO eviction: encrypted storage reconstructs the complete directory.
     clinic = new Clinic(ctx as any, env as any);
     expect((await req("/patients/search")).total).toBe(35);
+    const { defaultVipPolicy } = await import("../src/core/vipPoints");
+    const policyState = (await req("/state?view=workspace")).state;
+    await req("/commands", {
+      id: crypto.randomUUID(),
+      type: "vip.policy",
+      baseRev: policyState.policies[0]?.rev,
+      payload: { policy: { ...defaultVipPolicy, enabled: true } },
+    });
+    const vipImport = command([row(36)]);
+    await req("/commands", vipImport);
+    await req("/commands", vipImport);
+    const withVip = (await req("/state?view=workspace")).state;
+    expect(
+      withVip.vipAccounts.filter((a: any) => a.patientId === row(36).id),
+    ).toHaveLength(1);
+    expect(
+      withVip.pointEntries
+        .filter(
+          (e: any) => e.patientId === row(36).id && e.benefitKey === "welcome",
+        )
+        .map((e: any) => e.amount),
+    ).toEqual([100000]);
   } finally {
     db.close();
   }
 }, 30000);
+
+it("uses imported cash totals for permanent VIP and welcome points, but starts annual spending at import", async () => {
+  const {
+    defaultVipPolicy,
+    reconcileVip,
+    annualCash,
+    pointBalance,
+    vipPeriod,
+  } = await import("../src/core/vipPoints");
+  const s = emptyState(),
+    now = "2026-10-08T03:00:00.000Z";
+  s.policies = [
+    {
+      id: "grades",
+      rev: 1,
+      createdAt: now,
+      updatedAt: now,
+      grades: [{ id: "vip", name: "VIP", minimum: 5000000, color: "#145d55" }],
+      vip: {
+        ...defaultVipPolicy,
+        enabled: true,
+        startedAt: "2026-10-01T03:00:00.000Z",
+      },
+    },
+  ];
+  const high = { ...row(), dob: "1980-12-01" },
+    low = { ...row(2), external: { ...row(2).external, totalPaid: 4900000 } };
+  const imported = await applyCommand(s, admin, command([high, low]), now);
+  expect(imported.ledger).toHaveLength(0);
+  expect(imported.vipAccounts).toHaveLength(1);
+  expect(imported.vipAccounts[0].enrolledAt).toBe(now);
+  expect(pointBalance(imported, high.id, now)).toBe(100000);
+  const period = vipPeriod(imported.vipAccounts[0], now);
+  expect(period).toEqual({ from: "2026-10-08", to: "2027-10-08" });
+  expect(
+    annualCash(imported, imported.vipAccounts[0], period.from, period.to, now),
+  ).toBe(0);
+  reconcileVip(imported, now, "another-operation");
+  expect(pointBalance(imported, high.id, now)).toBe(100000);
+  // A sub-threshold imported patient qualifies after new real receipts cross the threshold.
+  imported.ledger.push({
+    id: "new-receipt",
+    rev: 1,
+    createdAt: "2026-10-09T03:00:00.000Z",
+    updatedAt: "2026-10-09T03:00:00.000Z",
+    patientId: low.id,
+    kind: "receipt",
+    date: "2026-10-09",
+    amount: 100000,
+  } as any);
+  reconcileVip(imported, "2026-10-09T04:00:00.000Z", "new-payment");
+  expect(imported.vipAccounts).toHaveLength(2);
+  expect(pointBalance(imported, low.id, "2026-10-09T04:00:00.000Z")).toBe(
+    100000,
+  );
+});

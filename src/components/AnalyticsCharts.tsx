@@ -1,3 +1,8 @@
+import {
+  comparisonBuckets,
+  isMissingComparisonValue,
+} from "../core/analyticsComparison";
+import { ComparisonSummary } from "./ComparisonSummary";
 import { useState } from "react";
 import type { Bucket, Performance } from "../core/analytics";
 import type { MarketingRow } from "../core/marketingAnalytics";
@@ -14,7 +19,7 @@ const colors = [
 ];
 const n = (v: number) => v.toLocaleString("ko-KR");
 export function DonutChart({
-  rows,
+  rows: allRows,
   label,
   onSelect,
 }: {
@@ -22,8 +27,8 @@ export function DonutChart({
   label: string;
   onSelect?: (name: string) => void;
 }) {
+  const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const [focus, setFocus] = useState(""),
-    total = rows.reduce((s, r) => s + r.count, 0),
     active = rows.find((r) => r.name === focus);
   let offset = 0;
   return (
@@ -77,9 +82,7 @@ export function DonutChart({
                 }
               }}
             >
-              <title>
-                {r.name}: {n(r.count)}명
-              </title>
+              <title>{`${r.name}: ${n(r.count)}명`}</title>
             </circle>
           );
         })}
@@ -89,7 +92,9 @@ export function DonutChart({
         <text x="120" y="139" textAnchor="middle" className="insight-subtitle">
           {active
             ? `${((100 * active.count) / (total || 1)).toFixed(1)}%`
-            : "명 · 전체"}
+            : excluded.length
+              ? "명 · 비교 대상"
+              : "명 · 전체"}
         </text>
       </svg>
       <figcaption>
@@ -110,8 +115,9 @@ export function DonutChart({
             <small>{((100 * r.count) / (total || 1)).toFixed(1)}%</small>
           </button>
         ))}
-        {!rows.length && <p>해당 자료가 없습니다.</p>}
+        {!total && <p>비교할 입력 자료가 없습니다.</p>}
       </figcaption>
+      <ComparisonSummary excluded={excluded} total={total} />
     </figure>
   );
 }
@@ -123,19 +129,21 @@ const ageOrder = [
   "50대",
   "60대",
   "70세 이상",
-  "미입력",
 ];
 export function AgeChart({
-  rows,
+  rows: allRows,
   onSelect,
 }: {
   rows: Bucket[];
   onSelect: (name: string) => void;
 }) {
+  const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const max = Math.max(1, ...rows.map((r) => r.count)),
     [focus, setFocus] = useState("");
   return (
     <figure className="insight-chart">
+      <ComparisonSummary excluded={excluded} total={total} />
+      {!total && <p className="small">비교할 입력 자료가 없습니다.</p>}
       <div
         className="insight-columns"
         role="group"
@@ -183,9 +191,20 @@ export function CategoryHeatmap({
   sex: string;
   onSelect: (age: string) => void;
 }) {
-  const filtered = rows.filter(
+  const source = rows.filter(
     (r) => r.dimension === "category" && (!sex || r.sex === sex),
   );
+  const missing = new Map<string, number>();
+  const filtered = source.filter((r) => {
+    const fields = [
+      isMissingComparisonValue(r.age) ? "연령" : "",
+      isMissingComparisonValue(r.name) ? "카테고리" : "",
+    ].filter(Boolean);
+    if (!fields.length) return true;
+    const label = fields.join("·") + " 미입력·미선택";
+    missing.set(label, (missing.get(label) || 0) + r.patients);
+    return false;
+  });
   const totals = new Map<string, number>();
   for (const r of filtered)
     totals.set(r.name, (totals.get(r.name) || 0) + r.patients);
@@ -207,6 +226,11 @@ export function CategoryHeatmap({
   );
   return (
     <figure className="insight-chart">
+      <ComparisonSummary
+        excluded={[...missing].map(([name, count]) => ({ name, count }))}
+        total={filtered.reduce((sum, r) => sum + r.patients, 0)}
+        detail="카테고리별 인원 합계로, 여러 카테고리를 선택한 환자는 중복 포함됩니다."
+      />
       <div className="analytics-table-scroll">
         <table className="insight-heatmap">
           <caption>

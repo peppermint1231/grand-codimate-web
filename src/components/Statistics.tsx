@@ -1,3 +1,5 @@
+import { comparisonBuckets } from "../core/analyticsComparison";
+import { ComparisonSummary } from "./ComparisonSummary";
 import { IntakeStatisticsSync } from "./IntakeStatisticsSync";
 import { InteractiveTrend } from "./AnalyticsCharts";
 import { PatientMarketingPanel } from "./PatientMarketingPanel";
@@ -30,10 +32,18 @@ import {
 } from "../core/model";
 const fmt = (n: number) => n.toLocaleString("ko-KR"),
   pct = (n: number) => n.toFixed(1) + "%";
-function Bars({ rows, unit = "명" }: { rows: Bucket[]; unit?: string }) {
+function Bars({
+  rows: allRows,
+  unit = "명",
+}: {
+  rows: Bucket[];
+  unit?: string;
+}) {
+  const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.count)));
   return (
     <div className="analytics-bars">
+      <ComparisonSummary excluded={excluded} total={total} unit={unit} />
       {rows.length ? (
         rows.map((r, i) => (
           <div className="analytics-bar" key={r.name}>
@@ -59,7 +69,7 @@ function Bars({ rows, unit = "명" }: { rows: Bucket[]; unit?: string }) {
           </div>
         ))
       ) : (
-        <p className="small">해당 기간에 기록된 자료가 없습니다.</p>
+        <p className="small">비교할 입력 자료가 없습니다.</p>
       )}
     </div>
   );

@@ -214,6 +214,7 @@ import {
   unlockVault,
   rememberLogin,
   restoreLogin,
+  restoreCachedSession,
   forgetLogin,
   lockVault,
   vaultRead,
@@ -318,6 +319,8 @@ export function App() {
     setModal("opinions");
   };
   const [restoring, setRestoring] = useState(!needsServer);
+  const [restoreError, setRestoreError] = useState("");
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
   );
@@ -884,6 +887,23 @@ export function App() {
     setPage("patients");
     setTab("photo");
   };
+  const openOffline = () => {
+    const password = window.prompt(
+      "이 기기에 설정한 기기 보관 암호 (계정 비밀번호와 별도)",
+    );
+    if (!password) return;
+    work(async () => {
+      const cached = await restoreCachedSession(password, loginName);
+      restoreNeeded.current = false;
+      setRestoreError("");
+      setState({ ...emptyState(), ...cached.state });
+      setUser(cached.user);
+      setPending((await vaultRead<Command[]>("pending")) || []);
+      setNotice(
+        "오프라인 · 기기 보관 자료입니다. 저장 내용은 서버 전송 대기열에 보관됩니다.",
+      );
+    });
+  };
   useEffect(() => {
     if (needsServer) return;
     let live = true,
@@ -892,6 +912,10 @@ export function App() {
     const restore = async () => {
       if (checking || !restoreNeeded.current) return;
       checking = true;
+      if (live) {
+        setRestoring(true);
+        setRestoreError("");
+      }
       controller = new AbortController();
       const timeout = setTimeout(() => controller?.abort(), 15000);
       try {
@@ -909,6 +933,12 @@ export function App() {
         if (live && e.status === 401) {
           restoreNeeded.current = false;
           forgetLogin();
+        } else if (live) {
+          setRestoreError(
+            e instanceof Error
+              ? e.message
+              : "서버 연결을 확인하지 못했습니다. 다시 연결해주세요.",
+          );
         }
       } finally {
         clearTimeout(timeout);
@@ -926,11 +956,42 @@ export function App() {
       controller?.abort();
       window.removeEventListener("online", online);
     };
-  }, []);
+  }, [restoreAttempt]);
   if (restoring)
     return (
       <div className="login-page" role="status">
         로그인을 복원하고 있습니다…
+      </div>
+    );
+  if (!user && restoreError && restoreNeeded.current)
+    return (
+      <div className="login-page">
+        <section className="login-card">
+          <h1>서버 연결을 기다리고 있습니다</h1>
+          <p role="alert">{restoreError}</p>
+          <p className="small">
+            로그인 정보를 유지하고 있습니다. 연결이 복구되면 다시 접속할 수
+            있습니다.
+          </p>
+          <button
+            className="primary"
+            onClick={() => setRestoreAttempt((n) => n + 1)}
+          >
+            다시 연결
+          </button>
+          <button disabled={busy} onClick={openOffline}>
+            기기 보관 자료로 임시 사용
+          </button>
+          <p className="small">
+            기기 암호화 보관을 설정했고, 마지막 온라인 저장이 12시간 이내인
+            자료만 열 수 있습니다.
+          </p>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+        </section>
       </div>
     );
   if (needsServer)
@@ -1179,34 +1240,7 @@ export function App() {
                     계정 비밀번호와 별도로 설정하며, 잊으면 기기 대기 자료를
                     복구할 수 없습니다.
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const id = window.prompt(
-                          "이 기기에 마지막 로그인한 사용자 ID",
-                        ),
-                        pass = window.prompt("기기 보관 암호");
-                      if (id && pass)
-                        work(async () => {
-                          await unlockVault(id, pass);
-                          const cached =
-                            await vaultRead<CachedSession>("session");
-                          if (
-                            !cached ||
-                            Date.now() - cached.savedAt > 12 * 3600000
-                          )
-                            throw new Error(
-                              "오프라인 로그인 유효기간(12시간)이 지났습니다. 온라인 로그인하세요.",
-                            );
-                          setState({ ...emptyState(), ...cached.state });
-                          setUser(cached.user);
-                          setPending(
-                            (await vaultRead<Command[]>("pending")) || [],
-                          );
-                          setNotice("오프라인 · 기기 보관 자료");
-                        });
-                    }}
-                  >
+                  <button type="button" onClick={openOffline}>
                     오프라인 잠금 해제
                   </button>
                 </details>

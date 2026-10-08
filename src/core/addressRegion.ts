@@ -114,7 +114,20 @@ export function directoryRegions(
   return {
     total,
     imported,
-    regions: [...counts]
+    regions: [
+      ...[...counts].filter(
+        ([name]) => name !== "주소 확인 필요" && name !== "주소 미입력",
+      ),
+      ...(counts.has("주소 확인 필요") || counts.has("주소 미입력")
+        ? [
+            [
+              "지역 누락",
+              (counts.get("주소 확인 필요") || 0) +
+                (counts.get("주소 미입력") || 0),
+            ] as [string, number],
+          ]
+        : []),
+    ]
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count),
     unresolved: counts.get("주소 확인 필요") || 0,

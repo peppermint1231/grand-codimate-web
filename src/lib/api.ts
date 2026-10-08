@@ -679,6 +679,47 @@ export interface CachedSession {
   user: User;
   savedAt: number;
 }
+export async function restoreCachedSession(password: string, username = "") {
+  const keys = await (await db()).getAllKeys("vault");
+  const owners = keys
+    .filter((k): k is string => typeof k === "string" && k.endsWith(":session"))
+    .map((k) => k.slice(0, -8));
+  if (!owners.length)
+    throw new Error(
+      "이 기기에 보관된 상담 자료가 없습니다. 서버 연결이 복구된 후 로그인해주세요.",
+    );
+  const matches: CachedSession[] = [];
+  let expired = false;
+  for (const id of owners) {
+    try {
+      await unlockVault(id, password);
+      const cached = await vaultRead<CachedSession>("session");
+      if (
+        !cached ||
+        cached.user.id !== id ||
+        !cached.user.active ||
+        (username && cached.user.username !== username)
+      )
+        continue;
+      if (Date.now() - cached.savedAt > 12 * 3600000) {
+        expired = true;
+        continue;
+      }
+      matches.push(cached);
+    } catch {
+      /* An account with a different device password is not a match. */
+    }
+  }
+  if (!matches.length)
+    throw new Error(
+      expired
+        ? "오프라인 로그인 유효기간(12시간)이 지났습니다. 서버 연결이 복구된 후 온라인 로그인해주세요."
+        : "기기 보관 암호 또는 아이디를 확인해주세요.",
+    );
+  const cached = matches.sort((a, b) => b.savedAt - a.savedAt)[0];
+  await unlockVault(cached.user.id, password);
+  return cached;
+}
 export const vaultEnabled = () => !!key;
 export async function recoveryCommands() {
   if (!key) return [];

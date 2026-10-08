@@ -70,6 +70,51 @@ it("resolves explicit neighbourhoods, defaults omitted city to Chuncheon, never 
       { address: "중앙로 68" },
     ]),
   ).toMatchObject({ total: 3, unresolved: 1, missing: 1 });
+  expect(
+    directoryRegions([{ address: "" }, { address: "중앙로 68" }]).regions,
+  ).toEqual([{ name: "지역 누락", count: 2 }]);
+});
+
+it("enriches only matching names and phones at the expected revision, preserving patient links and financial records", async () => {
+  const s = await applyCommand(emptyState(), admin, command([row()]));
+  s.patients[0].ownerId = "original-owner";
+  const { number, ...data } = row();
+  const enriched = {
+    ...data,
+    name: "가져오기 시험1",
+    dob: "1981-02-03",
+    address: "중앙로 68",
+    addressRegion: undefined,
+    external: { ...data.external, rows: [2, 100], totalPaid: 9500000 },
+    expectedRev: 1,
+  };
+  const c = {
+    id: crypto.randomUUID(),
+    type: "patient.import.enrich",
+    payload: { rows: [enriched] },
+  };
+  const next = await applyCommand(s, admin, c);
+  expect(next.patients).toHaveLength(1);
+  expect(next.patients[0]).toMatchObject({
+    id: data.id,
+    number,
+    ownerId: "original-owner",
+    rev: 2,
+    dob: "1981-02-03",
+    external: { rows: [2, 100], totalPaid: 9500000 },
+  });
+  expect(next.patients[0].createdAt).toBe(s.patients[0].createdAt);
+  expect(next.ledger).toEqual(s.ledger);
+  await expect(applyCommand(next, admin, c)).rejects.toThrow("다른 기기");
+  await expect(
+    applyCommand(s, admin, {
+      ...c,
+      payload: { rows: [{ ...enriched, phone: "01099998888" }] },
+    }),
+  ).rejects.toThrow("이름과 전화번호");
+  await expect(
+    applyCommand(s, { ...admin, role: "coordinator" }, c),
+  ).rejects.toThrow("관리자");
 });
 it("imports reference history without creating financial/VIP history and refuses overwrites or resident numbers", async () => {
   const c = command([
@@ -220,6 +265,41 @@ it("keeps directory outside workspace, pages/searches it, replays import safely,
         )
         .map((e: any) => e.amount),
     ).toEqual([100000]);
+    const beforeEnrich = (await req("/patients/" + row(36).id)).patient;
+    const { number: omitted, ...details } = row(36);
+    const enrichCommand = {
+      id: crypto.randomUUID(),
+      type: "patient.import.enrich",
+      payload: {
+        rows: [
+          {
+            ...details,
+            expectedRev: beforeEnrich.rev,
+            address: "중앙로 68",
+            addressRegion: undefined,
+            external: { ...details.external, rows: [37, 1000] },
+          },
+        ],
+      },
+    };
+    await req("/commands", enrichCommand);
+    expect((await req("/commands", enrichCommand)).replayed).toBe(true);
+    const enrichedState = (await req("/state?view=workspace")).state;
+    expect(
+      enrichedState.vipAccounts.filter((a: any) => a.patientId === row(36).id),
+    ).toHaveLength(1);
+    expect(
+      enrichedState.pointEntries.filter(
+        (e: any) => e.patientId === row(36).id && e.benefitKey === "welcome",
+      ),
+    ).toHaveLength(1);
+    expect(
+      (await req("/patients/" + row(36).id)).patient.external.rows,
+    ).toEqual([37, 1000]);
+    expect(
+      (await req("/analytics?from=2026-01-01&to=2026-12-31")).patientDirectory
+        .regions,
+    ).toContainEqual({ name: "지역 누락", count: 1 });
   } finally {
     db.close();
   }

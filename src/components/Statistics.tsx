@@ -647,9 +647,14 @@ export function Statistics({
                     위 상담기간·담당자 필터와 별도로 집계합니다.
                   </p>
                   <p className="small">
-                    주소 확인 필요 {fmt(report.patientDirectory.unresolved)}명 ·
-                    주소 미입력 {fmt(report.patientDirectory.missing)}명.
-                    도로명만으로 동을 추정하지 않습니다.
+                    지역 통계 누락{" "}
+                    {fmt(
+                      report.patientDirectory.unresolved +
+                        report.patientDirectory.missing,
+                    )}
+                    명 (동·읍·면 불명 {fmt(report.patientDirectory.unresolved)}
+                    명 · 주소 미입력 {fmt(report.patientDirectory.missing)}명).
+                    주소가 불완전해도 환자 등록은 유지합니다.
                   </p>
                   <Bars rows={report.patientDirectory.regions} />
                 </div>

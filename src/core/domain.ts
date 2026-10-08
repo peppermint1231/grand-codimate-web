@@ -1,4 +1,8 @@
-import { patientImportSchema, addressRegionSchema } from "./patientImport";
+import {
+  patientImportSchema,
+  patientEnrichmentSchema,
+  addressRegionSchema,
+} from "./patientImport";
 import { regionFromAddress } from "./addressRegion";
 import { packagePlanSchema } from "./packageBuilder";
 import { parsePackageSchedule, optionSessionCount } from "./packageSchedule";
@@ -808,6 +812,50 @@ export async function applyCommand(
     });
   };
   switch (cmd.type) {
+    case "patient.import.enrich": {
+      admin();
+      const rows = patientEnrichmentSchema.parse(p).rows;
+      ensure(
+        new Set(rows.map((r) => r.id)).size === rows.length,
+        "가져오기 ID가 중복됩니다",
+      );
+      const identityName = (name: string) =>
+        name.normalize("NFKC").replace(/\s/g, "").toLowerCase();
+      const identityPhone = (phone: string) =>
+        phone.normalize("NFKC").replace(/\D/g, "");
+      for (const { expectedRev, ...row } of rows) {
+        const patient = patientFor(s, row.id);
+        ensure(
+          patient && !patient.archived && !patient.mergedInto,
+          "정보를 합칠 기존 환자가 없습니다",
+          409,
+        );
+        ensure(
+          patient.rev === expectedRev,
+          "환자정보가 다른 기기에서 수정되었습니다. 최신 정보로 다시 합치세요",
+          409,
+        );
+        ensure(
+          identityName(patient.name) === identityName(row.name) &&
+            identityPhone(patient.phone) === identityPhone(row.phone),
+          "이름과 전화번호가 일치하는 환자만 정보를 합칠 수 있습니다",
+          409,
+        );
+        ensure(
+          !patient.external ||
+            patient.external.fileHash === row.external.fileHash,
+          "다른 원본의 이관 정보입니다. 원본을 확인하세요",
+          409,
+        );
+        Object.assign(patient, row, {
+          addressRegion: row.addressRegion || regionFromAddress(row.address),
+        });
+        touch(patient);
+      }
+      reconcileVip(s, now, cmd.id);
+      text = `베가스 환자 ${rows.length}명 정보 통합 (이름·전화번호 일치)`;
+      break;
+    }
     case "patient.import": {
       admin();
       const imported = patientImportSchema.parse(p).rows;

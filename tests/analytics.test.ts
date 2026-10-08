@@ -378,3 +378,22 @@ it("uses points to settle outstanding without adding cash revenue or incentives"
   ).toBe(450);
   expect(ledgerAvailable(s, "consult", "receipt")).toBe(7000);
 });
+
+it("counts the same name and phone once across native patient IDs while preserving both consultations", () => {
+  const s = fixture();
+  const duplicate = {
+    ...s.patients[0],
+    id: "duplicate-id",
+    name: "환자 실명",
+    phone: "010-9999-1234",
+  };
+  s.patients.push(duplicate);
+  s.consultations.push({
+    ...s.consultations[0],
+    id: "duplicate-consult",
+    patientId: duplicate.id,
+  });
+  const r = buildAnalytics(s, { from: "2026-01-01", to: "2026-12-31" });
+  expect(r.patients.consulted).toBe(1);
+  expect(r.marketing.find((x) => x.dimension === "source")?.patients).toBe(1);
+});

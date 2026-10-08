@@ -1,3 +1,14 @@
+import { patientIdentityKey } from "./patientIdentity";
+import {
+  buildMarketing,
+  type MarketingRow,
+  type PatientAudience,
+} from "./marketingAnalytics";
+import {
+  type PatientCohort,
+  cohortSelectionMask,
+  patientCohortMask,
+} from "./patientCohorts";
 import {
   importedHistory,
   importedRevenue,
@@ -18,6 +29,7 @@ export type AnalyticsFilter = {
   to: string;
   ownerId?: string;
   book?: string;
+  cohorts?: PatientCohort[];
 };
 export type Performance = {
   id: string;
@@ -47,6 +59,8 @@ export type AnalyticsReport = {
   filter: AnalyticsFilter;
   financial: boolean;
   generatedAt: string;
+  audience?: PatientAudience;
+  marketing: MarketingRow[];
   patientDirectory?: ReturnType<typeof directoryRegions>;
   totals: Performance;
   employees: Performance[];
@@ -241,7 +255,30 @@ export function buildAnalytics(
       ] as const;
     }),
   );
+  const identities = new Map(
+    s.patients.map((p) => [p.id, patientIdentityKey(p) || p.id]),
+  );
+  const masks = new Map<string, number>();
+  const ownConsults = new Map<string, Consultation[]>();
+  for (const c of s.consultations) {
+    if (!ownConsults.has(c.patientId)) ownConsults.set(c.patientId, []);
+    ownConsults.get(c.patientId)!.push(c);
+  }
+  for (const p of s.patients) {
+    const key = identities.get(p.id)!;
+    masks.set(
+      key,
+      (masks.get(key) || 0) | patientCohortMask(p, ownConsults.get(p.id) || []),
+    );
+  }
+  const selectedPatient = (id: string) =>
+    !filter.cohorts ||
+    !!(
+      (masks.get(identities.get(id) || id) || 0) &
+      cohortSelectionMask(filter.cohorts)
+    );
   const matchesFilter = (c: Consultation) =>
+    selectedPatient(c.patientId) &&
     (!filter.ownerId || c.ownerId === filter.ownerId) &&
     !!selections.get(c.id)!.chosen.length;
   const eligible = (c: Consultation) =>
@@ -410,13 +447,14 @@ export function buildAnalytics(
     if (!financial) m.receipts = m.refunds = m.net = 0;
   }
   if (!financial) for (const p of products.values()) p.contract = 0;
+  const personKey = (id: string) => identities.get(id) || id;
   const consultationsByPatient = new Map<string, Consultation[]>();
   for (const c of s.consultations.filter(
     (c) => eligible(c) && !c.cancelled && beforeEnd(koreanDay(c.createdAt)),
   )) {
-    if (!consultationsByPatient.has(c.patientId))
-      consultationsByPatient.set(c.patientId, []);
-    consultationsByPatient.get(c.patientId)!.push(c);
+    if (!consultationsByPatient.has(personKey(c.patientId)))
+      consultationsByPatient.set(personKey(c.patientId), []);
+    consultationsByPatient.get(personKey(c.patientId))!.push(c);
   }
   const buckets = (values: string[]): Bucket[] => {
     const counts = new Map<string, number>();
@@ -425,19 +463,42 @@ export function buildAnalytics(
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
   };
-  const patientList = s.patients.filter(
-    (p) =>
-      !p.mergedInto &&
-      !p.archived &&
-      beforeEnd(koreanDay(patientRegisteredAt(p))),
-  );
+  const patientList = [
+    ...new Map(
+      s.patients
+        .filter(
+          (p) =>
+            !p.mergedInto &&
+            !p.archived &&
+            beforeEnd(koreanDay(patientRegisteredAt(p))) &&
+            selectedPatient(p.id),
+        )
+        .sort((a, b) =>
+          patientRegisteredAt(b).localeCompare(patientRegisteredAt(a)),
+        )
+        .map((p) => [personKey(p.id), p]),
+    ).values(),
+  ];
+  const lifetimeByPerson = new Map<string, number>(),
+    openingByPerson = new Map<string, number>();
+  for (const p of s.patients.filter((p) => !p.archived && !p.mergedInto)) {
+    const key = personKey(p.id),
+      opening = importedRevenue(p);
+    openingByPerson.set(key, Math.max(openingByPerson.get(key) || 0, opening));
+    lifetimeByPerson.set(
+      key,
+      (lifetimeByPerson.get(key) || 0) + (lifetimeNet.get(p.id) || 0) - opening,
+    );
+  }
+  for (const [key, opening] of openingByPerson)
+    lifetimeByPerson.set(key, (lifetimeByPerson.get(key) || 0) + opening);
   const consulted = patientList.filter((p) =>
     consultationsByPatient
-      .get(p.id)
+      .get(personKey(p.id))
       ?.some((c) => inPeriod(koreanDay(c.createdAt))),
   );
   const firstDate = (id: string) =>
-    (consultationsByPatient.get(id) || [])
+    (consultationsByPatient.get(personKey(id)) || [])
       .map((c) => koreanDay(c.createdAt))
       .sort()[0];
   const first = consulted.filter((p) => inPeriod(firstDate(p.id))).length;
@@ -463,7 +524,7 @@ export function buildAnalytics(
     entry.patients++;
     const dates = [
       ...new Set(
-        (consultationsByPatient.get(p.id) || []).map((c) =>
+        (consultationsByPatient.get(personKey(p.id)) || []).map((c) =>
           koreanDay(c.createdAt),
         ),
       ),
@@ -495,8 +556,10 @@ export function buildAnalytics(
     meanLifetimeNet:
       financial && consulted.length
         ? Math.round(
-            consulted.reduce((n, p) => n + (lifetimeNet.get(p.id) || 0), 0) /
-              consulted.length,
+            consulted.reduce(
+              (n, p) => n + (lifetimeByPerson.get(personKey(p.id)) || 0),
+              0,
+            ) / consulted.length,
           )
         : 0,
     ages: buckets(
@@ -529,16 +592,18 @@ export function buildAnalytics(
           : financial
             ? [...s.policies.flatMap((x) => x.grades)]
                 .sort((a, b) => b.minimum - a.minimum)
-                .find((g) => (lifetimeNet.get(p.id) || 0) >= g.minimum)?.name ||
-              "미분류"
+                .find(
+                  (g) =>
+                    (lifetimeByPerson.get(personKey(p.id)) || 0) >= g.minimum,
+                )?.name || "미분류"
             : "금액 열람 필요",
       ),
     ),
     segments: buckets(
       patientList
-        .filter((p) => !!consultationsByPatient.get(p.id)?.length)
+        .filter((p) => !!consultationsByPatient.get(personKey(p.id))?.length)
         .map((p) => {
-          const last = (consultationsByPatient.get(p.id) || [])
+          const last = (consultationsByPatient.get(personKey(p.id)) || [])
             .map((c) => koreanDay(c.createdAt))
             .sort()
             .at(-1)!;
@@ -558,6 +623,7 @@ export function buildAnalytics(
   };
   return {
     filter,
+    marketing: buildMarketing(s, filter, financial),
     financial,
     generatedAt: new Date().toISOString(),
     totals,
@@ -574,6 +640,9 @@ export function buildAnalytics(
     ),
     methods: [...methods.values()],
     definitions: [
+      "환자군 전체 분석은 등록 전 초진설문 제출자를 포함한 현재 누적 자료이며 기간·담당자·단가표 필터와 별도로 집계합니다. 같은 이름+연락처는 한 명으로 통합하며 중복된 환자군은 코디메이트상담→베가스이관→미용설문→진료설문 순으로 한 곳에 표시합니다.",
+      "베가스 이관 총수납액은 누적 매출에만 반영하며 월별 수납·직원 성과·시술 내역으로 추정하지 않습니다. 최초·최근 방문일만으로 30일/90일 재방문을 추정하지 않습니다.",
+      "전체 환자군 연령은 현재 연도−출생연도 기준, 코디메이트 교차 분석은 조회 종료일 만 나이입니다. 유입경로별 금액은 해당 기간에 작성한 상담의 종료일까지 실수납이며, 선택한 단가표가 포함된 상담 전체 금액입니다. 카테고리별 환자 수는 중복 선택이 가능하므로 합산하지 않습니다.",
       "VIP 포인트 수납·반환은 실수납·기여매출·직원 매출 및 인센티브에서 제외하고, 미수금에는 결제수단으로 반영합니다.",
       "상담·계약은 상담 작성일(한국시간) 기준이며 취소·중간상담을 제외합니다. 현재 상태를 집계하므로 과거 기간도 이후 결과 변경에 따라 달라질 수 있습니다.",
       "전환율 = 성공 ÷ (성공+실패). 보류를 제외하며, 같은 상담에 여러 분야가 있으면 분야별 상담 수의 합은 전체보다 클 수 있습니다.",
@@ -681,6 +750,56 @@ export function analyticsPrompt(
           ),
           grades: suppress(report.patients.grades),
           cohorts: report.patients.cohorts.filter((c) => c.patients >= 5),
+          selectedPatientCohorts: report.filter.cohorts,
+          audience: report.audience
+            ? {
+                ...report.audience,
+                groups: suppress(report.audience.groups),
+                ages: suppress(report.audience.ages),
+                sexes: suppress(report.audience.sexes),
+                regions: suppress(report.audience.regions),
+                sources: suppress(
+                  report.audience.sources.map((r) => ({
+                    ...r,
+                    name: [
+                      "검색",
+                      "홈페이지",
+                      "SNS",
+                      "지인 소개",
+                      "병원 인근",
+                      "기존 환자",
+                      "광고",
+                      "미입력",
+                    ].includes(r.name)
+                      ? r.name
+                      : "기타 경로",
+                  })),
+                ),
+                visits: suppress(report.audience.visits),
+                segments: suppress(report.audience.segments),
+                spend: suppress(report.audience.spend),
+                grades: suppress(report.audience.grades),
+              }
+            : undefined,
+          marketing: report.marketing
+            .filter((r) => r.patients >= 5)
+            .map((r) => ({
+              ...r,
+              name:
+                r.dimension === "source" &&
+                ![
+                  "검색",
+                  "홈페이지",
+                  "SNS",
+                  "지인 소개",
+                  "병원 인근",
+                  "기존 환자",
+                  "광고",
+                  "미입력",
+                ].includes(r.name)
+                  ? "기타 경로"
+                  : r.name,
+            })),
         };
   return `당신은 병원 운영 통계 분석가입니다. 아래 자료는 ${report.filter.from}~${report.filter.to} 집계입니다.\n목적: ${purpose === "employee" ? "직원별 강점·교육·인센티브 검토" : "환자 재상담·유입경로·마케팅 개선"}\n추가 질문: ${question.trim() || "주요 변화와 실행 가능한 개선안을 제시해주세요."}\n\n분석 규칙: 관측 사실과 가설을 구분하세요. 작은 표본/관찰기간 차이를 명시하고, 인과관계·광고 성과를 단정하지 마세요. 인센티브는 설정 기반 예상치이며 확정 급여가 아닙니다. 미입력 항목을 추정으로 채우지 마세요. 개인 신원을 추론하지 마세요. 금액 열람 권한: ${report.financial ? "있음" : "없음, 0 금액은 비공개 처리값이므로 분석 금지"}.\n집계 기준:\n${report.definitions.join("\n")}\n\n집계 데이터:\n${JSON.stringify(data, null, 2)}\n\n출력: ① 핵심 지표 ② 강점/문제와 근거 수치 ③ 추가 확인할 데이터 ④ 우선순위별 실행안과 검증 지표. 개인정보 또는 환자별 진단은 요청하지 마세요.`;
 }

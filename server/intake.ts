@@ -14,7 +14,7 @@ import type { Drive } from "./drive";
 
 export const DEFAULT_INTAKE_FOLDER = "동의서/초진설문지";
 type RecordItem = Record<string, any>;
-type Settings = { folder: string; password: string };
+export type IntakeSettings = { folder: string; password: string };
 const settingsSchema = z.object({
   folder: z
     .string()
@@ -186,7 +186,7 @@ function intakeHeader(r: RecordItem): RecordItem {
 // encrypted record survive. No archive-sized JSON string/object is created.
 export async function readIntakeStream(
   response: Response,
-  selectedId?: string,
+  selectedId?: string | Set<string>,
 ) {
   ensure(response.body, "초진설문지 파일을 읽을 수 없습니다", 400);
   const reader = response.body.getReader();
@@ -297,7 +297,13 @@ export async function readIntakeStream(
             )
               records.set(
                 key,
-                selectedId === intakeHash(key) ? record : intakeHeader(record),
+                (
+                  typeof selectedId === "string"
+                    ? selectedId === intakeHash(key)
+                    : selectedId?.has(intakeHash(key))
+                )
+                  ? record
+                  : intakeHeader(record),
               );
           };
           text = prefix;
@@ -337,7 +343,7 @@ async function loadRecords(
   drive: Drive,
   folder: string,
   index?: IntakeIndex,
-  selectedId?: string,
+  selectedId?: string | Set<string>,
 ) {
   const item = await drive.exists(`${folder}/data/records.json`);
   ensure(
@@ -363,9 +369,12 @@ export interface IntakeContext {
   user: User;
   drive: Drive;
   index?: IntakeIndex;
-  getSettings: () => Promise<Settings | undefined>;
-  saveSettings: (s: Settings | null) => Promise<void>;
-  patients: () => Promise<State["patients"]>;
+  getSettings: () => Promise<IntakeSettings | undefined>;
+  saveSettings: (s: IntakeSettings | null) => Promise<void>;
+  patients: (
+    fields: { name: string; phone: string; dob: string },
+    originalId: string,
+  ) => Promise<State["patients"]>;
   audit: (action: string, target?: string) => Promise<void>;
 }
 export async function handleIntake(
@@ -512,7 +521,7 @@ export async function handleIntake(
     );
     ensure(fields.name, "설문지의 환자 이름을 확인하세요");
     const patientId = "intake-" + id.slice(0, 32);
-    const patients = await ctx.patients();
+    const patients = await ctx.patients(fields, patientId);
     const original = patients.find((p) => p.id === patientId);
     const matches = patients
       .filter(
@@ -541,4 +550,61 @@ export async function handleIntake(
     } satisfies IntakeSelection;
   }
   throw new DomainError("지원하지 않는 요청입니다", 404);
+}
+
+/** Bounded minimal-field extraction. Full clinical answers/signatures never enter the statistics store. */
+export async function intakeMarketingBatch(
+  drive: Drive,
+  settings: IntakeSettings,
+  index: IntakeIndex,
+  offset: number,
+  expectedTag: string,
+) {
+  const item = await drive.exists(`${settings.folder}/data/records.json`);
+  ensure(item && !item.folder, "초진설문지 자료가 없습니다", 404);
+  const tag = String(item.eTag || item.id);
+  if (expectedTag && tag !== expectedTag)
+    throw new DomainError(
+      "설문지가 변경되어 다음 갱신에서 처음부터 확인합니다",
+      409,
+    );
+  const headers = await loadRecords(drive, settings.folder, index);
+  const entries = headers
+    .map((r) => ({
+      id: intakeHash(intakeRecordKey(r)),
+      at: string(r.createdAt),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const selected = entries.slice(offset, offset + 12),
+    ids = new Set(selected.map((r) => r.id));
+  const full = ids.size
+    ? await loadRecords(drive, settings.folder, undefined, ids)
+    : [];
+  const rows = [];
+  for (const r of full) {
+    const id = intakeHash(intakeRecordKey(r));
+    if (!ids.has(id)) continue;
+    const fields = intakeFields(
+      await decryptIntakeRecord(r, settings.password),
+    );
+    rows.push({ id, fields, at: selected.find((x) => x.id === id)!.at });
+  }
+  ensure(
+    rows.length === selected.length,
+    "설문지가 변경되었습니다. 다시 갱신해주세요",
+    409,
+  );
+  const after = await drive.exists(`${settings.folder}/data/records.json`);
+  ensure(
+    String(after?.eTag || after?.id) === tag,
+    "설문지가 변경되었습니다. 다시 갱신해주세요",
+    409,
+  );
+  return {
+    rows,
+    tag,
+    total: entries.length,
+    cursor: offset + selected.length,
+    done: offset + selected.length >= entries.length,
+  };
 }

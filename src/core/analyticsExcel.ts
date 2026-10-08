@@ -26,7 +26,7 @@ export async function analyticsWorkbook(
       `${report.filter.from} ~ ${report.filter.to}`,
     ]);
     ws.addRow([
-      `직원: ${report.filter.ownerId || "전체"} / 구분: ${report.filter.book ? catalogBookLabel(report.filter.book) : "전체"} / 금액 열람: ${report.financial ? "가능" : "제한"}`,
+      `환자군: ${(report.filter.cohorts || ["codimate", "vegas", "intakeBeauty"]).join(", ")} / 직원: ${report.filter.ownerId || "전체"} / 구분: ${report.filter.book ? catalogBookLabel(report.filter.book) : "전체"} / 금액 열람: ${report.financial ? "가능" : "제한"}`,
     ]);
     ws.addRow(headers);
     ws.views = [{ state: "frozen", ySplit: 3, xSplit: 1 }];
@@ -148,6 +148,79 @@ export async function analyticsWorkbook(
         [2, 3, 4],
       );
   } else {
+    if (report.audience) {
+      sheet(
+        "환자군 누적 요약",
+        ["항목", "값"],
+        [
+          ["중복 제외 환자", report.audience.total],
+          ["코디메이트 전환 포함", report.audience.converted],
+          ...(report.financial
+            ? [
+                ["누적 기여매출", report.audience.revenue] as [
+                  string,
+                  number | null,
+                ],
+              ]
+            : []),
+        ],
+      );
+      for (const [name, key] of [
+        ["환자군", "groups"],
+        ["누적 연령", "ages"],
+        ["누적 성별", "sexes"],
+        ["누적 지역", "regions"],
+        ["누적 유입경로", "sources"],
+        ["누적 방문횟수", "visits"],
+        ["방문 최근성", "segments"],
+        ["누적 매출구간", "spend"],
+      ] as const)
+        sheet(
+          name,
+          ["구분", "환자 수"],
+          report.audience[key].map((r) => [r.name, r.count]),
+        );
+    }
+    sheet(
+      "연령 성별 카테고리",
+      ["연령", "성별", "카테고리", "환자", "상담", "성공", "실패", "성공률(%)"],
+      report.marketing
+        .filter((r) => r.dimension === "category")
+        .map((r) => [
+          r.age,
+          r.sex,
+          r.name,
+          r.patients,
+          r.consultations,
+          r.success,
+          r.failed,
+          r.conversion,
+        ]),
+    );
+    sheet(
+      "연령 성별 유입경로",
+      [
+        "연령",
+        "성별",
+        "유입경로",
+        "환자",
+        "상담",
+        "성공률(%)",
+        ...(report.financial ? ["계약금액", "실수납", "환자당 실수납"] : []),
+      ],
+      report.marketing
+        .filter((r) => r.dimension === "source")
+        .map((r) => [
+          r.age,
+          r.sex,
+          r.name,
+          r.patients,
+          r.consultations,
+          r.conversion,
+          ...(report.financial ? [r.contract, r.net, r.averageNet] : []),
+        ]),
+      [7, 8, 9],
+    );
     sheet(
       "환자 요약",
       ["지표", "값"],

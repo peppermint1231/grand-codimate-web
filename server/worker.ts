@@ -1,3 +1,8 @@
+import {
+  patientCohorts,
+  defaultPatientCohorts,
+} from "../src/core/patientCohorts";
+import { ReadProtection, ReadProtectionError } from "./readProtection";
 import { patientIdentityKey } from "../src/core/patientIdentity";
 import { directoryRegions } from "../src/core/addressRegion";
 import { entitySectionRows } from "./entityRows";
@@ -18,7 +23,12 @@ import { reconcileVip, seoulDay, vipPolicy } from "../src/core/vipPoints";
 import { catalogApplyGuard } from "../src/core/catalogApply";
 import { topQuoteReasons } from "../src/core/quoteReasons";
 import { RestoreJobs, restoreSchema } from "./restoreJobs";
-import { handleIntake, IntakeIndex } from "./intake";
+import {
+  handleIntake,
+  IntakeIndex,
+  intakeMarketingBatch,
+  type IntakeSettings,
+} from "./intake";
 import {
   patientIndex,
   searchPatients,
@@ -168,9 +178,11 @@ export class Clinic extends DurableObject<Env> {
   private inquiryEpoch = crypto.randomUUID();
   private intakeIndex = new IntakeIndex();
   private sql: SqlStorage;
+  private readProtection: ReadProtection;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.sql = ctx.storage.sql;
+    this.readProtection = new ReadProtection(ctx.storage.sql);
+    this.sql = this.readProtection.sql;
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS access_log(id TEXT PRIMARY KEY,at TEXT NOT NULL,value TEXT NOT NULL,backedUp INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
     );
@@ -316,6 +328,7 @@ export class Clinic extends DurableObject<Env> {
     return (this.directory ||= new PatientDirectory(
       this.sql,
       this.env.ENCRYPTION_KEY,
+      (fn) => this.ctx.storage.transactionSync(fn),
     ));
   }
   private async includePatients(s: State, ids: string[]) {
@@ -331,7 +344,6 @@ export class Clinic extends DurableObject<Env> {
       if (row) s.patients.push(await open(row.value, this.env.ENCRYPTION_KEY));
     }
   }
-  private patientRows?: PatientSearchRow[];
   private async auditAccess(
     actorId: string,
     action: string,
@@ -466,49 +478,62 @@ export class Clinic extends DurableObject<Env> {
     await this.setSecret("vip-last-day", day);
   }
   async alarm() {
-    const run = this.queue.then(async () => {
-      try {
-        if (
-          (await this.secret("restore-required")) ||
-          this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
-        )
-          return;
-        await this.settleStorageRename();
-        await this.flush();
-        await this.flushAccess();
-        await this.runVipDay();
-        const store = await this.inquiryStore();
-        await store.purge();
-        new QuoteShares(this.sql, this.env.ENCRYPTION_KEY).purge();
-        await store.flush();
-      } finally {
-        const queued =
-          this.sql
-            .exec("SELECT id FROM inquiries WHERE remoteId='' LIMIT 1")
-            .toArray().length ||
-          this.sql
-            .exec("SELECT id FROM access_log WHERE backedUp=0 LIMIT 1")
-            .toArray().length ||
-          this.sql
-            .exec("SELECT id FROM operations WHERE done=0 LIMIT 1")
-            .toArray().length;
-        await this.ctx.storage.setAlarm(
-          queued
-            ? Date.now() + 60000
-            : Math.min(
-                Date.now() + 3600_000,
-                Date.parse(
-                  seoulDay(new Date().toISOString()) + "T00:00:00+09:00",
-                ) + 86400000,
-              ),
-        );
-      }
-    });
+    const run = this.queue.then(() =>
+      this.readProtection.run("alarm", "POST", async () => {
+        try {
+          if (
+            (await this.secret("restore-required")) ||
+            this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+          )
+            return;
+          await this.settleStorageRename();
+          await this.flush();
+          await this.flushAccess();
+          await this.runVipDay();
+          await this.patientDirectory().step(200);
+          const store = await this.inquiryStore();
+          await store.purge();
+          new QuoteShares(this.sql, this.env.ENCRYPTION_KEY).purge();
+          await store.flush();
+        } finally {
+          const queued =
+            this.sql
+              .exec("SELECT id FROM inquiries WHERE remoteId='' LIMIT 1")
+              .toArray().length ||
+            this.sql
+              .exec("SELECT id FROM access_log WHERE backedUp=0 LIMIT 1")
+              .toArray().length ||
+            this.sql
+              .exec("SELECT id FROM operations WHERE done=0 LIMIT 1")
+              .toArray().length;
+          await this.ctx.storage.setAlarm(
+            !this.patientDirectory().status().ready ||
+              this.patientDirectory().status().dirty
+              ? Date.now() + 1000
+              : queued
+                ? Date.now() + 60000
+                : Math.min(
+                    Date.now() + 3600_000,
+                    Date.parse(
+                      seoulDay(new Date().toISOString()) + "T00:00:00+09:00",
+                    ) + 86400000,
+                  ),
+          );
+        }
+      }),
+    );
     this.queue = run.catch(() => undefined);
     await run;
   }
+  private serializeDirectory<T>(fn: () => Promise<T> | T): Promise<T> {
+    const run = this.queue.then(fn);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
   private async catalogState() {
     const state = emptyState();
+    for await (const row of this.entityRows("policies"))
+      state.policies.push(await open(row.value, this.env.ENCRYPTION_KEY));
     for await (const row of this.entityRows("catalogs"))
       state.catalogs.push(
         lightCatalog(await open(row.value, this.env.ENCRYPTION_KEY), false),
@@ -711,10 +736,7 @@ export class Clinic extends DurableObject<Env> {
             ? null
             : await seal(c.value, this.env.ENCRYPTION_KEY),
         });
-      this.patientRows = undefined;
-      for (const change of op.changes)
-        if (change.section === "patients")
-          this.directory?.update(change.value as State["patients"][number]);
+      const directory = this.patientDirectory();
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
           if (isConsentDeletion(c))
@@ -730,6 +752,7 @@ export class Clinic extends DurableObject<Env> {
               c.id,
               c.value,
             );
+        directory.track(op.changes);
         this.sql.exec("UPDATE operations SET done=1 WHERE id=?", row.id);
       });
     }
@@ -746,7 +769,9 @@ export class Clinic extends DurableObject<Env> {
       (req.method === "GET" &&
         new URL(req.url).pathname === "/api/intake/search") ||
       (req.method === "POST" &&
-        new URL(req.url).pathname === "/api/intake/select");
+        ["/api/intake/select", "/api/intake/analytics-sync"].includes(
+          new URL(req.url).pathname,
+        ));
     const run = sourceRequest
       ? (async () => {
           const user = await this.user(req);
@@ -758,13 +783,33 @@ export class Clinic extends DurableObject<Env> {
           return json(await fetchEventSource(new URL(req.url).searchParams));
         })()
       : intakeLookup
-        ? this.intakeReads.then(() => this.route(req))
-        : this.queue.then(() => this.route(req));
+        ? this.intakeReads.then(() =>
+            this.readProtection.run(new URL(req.url).pathname, req.method, () =>
+              this.route(req),
+            ),
+          )
+        : this.queue.then(() =>
+            this.readProtection.run(new URL(req.url).pathname, req.method, () =>
+              this.route(req),
+            ),
+          );
     if (intakeLookup) this.intakeReads = run.catch(() => undefined);
     else if (!sourceRequest) this.queue = run.catch(() => undefined);
     try {
       return await run;
     } catch (e) {
+      if (e instanceof ReadProtectionError) {
+        const response = json(
+          {
+            error: e.message,
+            code: "READ_SURGE_PROTECTED",
+            retryAfter: e.retryAfter,
+          },
+          429,
+        );
+        response.headers.set("Retry-After", String(e.retryAfter));
+        return response;
+      }
       const quota = storageQuotaResponse(e);
       if (quota) return quota;
       const message =
@@ -1309,6 +1354,60 @@ export class Clinic extends DurableObject<Env> {
       ensure(isAdministrator(user), "관리자만 가능합니다", 403);
     const executive = () =>
       ensure(canUseExecutiveFeatures(user), "관리자·임원만 가능합니다", 403);
+    if (
+      path === "/api/intake/analytics-status" ||
+      path === "/api/intake/analytics-sync"
+    ) {
+      ensure(allowed(user, "stats.read"), "통계 열람 권한이 필요합니다", 403);
+      const settings = await this.secret<IntakeSettings>("intake-settings"),
+        directory = this.patientDirectory();
+      if (req.method === "GET")
+        return json({ configured: !!settings, ...directory.intakeStatus() });
+      ensure(
+        req.method === "POST" && path.endsWith("analytics-sync"),
+        "지원하지 않는 요청입니다",
+        405,
+      );
+      ensure(settings, "관리자가 초진설문지 연동을 먼저 설정해 주세요", 409);
+      await this.serializeDirectory(() => directory.ready());
+      const current = await this.drive().exists(
+        `${settings.folder}/data/records.json`,
+      );
+      ensure(current?.eTag, "초진설문지 동기화 정보를 확인할 수 없습니다", 503);
+      let status = directory.intakeStatus();
+      if (status.tag !== current.eTag) {
+        directory.resetIntakeCursor();
+        status = directory.intakeStatus();
+      }
+      if (status.done && status.tag === current.eTag)
+        return json({ configured: true, ...status });
+      if (status.tag && status.cursor >= status.total)
+        return json({
+          configured: true,
+          ...(await this.serializeDirectory(() =>
+            directory.cleanIntake(status.tag),
+          )),
+        });
+      try {
+        const batch = await intakeMarketingBatch(
+          this.drive(),
+          settings,
+          this.intakeIndex,
+          status.cursor,
+          current.eTag,
+        );
+        return json({
+          configured: true,
+          ...(await this.serializeDirectory(() =>
+            directory.applyIntake(batch),
+          )),
+        });
+      } catch (e) {
+        if (e instanceof DomainError && e.status === 409)
+          directory.resetIntakeCursor();
+        throw e;
+      }
+    }
     if (path.startsWith("/api/intake/"))
       return json(
         await handleIntake(req, {
@@ -1317,12 +1416,10 @@ export class Clinic extends DurableObject<Env> {
           index: this.intakeIndex,
           getSettings: () => this.secret("intake-settings"),
           saveSettings: (value) => this.setSecret("intake-settings", value),
-          patients: async () => {
-            const all = new Map(await this.patientDirectory().all());
-            for (const p of (await this.state(false, ["patients"])).patients)
-              all.set(p.id, p);
-            return [...all.values()];
-          },
+          patients: (fields, originalId) =>
+            this.serializeDirectory(() =>
+              this.patientDirectory().candidates(fields, originalId),
+            ),
           audit: (action, target) => this.auditAccess(user.id, action, target),
         }),
       );
@@ -1367,8 +1464,7 @@ export class Clinic extends DurableObject<Env> {
       }
       if (b.action === "commit") {
         const result = await store.commit(b.id);
-        this.patientRows = undefined;
-        this.directory?.clear();
+        this.patientDirectory().reset();
         const response = json(result);
         response.headers.set(
           "Set-Cookie",
@@ -2320,21 +2416,26 @@ export class Clinic extends DurableObject<Env> {
       );
       return json({ ok: true });
     }
+    if (path === "/api/read-protection") {
+      admin();
+      return json({
+        ...this.readProtection.status(),
+        directory: this.patientDirectory().status(),
+      });
+    }
+    if (path === "/api/patient-index") {
+      admin();
+      if (req.method === "POST") {
+        const next = await this.patientDirectory().step(250);
+        await this.ctx.storage.setAlarm?.(Date.now() + 1000);
+        return json(next);
+      }
+      return json(this.patientDirectory().status());
+    }
     if (path === "/api/patients/search") {
-      if (!this.patientRows)
-        this.patientRows = await this.patientDirectory().index(
-          await this.state(false, [
-            "patients",
-            "consultations",
-            "ledger",
-            "policies",
-            "vipAccounts",
-          ]),
-        );
       const p = url.searchParams;
       return json(
-        searchPatients(
-          this.patientRows,
+        await this.patientDirectory().search(
           {
             search: (p.get("search") || "").slice(0, 200),
             grade: p.get("grade") || "",
@@ -2359,16 +2460,8 @@ export class Clinic extends DurableObject<Env> {
         (p) => p.id === url.searchParams.get("id"),
       );
       ensure(patient, "환자가 없습니다", 404);
-      const all = new Map(await this.patientDirectory().all());
-      for (const p of s.patients) all.set(p.id, p);
-      const matches = [...all.values()].filter(
-        (p) =>
-          p.id !== patient.id &&
-          !p.archived &&
-          !p.mergedInto &&
-          !!patientIdentityKey(patient) &&
-          patientIdentityKey(patient) === patientIdentityKey(p),
-      );
+      const matchResult = await this.patientDirectory().matches(patient);
+      const matches = matchResult.patients;
       const patients = matches.slice(0, 100).map((p) =>
         allowed(user, "money.read")
           ? p
@@ -2382,7 +2475,7 @@ export class Clinic extends DurableObject<Env> {
                 : {}),
             },
       );
-      return json({ patients, total: matches.length });
+      return json({ patients, total: matchResult.total });
     }
     if (path.startsWith("/api/patients/") && req.method === "GET") {
       const id = decodeURIComponent(path.slice("/api/patients/".length));
@@ -2402,6 +2495,15 @@ export class Clinic extends DurableObject<Env> {
         to: url.searchParams.get("to") || "",
         ownerId: url.searchParams.get("ownerId") || "",
         book: url.searchParams.get("book") || "",
+        cohorts: url.searchParams.has("cohorts")
+          ? patientCohorts
+              .filter((c) =>
+                (url.searchParams.get("cohorts") || "")
+                  .split(",")
+                  .includes(c.id),
+              )
+              .map((c) => c.id)
+          : defaultPatientCohorts,
       };
       ensure(
         !filter.book || ["미용", "보험", "이벤트"].includes(filter.book),
@@ -2409,16 +2511,27 @@ export class Clinic extends DurableObject<Env> {
       );
       try {
         const s = await this.state(false);
-        const combined = new Map(await this.patientDirectory().all());
-        for (const p of s.patients) combined.set(p.id, p);
-        const report = buildAnalytics(
-          { ...s, patients: [...combined.values()] },
-          filter,
+        const directory = await this.patientDirectory().statistics(
+          filter.from,
+          filter.to,
+          filter.ownerId,
+        );
+        this.patientDirectory().enrichCohorts(s.patients);
+        const report = buildAnalytics(s, filter, allowed(user, "money.read"));
+        if (!filter.ownerId && !filter.book)
+          report.patients.registered = this.patientDirectory().registeredReport(
+            filter.from,
+            filter.to,
+            filter.cohorts,
+          );
+        report.patientDirectory = directory.directory;
+        report.audience = await this.patientDirectory().marketingReport(
+          filter.cohorts,
           allowed(user, "money.read"),
         );
-        report.patientDirectory = directoryRegions(combined.values());
         return json(report);
       } catch (e) {
+        if (e instanceof DomainError) throw e;
         throw new DomainError((e as Error).message, 400);
       }
     }
@@ -2888,8 +3001,7 @@ export class Clinic extends DurableObject<Env> {
         409,
       );
       this.ctx.storage.transactionSync(() => {
-        this.patientRows = undefined;
-        this.directory?.clear();
+        this.patientDirectory().reset();
         this.sql.exec("DELETE FROM entities");
         this.sql.exec("DELETE FROM quote_shares");
         this.sql.exec("DELETE FROM operations");

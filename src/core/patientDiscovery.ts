@@ -54,30 +54,11 @@ export const patientConcerns: PatientConcern[] = [
   },
   {
     id: "patient:medical",
-    name: "피부 증상·손발톱",
-    subtitle: "가려움, 피부염, 손발톱 상태 상담",
-    tags: ["가려움", "피부염", "손발톱"],
+    name: "손발톱 무좀",
+    subtitle: "손발톱 무좀 치료 상담",
+    tags: ["무좀", "손발톱"],
     questions: [
-      {
-        id: "itch-dermatitis",
-        label: "가렵거나 두드러기·피부염이 있어요",
-        recommended: [],
-      },
-      {
-        id: "herpes-zoster",
-        label: "대상포진 진료를 상담하고 싶어요",
-        recommended: [],
-      },
-      {
-        id: "nail-health",
-        label: "손발톱 무좀이나 내성발톱이 고민이에요",
-        recommended: [],
-      },
-      {
-        id: "skin-lump",
-        label: "피부에 생긴 혹이나 돌출된 부위가 고민이에요",
-        recommended: [],
-      },
+      { id: "nail-health", label: "손발톱 무좀이 고민이에요", recommended: [] },
     ],
   },
   {
@@ -144,7 +125,7 @@ const symptoms: Record<string, RegExp> = {
   "stretch-marks": /튼살|닭살|모공각화/,
   "itch-dermatitis": /두드러기|가려움|피부염|구순염|아토피/,
   "herpes-zoster": /대상포진/,
-  "nail-health": /발톱|손톱|조갑|무좀/,
+  "nail-health": /무좀|루눌라|조갑백선|조갑진균/,
   "skin-lump": /양성종양|피부종양|피지낭종|지방종/,
   "fatigue-care": /피로|전신\s*컨디션|영양수액|영양요법/,
 };
@@ -231,6 +212,13 @@ export function patientMatchEvidence(
   const text = primary + " " + composition;
   const productName = normalize(indicationText(p.name));
   return patientConcerns.flatMap((c) => {
+    if (
+      c.id === "patient:medical" &&
+      !/무좀|루눌라|조갑백선|조갑진균/.test(
+        p.name + " " + (p.description || ""),
+      )
+    )
+      return [];
     if (supportive && !["patient:booster", "patient:redness"].includes(c.id))
       return [];
     const root = rootPatterns[c.id.slice(8)];

@@ -37,14 +37,7 @@ it("classifies packages and care by stated indications, never by a merchandising
   ]) {
     expect(
       patientMatches(product("피부염 수액"), [[{ name: folder }]]),
-    ).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          concernId: "patient:medical",
-          answerIds: expect.arrayContaining(["itch-dermatitis"]),
-        }),
-      ]),
-    );
+    ).toEqual([]);
     expect(
       patientMatches(product("닥터플랜 리팟 흑자제거"), [[{ name: folder }]]),
     ).toEqual(
@@ -269,7 +262,7 @@ it("keeps explicit multiple indications and the clinic's approved exceptions", (
   for (const name of ["덱세릴MD크림", "이지듀MD크림", "이지듀MD로션"]) {
     const ids = patientMatches(product(name), []).flatMap((m) => m.answerIds);
     expect(ids).toContain("glow");
-    expect(ids).toContain("itch-dermatitis");
+    expect(ids).not.toContain("itch-dermatitis");
   }
   const scar = patientMatches(product("나만의 닥터플랜 · 흉터"), []).flatMap(
     (m) => m.answerIds,

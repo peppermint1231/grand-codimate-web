@@ -463,7 +463,7 @@ it("accepts unified patient concerns and records detail labels while retaining o
   const input = {
     ...f.input,
     concerns: ["patient:pigment", "patient:medical"],
-    answers: ["spots", "itch-dermatitis"],
+    answers: ["spots", "nail-health"],
   };
   const response = await f.request("/public/inquiries", input, true);
   expect(response.status, await response.clone().text()).toBe(200);
@@ -471,7 +471,7 @@ it("accepts unified patient concerns and records detail labels while retaining o
   const entry = (
     (await (await f.request("/inquiries")).json()) as any
   ).inquiries.find((x: any) => x.id === receipt);
-  expect(entry.concernLabels).toEqual(["점·잡티·기미", "피부 증상·손발톱"]);
+  expect(entry.concernLabels).toEqual(["점·잡티·기미", "손발톱 무좀"]);
   expect(entry.answerLabels).toContain("잡티·주근깨가 눈에 띄어요");
   expect(new Set(entry.selections.map((s: any) => s.book))).toEqual(
     new Set(["미용", "보험", "이벤트"]),

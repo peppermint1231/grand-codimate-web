@@ -1,3 +1,5 @@
+import { discoverySettings } from "./discoverySettings";
+import { productType } from "./productType";
 import { optionPackageComposition } from "./packageSchedule";
 import { publicDescription } from "./publicDescription";
 import { eventAvailability, type EventOriginInfo } from "./eventCatalog";
@@ -31,6 +33,7 @@ export interface PublicOption {
   tax: string;
 }
 export interface PublicProduct {
+  priceVisible?: boolean;
   description?: string;
   matches?: { concernId: string; answerIds: string[] }[];
   event?: Pick<
@@ -87,22 +90,29 @@ export interface Inquiry {
   consultationId?: string;
 }
 export function publicProducts(state: State): PublicProduct[] {
+  const settings = discoverySettings(state);
   return latestCatalogs(state)
     .map((c) => withBeautyRootLabels(c, latestCatalog(state, "미용")))
     .flatMap((c) =>
       c.products
         .filter(
           (p) =>
-            p.productType !== "block" &&
+            settings[catalogBook(c)].types.includes(productType(p)) &&
             p.publicVisible &&
             eventAvailability(p.webEvent) === "current",
         )
         .map((p) => ({
+          priceVisible: settings[catalogBook(c)].showPrices,
           id: p.id,
           name: p.name,
-          description: publicDescription(p.description, catalogBook(c)),
+          description: publicDescription(
+            p.description,
+            catalogBook(c),
+            settings[catalogBook(c)].showPrices,
+          ),
           matches: patientMatches(p, productFolderPaths(c, p)),
-          ...(catalogBook(c) === "이벤트" &&
+          ...(settings[catalogBook(c)].showPrices &&
+          catalogBook(c) === "이벤트" &&
           p.active &&
           p.options.length === 1 &&
           p.options[0].tax !== "unknown" &&
@@ -130,10 +140,12 @@ export function publicProducts(state: State): PublicProduct[] {
                   packageComposition: publicDescription(
                     optionPackageComposition(p, o)!,
                     catalogBook(c),
+                    settings[catalogBook(c)].showPrices,
                   ),
                 }
               : {}),
-            ...(catalogBook(c) === "이벤트" &&
+            ...(settings[catalogBook(c)].showPrices &&
+            catalogBook(c) === "이벤트" &&
             p.active &&
             o.tax !== "unknown" &&
             o.price !== null
@@ -147,11 +159,15 @@ export function publicProducts(state: State): PublicProduct[] {
                 : o.label,
             unit: o.unit,
             price:
-              catalogBook(c) === "이벤트" && p.active && o.tax !== "unknown"
+              settings[catalogBook(c)].showPrices &&
+              p.active &&
+              o.tax !== "unknown"
                 ? o.price
                 : null,
             tax:
-              catalogBook(c) === "이벤트" && p.active && o.tax !== "unknown"
+              settings[catalogBook(c)].showPrices &&
+              p.active &&
+              o.tax !== "unknown"
                 ? o.tax
                 : "unknown",
           })),

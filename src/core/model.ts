@@ -56,6 +56,9 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  /** Derived only for analytics; never accepted in patient commands. */
+  analyticsCohorts?: number;
+  intakeKind?: "beauty" | "medical";
   /** Compact, derived directory data; full reference details load on patient open. */
   importSummary?: {
     totalPaid: number | null;
@@ -318,6 +321,7 @@ export interface Grade {
   minimum: number;
 }
 export interface Policy extends Base {
+  discovery?: import("./discoverySettings").DiscoverySettings;
   vip?: VipPolicy;
   grades: Grade[];
 }

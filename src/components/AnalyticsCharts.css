@@ -1,0 +1,241 @@
+.insight-chart {
+  margin: 16px 0;
+  min-width: 0;
+  animation: insight-appear 0.3s ease-out;
+}
+.insight-chart svg {
+  width: 100%;
+  display: block;
+  color: #294840;
+}
+.insight-chart svg text {
+  fill: currentColor;
+}
+.insight-chart [role="button"] {
+  cursor: pointer;
+}
+.insight-chart [role="button"]:focus-visible {
+  outline: 3px solid #d78b42;
+  outline-offset: 3px;
+}
+.insight-chart figcaption {
+  font-size: 13px;
+  color: #536e65;
+  margin-top: 10px;
+  min-height: 22px;
+}
+.insight-donut {
+  display: grid;
+  grid-template-columns: minmax(130px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.insight-donut figcaption {
+  display: grid;
+  gap: 6px;
+}
+.insight-donut figcaption button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  min-width: 0;
+  font-size: 13px;
+  border-color: transparent;
+  background: transparent;
+}
+.insight-donut figcaption button[aria-pressed="true"] {
+  background: #eaf3ef;
+}
+.insight-donut figcaption button span {
+  flex: 1;
+  text-align: left;
+}
+.insight-donut figcaption i {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.insight-donut figcaption small {
+  min-width: 40px;
+}
+.insight-total {
+  font-size: 28px;
+  font-weight: 750;
+}
+.insight-subtitle {
+  font-size: 13px;
+}
+.insight-ring {
+  transition:
+    stroke-width 0.2s,
+    opacity 0.2s,
+    stroke-dasharray 0.5s;
+  animation: insight-appear 0.6s ease-out;
+}
+.insight-columns {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 5px;
+  height: 220px;
+  border-bottom: 1px solid #d4e1d9;
+  padding: 10px 0 0;
+}
+.insight-columns > button {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: stretch;
+  padding: 4px 1px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px 8px 0 0;
+  font-size: 11px;
+  color: #294840;
+  min-width: 0;
+}
+.insight-columns > button:hover,
+.insight-columns > .selected {
+  background: #edf5ef;
+  border-color: #b7cdc0;
+}
+.insight-column-track {
+  height: 150px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.insight-column-track i {
+  width: 70%;
+  border-radius: 5px 5px 0 0;
+  min-height: 0;
+  transition: height 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transform-origin: bottom;
+  animation: insight-grow 0.55s ease-out;
+}
+.insight-column-value {
+  font-weight: 700;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.insight-heatmap {
+  width: 100%;
+  min-width: 380px;
+}
+.insight-heatmap caption {
+  text-align: left;
+  font-weight: 600;
+  margin: 8px 0 12px;
+}
+.insight-heatmap td {
+  padding: 3px !important;
+}
+.insight-heatmap th {
+  font-size: 12px !important;
+  max-width: 220px;
+  white-space: normal !important;
+}
+.insight-heatmap td button {
+  width: 100%;
+  min-width: 40px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 6px;
+  padding: 8px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background 0.3s,
+    transform 0.15s;
+}
+.insight-heatmap td button:hover {
+  transform: scale(1.04);
+  outline: 2px solid #d78b42;
+}
+.insight-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: insight-draw 0.75s ease-out;
+}
+.analytics-cohort-filters {
+  border: 0;
+  padding: 12px 0;
+  min-width: 0;
+}
+.analytics-cohort-filters .button-row {
+  flex-wrap: wrap;
+}
+.analytics-cohort-filters small {
+  display: block;
+  margin-top: 8px;
+}
+.insight-trend svg {
+  max-height: 300px;
+}
+.insight-trend .button-row {
+  flex-wrap: wrap;
+}
+@keyframes insight-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+@keyframes insight-appear {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes insight-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (max-width: 600px) {
+  .insight-donut {
+    grid-template-columns: 130px minmax(0, 1fr);
+  }
+  .insight-donut figcaption button {
+    gap: 5px;
+    padding: 7px 1px;
+    font-size: 12px;
+  }
+  .insight-donut figcaption small {
+    display: none;
+  }
+  .insight-column-value {
+    font-size: 10px;
+  }
+  .insight-columns {
+    gap: 2px;
+  }
+  .insight-heatmap th:first-child {
+    max-width: 100px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .insight-chart,
+  .insight-ring,
+  .insight-column-track i,
+  .insight-line {
+    animation: none !important;
+    transition: none !important;
+  }
+  .insight-heatmap td button {
+    transition: none !important;
+  }
+}
+.analytics-grid > * { min-width: 0; }
+.insight-donut figcaption { min-width: 0; }
+.insight-donut figcaption button span { min-width: 0; overflow-wrap: anywhere; }

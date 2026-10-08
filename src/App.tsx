@@ -1,3 +1,9 @@
+import {
+  importedHistory,
+  importedRevenue,
+  patientRegisteredAt,
+  patientLastConsultedAt,
+} from "./core/patientHistory";
 import { ProcedureSearch } from "./components/ProcedureSearch";
 import { usePatientLookup } from "./hooks/usePatientLookup";
 import { regionLabel } from "./core/addressRegion";
@@ -1937,10 +1943,10 @@ function Patients({
           label="기여매출"
           value={
             allowed(user, "money.read")
-              ? money(localIndex.reduce((a, row) => a + row.m.revenue, 0))
+              ? money(listResult.totalRevenue ?? 0)
               : "권한 필요"
           }
-          detail="실수납 − 실제 환불"
+          detail="이관 총수납액 + 실수납 − 실제 환불"
         />
       </div>
       <div className="card">
@@ -2073,6 +2079,7 @@ function Patients({
               <tr>
                 <th>환자</th>
                 <th>연락처</th>
+                <th>등록일</th>
                 <th>최근 상담</th>
                 <th>계약금액</th>
                 <th>기여매출</th>
@@ -2160,7 +2167,8 @@ function Patients({
                     </div>
                   </td>
                   <td>{p.phone}</td>
-                  <td>{cs.at(-1)?.createdAt.slice(0, 10) || "—"}</td>
+                  <td>{patientRegisteredAt(p).slice(0, 10)}</td>
+                  <td>{patientLastConsultedAt(p, cs).slice(0, 10) || "—"}</td>
                   <td>
                     {allowed(user, "money.read") ? money(m.contract) : "—"}
                   </td>
@@ -2240,8 +2248,8 @@ function Patients({
           }}
         >
           <p>
-            이름·생년월일 또는 전화번호가 같습니다. 가족 연락처와 동명이인을
-            확인한 뒤 같은 환자일 때만 병합하세요.
+            이름과 전화번호가 모두 같습니다. 환자 정보를 비교한 뒤 같은 환자일
+            때만 병합하세요.
           </p>
           <div className="duplicate-summary">
             <b>현재 환자: {duplicatePatient.name}</b>
@@ -2808,6 +2816,10 @@ function PatientDetail({
           <small>통계 지역: {regionLabel(p)}</small>
         </span>
         <small>환자번호 {p.number || p.id}</small>
+        <small>
+          등록일 {patientRegisteredAt(p).slice(0, 10)} · 최근 상담{" "}
+          {patientLastConsultedAt(p, cs).slice(0, 10) || "—"}
+        </small>
         {allowed(user, "patient.edit") && (
           <button onClick={() => setEdit(true)}>정보 수정</button>
         )}
@@ -2816,8 +2828,10 @@ function PatientDetail({
         <details className="card">
           <summary>베가스에서 가져온 참고정보</summary>
           <p className="small">
-            원본 환자목록의 누적 정보입니다. 코디메이트 수납·환불·직원 실적에는
-            합산하지 않으며 VIP 자격 판정에 반영합니다. 연간 추가 적립은
+            {importedHistory(p)
+              ? "총수납액은 기존 계약금액·기여매출에 포함됩니다. 최초일은 등록일, 최근일은 기존 최근 상담일에 반영합니다."
+              : "기존 환자와 연결한 원본 참고정보입니다. 기존 계약금액·기여매출에 중복 합산하지 않습니다."}{" "}
+            직원 실적·미수금에는 합산하지 않으며, VIP 연간 추가 적립은
             이관일부터의 새 수납을 기준으로 합니다.
           </p>
           <p>
@@ -2843,12 +2857,16 @@ function PatientDetail({
           <Summary
             label="유효 계약금액"
             value={money(m.contract)}
-            detail="취소 계약 제외"
+            detail={
+              importedRevenue(p)
+                ? `이관 ${money(importedRevenue(p))} 포함 · 취소 계약 제외`
+                : "취소 계약 제외"
+            }
           />
           <Summary
             label="기여매출"
             value={money(m.revenue)}
-            detail={`수납 ${money(m.receipts)} − 환불 ${money(m.refunds)}`}
+            detail={`${importedRevenue(p) ? `이관 ${money(importedRevenue(p))} + ` : ""}수납 ${money(m.receipts)} − 환불 ${money(m.refunds)}`}
           />
           <Summary
             label="미수금"

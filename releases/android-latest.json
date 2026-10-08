@@ -1,7 +1,7 @@
 {
-  "version": "0.18.10",
-  "versionCode": 80,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.10.apk",
-  "sha256": "8a1572814db20886bee469fb2f278dda16f4dbc158c889e737b6a3d269d2b6c7",
-  "notes": "대량 환자 조회 최적화, 장애 시 로그인 유지·기기 보관 임시 사용과 이름·전화번호 기준 정보 통합을 지원합니다."
+  "version": "0.18.11",
+  "versionCode": 81,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.11.apk",
+  "sha256": "c837aa0baf50771c7def4c7501496c0ed154ac6b749ee89a696859a1605567c7",
+  "notes": "중복 의심을 이름·전화번호 일치로 통일하고 이관 총수납액·최초일·최근일을 환자 실적과 날짜에 반영합니다."
 }

@@ -179,9 +179,19 @@ it("does not match empty duplicate inputs and normalizes phone/name spacing", as
   expect(duplicates(s, { name: "", dob: "", phone: "" })).toHaveLength(0);
   expect(
     duplicates(s, { name: "other", dob: "1990-01-01", phone: "010-0000-0000" }),
-  ).toHaveLength(2);
+  ).toHaveLength(0);
   expect(
     duplicates(s, { name: "중복 시험", dob: "1980-01-01", phone: "" }),
+  ).toHaveLength(0);
+});
+it("matches names and phones despite spacing and different birthdays", async () => {
+  const s = await fixture();
+  expect(
+    duplicates(s, {
+      name: "중복 시험",
+      dob: "1991-02-02",
+      phone: "０１０-００００-００００",
+    }),
   ).toHaveLength(2);
 });
 it("persists movable text boxes and emoji stamps with strict validation", async () => {

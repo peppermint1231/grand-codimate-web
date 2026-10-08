@@ -1,3 +1,8 @@
+import {
+  importedHistory,
+  importedRevenue,
+  patientRegisteredAt,
+} from "./patientHistory";
 import { regionLabel, type directoryRegions } from "./addressRegion";
 import { activeLedger, calculate } from "./domain";
 import {
@@ -265,7 +270,11 @@ export function buildAnalytics(
   const products = new Map<string, AnalyticsReport["products"][number]>();
   const active = activeLedger(s).filter((l) => beforeEnd(l.date));
   const balances = new Map<string, number>();
-  const lifetimeNet = new Map<string, number>();
+  const lifetimeNet = new Map<string, number>(
+    s.patients
+      .filter((p) => beforeEnd(koreanDay(patientRegisteredAt(p))))
+      .map((p) => [p.id, importedRevenue(p)]),
+  );
   const methods = new Map<string, AnalyticsReport["methods"][number]>();
   for (const l of active) {
     balances.set(
@@ -417,7 +426,10 @@ export function buildAnalytics(
       .sort((a, b) => b.count - a.count);
   };
   const patientList = s.patients.filter(
-    (p) => !p.mergedInto && !p.archived && beforeEnd(koreanDay(p.createdAt)),
+    (p) =>
+      !p.mergedInto &&
+      !p.archived &&
+      beforeEnd(koreanDay(patientRegisteredAt(p))),
   );
   const consulted = patientList.filter((p) =>
     consultationsByPatient
@@ -470,8 +482,8 @@ export function buildAnalytics(
   const patients: AnalyticsReport["patients"] = {
     registered: patientList.filter(
       (p) =>
-        !p.id.startsWith("vegas-") &&
-        inPeriod(koreanDay(p.createdAt)) &&
+        (!p.id.startsWith("vegas-") || !!importedHistory(p)?.firstVisit) &&
+        inPeriod(koreanDay(patientRegisteredAt(p))) &&
         (!filter.ownerId || p.ownerId === filter.ownerId),
     ).length,
     consulted: consulted.length,
@@ -568,6 +580,7 @@ export function buildAnalytics(
       "수납·환불은 처리일 기준, 정정 취소된 금액 기록은 제외합니다. 담당 상담자에게 귀속하며 결제 입력 직원의 매출로 계산하지 않습니다.",
       "분야별 금액은 상담 견적 항목의 금액 비율로 배분한 추정치입니다. 원 단위 잔여분을 배분하여 합계를 보존합니다. 미수금은 조회 종료일 기준 현재 유효 계약 잔액입니다.",
       "신규/재상담은 선택한 직원·단가표 범위에서 첫 상담이 조회 기간 안/이전인지로 구분합니다. 기간 내 여러 번 상담해도 신규 환자는 신규로만 셉니다. 실제 내원 여부와 다릅니다. 30·90일 재상담률은 해당 관찰기간이 지난 신규 환자만 분모에 포함합니다.",
+      "이관 환자의 등록일은 원본 최초일입니다. 과거 총수납액은 환자 누적 기여매출에 포함하며 기간별 수납·직원 실적에는 포함하지 않습니다.",
       "환자 연령은 조회 종료일 기준, 유입경로는 등록된 값만 사용합니다. 미입력 경로를 추측하지 않습니다. 마케팅 발송 동의 여부는 별도 확인이 필요합니다.",
       "누적 실수납 평균은 조회 환자의 종료일 이전 전체 수납−환불입니다. 여러 분야가 선택된 상담은 선택 분야만 금액을 배분하지만 환자 수는 중복 제거합니다.",
     ],

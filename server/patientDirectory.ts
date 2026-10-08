@@ -1,3 +1,8 @@
+import {
+  patientDuplicateCounts,
+  patientIdentityKey,
+} from "../src/core/patientIdentity";
+import { importedRevenue } from "../src/core/patientHistory";
 import type { Patient, State } from "../src/core/model";
 import { patientIndex, type PatientSearchRow } from "../src/core/patientSearch";
 import { gradeFor, metrics } from "../src/core/domain";
@@ -39,7 +44,18 @@ export class PatientDirectory {
   private compact(patient: Patient): Patient {
     // Reference visit/payment details are fetched only when opening the patient.
     const { external, ...entry } = patient;
-    return entry;
+    return {
+      ...entry,
+      ...(external
+        ? {
+            importSummary: {
+              totalPaid: external.totalPaid,
+              firstVisit: external.firstVisit,
+              lastVisit: external.lastVisit,
+            },
+          }
+        : {}),
+    };
   }
   update(patient: Patient) {
     if (patient.id.startsWith("vegas-"))
@@ -66,34 +82,23 @@ export class PatientDirectory {
           : [
               {
                 p,
-                m: zero,
-                g: gradeFor(gradeState, p),
+                m: {
+                  ...zero,
+                  contract: importedRevenue(p),
+                  revenue: importedRevenue(p),
+                },
+                g: gradeFor({ ...gradeState, patients: [p] }, p),
                 cs: empty,
                 duplicates: 0,
               },
             ],
       ),
     );
-    const birth = new Map<string, number>(),
-      phones = new Map<string, number>();
-    for (const { p } of rows) {
-      const key = p.dob
-        ? p.name.toLowerCase().replace(/\s/g, "") + "|" + p.dob
-        : "";
-      if (key) birth.set(key, (birth.get(key) || 0) + 1);
-      if (p.phone) phones.set(p.phone, (phones.get(p.phone) || 0) + 1);
-    }
-    for (const row of rows) {
-      const p = row.p;
-      row.duplicates = Math.max(
-        row.duplicates,
-        (p.dob
-          ? birth.get(p.name.toLowerCase().replace(/\s/g, "") + "|" + p.dob) ||
-            1
-          : 1) - 1,
-        (phones.get(p.phone) || 1) - 1,
-      );
-    }
+    const counts = patientDuplicateCounts(rows.map((row) => row.p));
+    for (const row of rows)
+      row.duplicates = row.p.archived
+        ? 0
+        : Math.max(0, (counts.get(patientIdentityKey(row.p)) || 1) - 1);
     return rows;
   }
 }

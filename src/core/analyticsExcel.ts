@@ -1,3 +1,4 @@
+import { isMissingComparisonValue } from "./analyticsComparison";
 import { catalogBookLabel } from "./model";
 import ExcelJS from "exceljs";
 import {
@@ -177,8 +178,12 @@ export async function analyticsWorkbook(
       ] as const)
         sheet(
           name,
-          ["구분", "환자 수"],
-          report.audience[key].map((r) => [r.name, r.count]),
+          ["구분", "환자 수", "비교 포함 여부"],
+          report.audience[key].map((r) => [
+            r.name,
+            r.count,
+            isMissingComparisonValue(r.name) ? "제외 · 인원 참고" : "포함",
+          ]),
         );
     }
     sheet(
@@ -250,14 +255,22 @@ export async function analyticsWorkbook(
     ] as const)
       sheet(
         title,
-        ["분류", "환자 수"],
-        report.patients[key].map((r) => [r.name, r.count]),
+        ["분류", "환자 수", "비교 포함 여부"],
+        report.patients[key].map((r) => [
+          r.name,
+          r.count,
+          isMissingComparisonValue(r.name) ? "제외 · 인원 참고" : "포함",
+        ]),
       );
     if (report.patientDirectory)
       sheet(
         "전체 환자 지역",
-        ["동·읍·면 (전체 환자목록 기준)", "환자 수"],
-        report.patientDirectory.regions.map((r) => [r.name, r.count]),
+        ["동·읍·면 (전체 환자목록 기준)", "환자 수", "비교 포함 여부"],
+        report.patientDirectory.regions.map((r) => [
+          r.name,
+          r.count,
+          isMissingComparisonValue(r.name) ? "제외 · 인원 참고" : "포함",
+        ]),
       );
     sheet(
       "재상담 코호트",

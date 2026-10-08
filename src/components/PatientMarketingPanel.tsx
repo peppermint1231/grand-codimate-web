@@ -1,4 +1,9 @@
 import {
+  comparisonBuckets,
+  isMissingComparisonValue,
+} from "../core/analyticsComparison";
+import { ComparisonSummary } from "./ComparisonSummary";
+import {
   DonutChart,
   AgeChart,
   CategoryHeatmap,
@@ -8,10 +13,12 @@ import { useMemo, useState } from "react";
 import { money } from "../core/model";
 import type { AnalyticsReport, Bucket } from "../core/analytics";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-function Bars({ rows }: { rows: Bucket[] }) {
+function Bars({ rows: allRows }: { rows: Bucket[] }) {
+  const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="analytics-bars">
+      <ComparisonSummary excluded={excluded} total={total} />
       {rows.slice(0, 15).map((r) => (
         <div className="analytics-bar" key={r.name}>
           <span>{r.name}</span>
@@ -26,7 +33,7 @@ function Bars({ rows }: { rows: Bucket[] }) {
           <strong>{fmt(r.count)}명</strong>
         </div>
       ))}
-      {!rows.length && <p className="small">해당 자료가 없습니다.</p>}
+      {!rows.length && <p className="small">비교할 입력 자료가 없습니다.</p>}
       {rows.length > 15 && (
         <small>상위 15개 표시 · 전체 목록은 엑셀에서 확인</small>
       )}
@@ -207,7 +214,11 @@ export function PatientMarketingPanel({ report }: { report: AnalyticsReport }) {
                   </thead>
                   <tbody>
                     {grouped
-                      .filter((r) => r.dimension === d)
+                      .filter(
+                        (r) =>
+                          r.dimension === d &&
+                          !isMissingComparisonValue(r.name),
+                      )
                       .map((r) => (
                         <tr key={r.name}>
                           <th>{r.name}</th>

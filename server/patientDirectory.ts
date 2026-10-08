@@ -19,6 +19,7 @@ import {
   patientRegisteredAt,
 } from "../src/core/patientHistory";
 import { regionLabel } from "../src/core/addressRegion";
+import { groupSmallPatientRegions } from "./patientRegionGroups";
 import { DomainError } from "../src/core/domain";
 type Meta = {
   phase: string;
@@ -900,14 +901,14 @@ export class PatientDirectory {
         imported: this.total("imported").n,
         missing,
         unresolved,
-        regions: [
+        regions: groupSmallPatientRegions([
           ...regions.filter(
             (r) => !["주소 미입력", "주소 확인 필요"].includes(r.name),
           ),
           ...(missing + unresolved
             ? [{ name: "지역 누락", count: missing + unresolved }]
             : []),
-        ].sort((a, b) => b.count - a.count),
+        ]),
       },
     };
   }

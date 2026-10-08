@@ -1,4 +1,6 @@
 import { directoryRegions } from "../src/core/addressRegion";
+import { entitySectionRows } from "./entityRows";
+import { storageQuotaResponse } from "./storageQuota";
 import { PatientDirectory } from "./patientDirectory";
 import { z } from "zod";
 import { validDay, validRequestedSlot } from "../src/core/appointments";
@@ -140,9 +142,14 @@ export default {
           "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
         },
       });
-    const res = await env.CLINIC.get(env.CLINIC.idFromName("hospital")).fetch(
-      req,
-    );
+    let res: Response;
+    try {
+      res = await env.CLINIC.get(env.CLINIC.idFromName("hospital")).fetch(req);
+    } catch (error) {
+      const quota = storageQuotaResponse(error);
+      if (!quota) throw error;
+      res = quota;
+    }
     const h = new Headers(res.headers);
     if (origin) {
       h.set("Access-Control-Allow-Origin", origin);
@@ -187,30 +194,13 @@ export class Clinic extends DurableObject<Env> {
     return account ? normalizeUser(account) : undefined;
   }
   /** Read encrypted rows one at a time, without retaining the complete SQL result. */
-  private async *entityRows(where = "1", args: unknown[] = []) {
-    let cursor = 0;
-    while (true) {
-      const row = this.sql
-        .exec<{
-          cursor: number;
-          section: keyof State;
-          id: string;
-          value: string;
-        }>(
-          `SELECT rowid AS cursor,section,id,value FROM entities WHERE (${where}) AND rowid>? ORDER BY rowid LIMIT 1`,
-          ...(args as any[]),
-          cursor,
-        )
-        .toArray()[0];
-      if (!row) break;
-      cursor = row.cursor;
-      yield row;
-    }
+  private entityRows(section: keyof State, nativePatients = false) {
+    return entitySectionRows(this.sql, section, nativePatients);
   }
   private async commandCatalogState(cmd: Command) {
     const s = await this.state(false, []);
     // Old catalogue bodies and unrelated patient records are not command inputs.
-    for await (const row of this.entityRows("section='catalogs'")) {
+    for await (const row of this.entityRows("catalogs")) {
       const c = await open<State["catalogs"][number]>(
         row.value,
         this.env.ENCRYPTION_KEY,
@@ -237,7 +227,7 @@ export class Clinic extends DurableObject<Env> {
         .toArray()[0];
       s.catalogs[i] = await open(row.value, this.env.ENCRYPTION_KEY);
     }
-    for await (const row of this.entityRows("section='catalogRevisions'")) {
+    for await (const row of this.entityRows("catalogRevisions")) {
       const r = await open<State["catalogRevisions"][number]>(
         row.value,
         this.env.ENCRYPTION_KEY,
@@ -263,21 +253,18 @@ export class Clinic extends DurableObject<Env> {
     workspace = false,
   ) {
     const s = emptyState();
-    const where = sections
-      ? sections.length
-        ? "section IN (" + sections.map(() => "?").join(",") + ")"
-        : "0"
-      : includeHistory
-        ? "1"
-        : "section != 'catalogRevisions'";
-    for await (const row of this.entityRows(
-      `(${where}) AND NOT (section='patients' AND id LIKE 'vegas-%')`,
-      sections || [],
-    )) {
-      let item = await open<any>(row.value, this.env.ENCRYPTION_KEY);
-      if (!includeHistory && row.section === "catalogs")
-        item = lightCatalog(item, !workspace);
-      (s[row.section] as unknown[]).push(item);
+    const requested =
+      sections ||
+      (Object.keys(s) as (keyof State)[]).filter(
+        (section) => includeHistory || section !== "catalogRevisions",
+      );
+    for (const section of requested) {
+      for await (const row of this.entityRows(section, true)) {
+        let item = await open<any>(row.value, this.env.ENCRYPTION_KEY);
+        if (!includeHistory && row.section === "catalogs")
+          item = lightCatalog(item, !workspace);
+        (s[row.section] as unknown[]).push(item);
+      }
     }
     if (!sections || sections.includes("patients")) {
       await this.includePatients(s, [
@@ -521,7 +508,7 @@ export class Clinic extends DurableObject<Env> {
   }
   private async catalogState() {
     const state = emptyState();
-    for await (const row of this.entityRows("section='catalogs'"))
+    for await (const row of this.entityRows("catalogs"))
       state.catalogs.push(
         lightCatalog(await open(row.value, this.env.ENCRYPTION_KEY), false),
       );
@@ -777,6 +764,8 @@ export class Clinic extends DurableObject<Env> {
     try {
       return await run;
     } catch (e) {
+      const quota = storageQuotaResponse(e);
+      if (quota) return quota;
       const message =
         e instanceof Error ? e.message : "처리 중 오류가 발생했습니다";
       return json(
@@ -1543,7 +1532,7 @@ export class Clinic extends DurableObject<Env> {
       const patientState = await this.state(false, ["patients"]);
       const patients = patientState.patients;
       const appointments = [];
-      for await (const row of this.entityRows("section='consultations'")) {
+      for await (const row of this.entityRows("consultations")) {
         const c = await open<import("../src/core/model").Consultation>(
           row.value,
           this.env.ENCRYPTION_KEY,
@@ -2453,7 +2442,7 @@ export class Clinic extends DurableObject<Env> {
       );
       const book = new URL(req.url).searchParams.get("book");
       const revisions = [];
-      for await (const row of this.entityRows("section='catalogRevisions'")) {
+      for await (const row of this.entityRows("catalogRevisions")) {
         const revision = await open<State["catalogRevisions"][number]>(
           row.value,
           this.env.ENCRYPTION_KEY,
@@ -2651,10 +2640,20 @@ export class Clinic extends DurableObject<Env> {
       await this.flush();
       const before = cmd.type.startsWith("catalog.")
         ? await this.commandCatalogState(cmd)
-        : cmd.type === "patient.import"
-          ? await this.state(false, ["policies"])
-          : await this.state(false);
-      if (cmd.type === "patient.import") {
+        : cmd.type === "patient.import.enrich"
+          ? await this.state(false, [
+              "policies",
+              "vipAccounts",
+              "pointEntries",
+              "ledger",
+            ])
+          : cmd.type === "patient.import"
+            ? await this.state(false, ["policies"])
+            : await this.state(false);
+      if (
+        cmd.type === "patient.import" ||
+        cmd.type === "patient.import.enrich"
+      ) {
         const ids = Array.isArray(cmd.payload.rows)
           ? cmd.payload.rows
               .map((p: any) => p.id)

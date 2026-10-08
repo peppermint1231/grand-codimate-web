@@ -1,7 +1,7 @@
 {
-  "version": "0.18.9",
-  "versionCode": 79,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.9.apk",
-  "sha256": "96526cb0ff28ceabb75a6defaff261ac2721203256f1357c15f1b3f8e111f68b",
-  "notes": "베가스 환자 이관·지역 통계·VIP 자동 혜택과 상담 시술 검색 속도를 개선했습니다."
+  "version": "0.18.10",
+  "versionCode": 80,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.10.apk",
+  "sha256": "8a1572814db20886bee469fb2f278dda16f4dbc158c889e737b6a3d269d2b6c7",
+  "notes": "대량 환자 조회 최적화, 장애 시 로그인 유지·기기 보관 임시 사용과 이름·전화번호 기준 정보 통합을 지원합니다."
 }

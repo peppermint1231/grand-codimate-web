@@ -18,11 +18,11 @@ export class PatientDirectory {
   }
   private async load() {
     const patients = new Map<string, Patient>();
-    let cursor = 0;
+    let cursor = "vegas-";
     for (;;) {
       const rows = this.sql
-        .exec<{ cursor: number; value: string }>(
-          "SELECT rowid AS cursor,value FROM entities WHERE section='patients' AND id LIKE 'vegas-%' AND rowid>? ORDER BY rowid LIMIT 100",
+        .exec<{ id: string; value: string }>(
+          "SELECT id,value FROM entities WHERE section='patients' AND id>? AND id<'vegas.' ORDER BY id LIMIT 100",
           cursor,
         )
         .toArray();
@@ -32,7 +32,7 @@ export class PatientDirectory {
         rows.map((row) => open<Patient>(row.value, this.key)),
       ))
         patients.set(p.id, this.compact(p));
-      cursor = rows.at(-1)!.cursor;
+      cursor = rows.at(-1)!.id;
     }
     return (this.patients = patients);
   }

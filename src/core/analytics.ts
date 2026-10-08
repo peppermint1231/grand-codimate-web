@@ -470,7 +470,7 @@ export function buildAnalytics(
   const patients: AnalyticsReport["patients"] = {
     registered: patientList.filter(
       (p) =>
-        !p.external &&
+        !p.id.startsWith("vegas-") &&
         inPeriod(koreanDay(p.createdAt)) &&
         (!filter.ownerId || p.ownerId === filter.ownerId),
     ).length,

@@ -51,3 +51,21 @@ export const patientImportSchema = z
       .max(250),
   })
   .strict();
+
+/** Admin reconciliation of an existing record; identity and revision are checked in the domain. */
+export const patientEnrichmentSchema = z
+  .object({
+    rows: z
+      .array(
+        patientImportSchema.shape.rows.element
+          .omit({ number: true })
+          .extend({
+            id: z.string().min(1).max(100),
+            expectedRev: z.number().int().min(1),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(250),
+  })
+  .strict();

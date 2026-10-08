@@ -510,6 +510,15 @@ export class PatientDirectory {
       );
       args.push('"' + this.chars(q) + '"');
     }
+    const source =
+      "patient_directory d" +
+      (q
+        ? " NOT INDEXED"
+        : facets.length
+          ? " INDEXED BY sqlite_autoindex_patient_directory_1"
+          : f.duplicateOnly
+            ? " INDEXED BY patient_directory_identity_lookup"
+            : "");
     const where = conditions.join(" AND "),
       sort =
         f.sort === "name"
@@ -534,7 +543,7 @@ export class PatientDirectory {
       if (cached) total = cached.total;
       else {
         total = this.rows(
-          `SELECT COUNT(*) AS n FROM (SELECT d.id FROM patient_directory d WHERE ${where} LIMIT 10001)`,
+          `SELECT COUNT(*) AS n FROM (SELECT d.id FROM ${source} WHERE ${where} LIMIT 10001)`,
           ...args,
         )[0].n;
         if (total > 10000)
@@ -551,6 +560,15 @@ export class PatientDirectory {
         );
       }
     }
+    if (total === 0)
+      return {
+        page: 0,
+        total: 0,
+        pageSize: 30,
+        allActiveTotal: this.total("0:all").n,
+        totalRevenue: financial ? this.total("0:all").revenue : null,
+        rows: [],
+      };
     let page = Math.min(
         Math.max(0, Math.floor(f.page) || 0),
         Math.max(0, Math.ceil(total / 30) - 1),
@@ -578,7 +596,7 @@ export class PatientDirectory {
       }
     }
     const selected = this.rows(
-      `SELECT d.value,d.identity,d.${sort} AS sort_value,d.id FROM patient_directory d WHERE ${where}${seek} ORDER BY ${order} LIMIT 30 OFFSET ?`,
+      `SELECT d.value,d.identity,d.${sort} AS sort_value,d.id FROM ${source} WHERE ${where}${seek} ORDER BY ${order} LIMIT 30 OFFSET ?`,
       ...pageArgs,
       offset,
     );

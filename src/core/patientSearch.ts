@@ -1,5 +1,7 @@
+import { patientDuplicateCounts, patientIdentityKey } from "./patientIdentity";
+import { patientLastConsultedAt, patientRegisteredAt } from "./patientHistory";
 import { regionLabel } from "./addressRegion";
-import { duplicates, gradeFor, metrics } from "./domain";
+import { gradeFor, metrics } from "./domain";
 import {
   emptyState,
   type State,
@@ -47,18 +49,7 @@ export function patientIndex(s: State): PatientSearchRow[] {
     if (!ledger.has(l.patientId)) ledger.set(l.patientId, []);
     ledger.get(l.patientId)!.push(l);
   }
-  const nameBirth = new Map<string, Set<string>>(),
-    phones = new Map<string, Set<string>>();
-  for (const p of s.patients.filter((p) => !p.mergedInto)) {
-    for (const [map, key] of [
-      [nameBirth, p.name.toLowerCase().replace(/\s/g, "") + "|" + p.dob],
-      [phones, p.phone.replace(/\D/g, "")],
-    ] as const) {
-      if (!key) continue;
-      if (!map.has(key)) map.set(key, new Set());
-      map.get(key)!.add(p.id);
-    }
-  }
+  const duplicateCounts = patientDuplicateCounts(s.patients);
   return s.patients
     .filter((p) => !p.mergedInto)
     .map((p) => {
@@ -75,13 +66,6 @@ export function patientIndex(s: State): PatientSearchRow[] {
             (a) => a.patientId === p.id,
           ),
         };
-      const dupe = new Set([
-        ...(nameBirth.get(
-          p.name.toLowerCase().replace(/\s/g, "") + "|" + p.dob,
-        ) || []),
-        ...(phones.get(p.phone.replace(/\D/g, "")) || []),
-      ]);
-      dupe.delete(p.id);
       return {
         p,
         m: metrics(mini, p.id),
@@ -107,7 +91,9 @@ export function patientIndex(s: State): PatientSearchRow[] {
             packageProgress,
           }),
         ),
-        duplicates: dupe.size,
+        duplicates: p.archived
+          ? 0
+          : Math.max(0, (duplicateCounts.get(patientIdentityKey(p)) || 1) - 1),
       };
     });
 }
@@ -140,7 +126,7 @@ export function searchPatients(
           cs.some((c) => c.ownerId === f.owner)) &&
         (!f.consultStatus ||
           cs.some((c) => c.status === f.consultStatus && !c.cancelled)) &&
-        (!f.since || cs.some((c) => c.createdAt.slice(0, 10) >= f.since)) &&
+        (!f.since || patientLastConsultedAt(p, cs).slice(0, 10) >= f.since) &&
         (!f.unpaid || (financial && m.outstanding > 0)),
     )
     .sort((a, b) =>
@@ -148,8 +134,10 @@ export function searchPatients(
         ? b.m.revenue - a.m.revenue || a.p.id.localeCompare(b.p.id)
         : f.sort === "name"
           ? a.p.name.localeCompare(b.p.name) || a.p.id.localeCompare(b.p.id)
-          : (b.cs.at(-1)?.createdAt || b.p.createdAt).localeCompare(
-              a.cs.at(-1)?.createdAt || a.p.createdAt,
+          : (
+              patientLastConsultedAt(b.p, b.cs) || patientRegisteredAt(b.p)
+            ).localeCompare(
+              patientLastConsultedAt(a.p, a.cs) || patientRegisteredAt(a.p),
             ) || a.p.id.localeCompare(b.p.id),
     );
   const page = Math.min(
@@ -160,6 +148,11 @@ export function searchPatients(
     page,
     total: rows.length,
     pageSize: 30,
+    totalRevenue: financial
+      ? index
+          .filter((r) => !r.p.archived && !r.p.mergedInto)
+          .reduce((sum, r) => sum + r.m.revenue, 0)
+      : null,
     allActiveTotal: index.filter((r) => !r.p.archived && !r.p.mergedInto)
       .length,
     rows: rows.slice(page * 30, page * 30 + 30).map((r) =>
@@ -167,9 +160,15 @@ export function searchPatients(
         ? r
         : {
             ...r,
-            p: r.p.external
-              ? { ...r.p, external: { ...r.p.external, totalPaid: null } }
-              : r.p,
+            p: {
+              ...r.p,
+              ...(r.p.external
+                ? { external: { ...r.p.external, totalPaid: null } }
+                : {}),
+              ...(r.p.importSummary
+                ? { importSummary: { ...r.p.importSummary, totalPaid: null } }
+                : {}),
+            },
             m: {
               ...r.m,
               contract: 0,

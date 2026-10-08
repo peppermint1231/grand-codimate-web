@@ -133,7 +133,7 @@ describe("견적", () => {
   });
 });
 describe("환자와 권한", () => {
-  it("가족 전화번호는 후보일 뿐 자동 병합하지 않음", async () => {
+  it("이름이 다른 가족 전화번호는 중복 후보로 잡지 않음", async () => {
     const s = await fixture();
     expect(
       duplicates(s, {
@@ -141,7 +141,7 @@ describe("환자와 권한", () => {
         dob: "2001-01-01",
         phone: "01012345678",
       }),
-    ).toHaveLength(1);
+    ).toHaveLength(0);
     expect(s.patients).toHaveLength(1);
   });
   it("환자 수정 후 과거 상담 스냅샷 보존", async () => {

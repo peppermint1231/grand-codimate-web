@@ -56,6 +56,12 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  /** Compact, derived directory data; full reference details load on patient open. */
+  importSummary?: {
+    totalPaid: number | null;
+    firstVisit: string;
+    lastVisit: string;
+  };
   addressRegion?: import("./addressRegion").AddressRegion;
   external?: {
     source: "vegas";

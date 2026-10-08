@@ -1,3 +1,4 @@
+import { patientIdentityKey } from "../src/core/patientIdentity";
 import { directoryRegions } from "../src/core/addressRegion";
 import { entitySectionRows } from "./entityRows";
 import { storageQuotaResponse } from "./storageQuota";
@@ -2365,19 +2366,22 @@ export class Clinic extends DurableObject<Env> {
           p.id !== patient.id &&
           !p.archived &&
           !p.mergedInto &&
-          ((patient.dob &&
-            patient.dob === p.dob &&
-            patient.name.replace(/\s/g, "").toLowerCase() ===
-              p.name.replace(/\s/g, "").toLowerCase()) ||
-            (patient.phone && patient.phone === p.phone)),
+          !!patientIdentityKey(patient) &&
+          patientIdentityKey(patient) === patientIdentityKey(p),
       );
-      const patients = matches
-        .slice(0, 100)
-        .map((p) =>
-          !allowed(user, "money.read") && p.external
-            ? { ...p, external: { ...p.external, totalPaid: null } }
-            : p,
-        );
+      const patients = matches.slice(0, 100).map((p) =>
+        allowed(user, "money.read")
+          ? p
+          : {
+              ...p,
+              ...(p.external
+                ? { external: { ...p.external, totalPaid: null } }
+                : {}),
+              ...(p.importSummary
+                ? { importSummary: { ...p.importSummary, totalPaid: null } }
+                : {}),
+            },
+      );
       return json({ patients, total: matches.length });
     }
     if (path.startsWith("/api/patients/") && req.method === "GET") {
@@ -2405,9 +2409,13 @@ export class Clinic extends DurableObject<Env> {
       );
       try {
         const s = await this.state(false);
-        const report = buildAnalytics(s, filter, allowed(user, "money.read"));
         const combined = new Map(await this.patientDirectory().all());
         for (const p of s.patients) combined.set(p.id, p);
+        const report = buildAnalytics(
+          { ...s, patients: [...combined.values()] },
+          filter,
+          allowed(user, "money.read"),
+        );
         report.patientDirectory = directoryRegions(combined.values());
         return json(report);
       } catch (e) {

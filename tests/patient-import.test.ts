@@ -133,7 +133,7 @@ it("imports reference history without creating financial/VIP history and refuses
       ownerId: "",
       book: "",
     }).patients.registered,
-  ).toBe(0);
+  ).toBe(2);
   await expect(applyCommand(s, admin, command([row()]))).rejects.toThrow(
     "이미 가져온",
   );
@@ -209,6 +209,23 @@ it("keeps directory outside workspace, pages/searches it, replays import safely,
     expect((await req("/state?view=workspace")).state.patients).toHaveLength(0);
     const results = await req("/patients/search");
     expect(results.total).toBe(35);
+    expect(results.totalRevenue).toBe(35 * 9000000);
+    expect(results.rows[0].m).toMatchObject({
+      contract: 9000000,
+      revenue: 9000000,
+      receipts: 0,
+      outstanding: 0,
+    });
+    expect(results.rows[0].p.importSummary).toMatchObject({
+      firstVisit: "2020-01-01",
+      lastVisit: "2024-03-01",
+    });
+    expect((await req("/patients/search?duplicateOnly=true")).total).toBe(0);
+    expect((await req("/patients/matches?id=" + row().id)).total).toBe(0);
+    expect(
+      (await req("/analytics?from=2020-01-01&to=2020-12-31")).patients
+        .registered,
+    ).toBe(35);
     expect(results.rows).toHaveLength(30);
     expect((await req("/patients/search?page=1")).rows).toHaveLength(5);
     expect(

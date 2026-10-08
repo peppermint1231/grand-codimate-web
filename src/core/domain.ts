@@ -1,3 +1,5 @@
+import { patientIdentityKey } from "./patientIdentity";
+import { importedRevenue } from "./patientHistory";
 import {
   patientImportSchema,
   patientEnrichmentSchema,
@@ -307,6 +309,7 @@ export function ledgerAvailable(
       );
 }
 export function metrics(s: State, patientId: string) {
+  const opening = importedRevenue(s.patients.find((p) => p.id === patientId));
   const entries = activeLedger(s).filter((l) => l.patientId === patientId);
   const receipts = entries
       .filter((l) => l.kind === "receipt" && l.tender !== "points")
@@ -325,10 +328,10 @@ export function metrics(s: State, patientId: string) {
     return sum + Math.max(0, c.quote.total - net);
   }, 0);
   return {
-    contract,
+    contract: contract + opening,
     receipts,
     refunds,
-    revenue: receipts - refunds,
+    revenue: opening + receipts - refunds,
     outstanding,
   };
 }
@@ -366,16 +369,10 @@ export function duplicates(
   s: State,
   p: { name: string; dob: string; phone: string },
 ) {
+  const key = patientIdentityKey(p);
   return s.patients.filter(
     (x) =>
-      !x.mergedInto &&
-      !x.archived &&
-      ((!!p.name.trim() &&
-        !!p.dob &&
-        x.name.replace(/\s/g, "") === p.name.replace(/\s/g, "") &&
-        x.dob === p.dob) ||
-        (!!p.phone.replace(/\D/g, "") &&
-          x.phone.replace(/\D/g, "") === p.phone.replace(/\D/g, ""))),
+      !x.mergedInto && !x.archived && !!key && patientIdentityKey(x) === key,
   );
 }
 export function patientFor(s: State, id: string) {

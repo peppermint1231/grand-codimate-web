@@ -56,6 +56,17 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  addressRegion?: import("./addressRegion").AddressRegion;
+  external?: {
+    source: "vegas";
+    fileHash: string;
+    rows: number[];
+    firstVisit: string;
+    lastVisit: string;
+    totalPaid: number | null;
+    visitCount: number | null;
+    issues: string[];
+  };
   referredByPatientId?: string;
   acquisitionSource?: string;
   number?: string;

@@ -1,8 +1,18 @@
-import { productType,productTypeLabels,type ProductType } from "./core/productType";
+import { ProcedureSearch } from "./components/ProcedureSearch";
+import { usePatientLookup } from "./hooks/usePatientLookup";
+import { regionLabel } from "./core/addressRegion";
+import {
+  productType,
+  productTypeLabels,
+  type ProductType,
+} from "./core/productType";
 import { PackageBuilder } from "./components/PackageBuilder";
 import { packageOption, type PackagePlan } from "./core/packageBuilder";
 import { ProductWizard } from "./components/ProductWizard";
-import { optionPackageComposition, optionSessionCount } from "./core/packageSchedule";
+import {
+  optionPackageComposition,
+  optionSessionCount,
+} from "./core/packageSchedule";
 import { GradeSettings } from "./components/GradeSettings";
 import { ConsultationOwner } from "./components/ConsultationOwner";
 import { ReferralPicker } from "./components/ReferralPicker";
@@ -433,12 +443,20 @@ export function App() {
       setBusy(false);
     }
   };
-  const refresh = async (preserveConsult = false) => {
+  const refresh = async (
+    preserveConsult = false,
+    selectedPatientId = patientId,
+  ) => {
     currentProgress()?.update({
       title: "저장된 자료 확인 중입니다",
       detail: "최신 내용을 화면에 반영하고 있습니다.",
     });
-    const d = await api("/state?view=workspace");
+    const d = await api(
+      "/state?view=workspace" +
+        (selectedPatientId
+          ? "&patientId=" + encodeURIComponent(selectedPatientId)
+          : ""),
+    );
     if (vaultEnabled()) {
       const queued = (await vaultRead<Command[]>("pending")) || [];
       const cached = await vaultRead<CachedSession>("session");
@@ -1457,7 +1475,7 @@ export function App() {
                 user={user}
                 select={(id) =>
                   work(async () => {
-                    if (navigator.onLine) await refresh();
+                    if (navigator.onLine) await refresh(false, id);
                     setPaymentTarget(undefined);
                     setPatientId(id);
                   })
@@ -1627,7 +1645,7 @@ export function App() {
             state={state}
             openExisting={(id) => {
               void work(async () => {
-                await refresh();
+                await refresh(false, id);
                 setModal("");
                 setPatientId(id);
               });
@@ -1722,6 +1740,7 @@ function Patients({
 }) {
   const [search, setSearch] = useState(""),
     [grade, setGrade] = useState(""),
+    [addressStatus, setAddressStatus] = useState(""),
     [sort, setSort] = useState("recent"),
     [unpaid, setUnpaid] = useState(false),
     [owner, setOwner] = useState(""),
@@ -1735,9 +1754,17 @@ function Patients({
   } | null>(null);
   const [archived, setArchived] = useState(false),
     [duplicateOnly, setDuplicateOnly] = useState(false);
+  const [duplicatePool, setDuplicatePool] = useState<Patient[]>([]);
+  const comparePatients = [
+    ...new Map(
+      [...state.patients, ...duplicatePool].map((p) => [p.id, p]),
+    ).values(),
+  ];
   const candidates = (p: Patient) =>
-    duplicates(state, p).filter((x) => x.id !== p.id);
-  const duplicatePatient = state.patients.find((p) => p.id === duplicateId);
+    duplicates({ ...state, patients: comparePatients }, p).filter(
+      (x) => x.id !== p.id,
+    );
+  const duplicatePatient = comparePatients.find((p) => p.id === duplicateId);
   const archive = async (p: Patient) => {
     if (
       !window.confirm(
@@ -1760,6 +1787,7 @@ function Patients({
     [
       search,
       grade,
+      addressStatus,
       sort,
       unpaid,
       owner,
@@ -1781,6 +1809,7 @@ function Patients({
             new URLSearchParams({
               search,
               grade,
+              addressStatus,
               sort,
               unpaid: String(unpaid),
               owner,
@@ -1811,6 +1840,7 @@ function Patients({
   }, [
     search,
     grade,
+    addressStatus,
     sort,
     unpaid,
     owner,
@@ -1834,6 +1864,7 @@ function Patients({
       {
         search,
         grade,
+        addressStatus,
         sort,
         unpaid,
         owner,
@@ -1860,7 +1891,7 @@ function Patients({
       <div className="summary-grid">
         <Summary
           label="전체 환자"
-          value={`${state.patients.filter((p) => !p.mergedInto && !p.archived).length}명`}
+          value={`${listResult.allActiveTotal ?? state.patients.filter((p) => !p.mergedInto && !p.archived).length}명`}
           detail="함께하고 있는 환자"
         />
         <Summary
@@ -1918,6 +1949,16 @@ function Patients({
                 {g.name}
               </option>
             ))}
+          </select>
+          <select
+            aria-label="주소 확인 필터"
+            value={addressStatus}
+            onChange={(e) => setAddressStatus(e.target.value)}
+          >
+            <option value="">모든 주소</option>
+            <option value="ready">동·읍·면 확인됨</option>
+            <option value="unresolved">동·읍·면 확인 필요</option>
+            <option value="missing">주소 미입력</option>
           </select>
           <select
             aria-label="정렬"
@@ -2007,7 +2048,7 @@ function Patients({
               </tr>
             </thead>
             <tbody>
-              {ps.map(({ p, m, g, cs }) => (
+              {ps.map(({ p, m, g, cs, duplicates: duplicateCount }) => (
                 <tr
                   key={p.id}
                   onClick={() => select(p.id)}
@@ -2040,16 +2081,25 @@ function Patients({
                           </span>
                         )}
                         <small>환자번호 {p.number || p.id}</small>
-                        {!!candidates(p).length && (
+                        {!!duplicateCount && (
                           <button
                             className="duplicate-link"
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
+                              try {
+                                const result = await api(
+                                  "/patients/matches?id=" +
+                                    encodeURIComponent(p.id),
+                                );
+                                setDuplicatePool([p, ...result.patients]);
+                              } catch {
+                                setDuplicatePool([p]);
+                              }
                               setDuplicateId(p.id);
                               setMergePair(null);
                             }}
                           >
-                            중복 의심 {candidates(p).length}명 · 비교
+                            중복 의심 {duplicateCount}명 · 비교
                           </button>
                         )}
                         {(["미용", "보험"] as const).map(
@@ -2064,7 +2114,7 @@ function Patients({
                             ),
                         )}
                         <small>
-                          {age(p.dob)}세 ·{" "}
+                          {p.dob ? `${age(p.dob)}세` : "생년월일 미입력"} ·{" "}
                           {p.sex === "M"
                             ? "남성"
                             : p.sex === "F"
@@ -2228,10 +2278,10 @@ function Patients({
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const from = state.patients.find(
+                const from = comparePatients.find(
                     (p) => p.id === mergePair.from,
                   )!,
-                  to = state.patients.find((p) => p.id === mergePair.to)!;
+                  to = comparePatients.find((p) => p.id === mergePair.to)!;
                 const reason = new FormData(e.currentTarget).get("reason");
                 if (
                   !window.confirm(
@@ -2256,7 +2306,7 @@ function Patients({
               <p>
                 <strong>
                   남길 환자번호:{" "}
-                  {state.patients.find((p) => p.id === mergePair.to)?.number ||
+                  {comparePatients.find((p) => p.id === mergePair.to)?.number ||
                     mergePair.to}
                 </strong>
               </p>
@@ -2315,7 +2365,18 @@ function PatientForm({
     address: patient?.address || "",
     acquisitionSource: patient?.acquisitionSource || "",
   });
-  const found = duplicates(state, data).filter((p) => p.id !== patient?.id);
+  const remote = usePatientLookup(data.phone.replace(/\D/g, "") || data.name);
+  const found = duplicates(
+    {
+      ...state,
+      patients: [
+        ...new Map(
+          [...state.patients, ...remote].map((p) => [p.id, p]),
+        ).values(),
+      ],
+    },
+    data,
+  ).filter((p) => p.id !== patient?.id);
   return (
     <>
       {!patient && (
@@ -2515,7 +2576,7 @@ function PatientDetail({
       </button>
       <Title
         title={`${p.name} 님`}
-        description={`${sexLabel(p.sex)} · ${age(p.dob)}세 · ${p.dob} · ${p.phone}`}
+        description={`${sexLabel(p.sex)} · ${p.dob ? `${age(p.dob)}세` : "생년월일 미입력"} · ${p.dob} · ${p.phone}`}
         action={
           <div className="button-row">
             <button
@@ -2708,12 +2769,41 @@ function PatientDetail({
               ? "관리자 지정"
               : "자동 산정"}
         </span>
-        <span>{p.address}</span>
+        <span>
+          {p.address || "주소 미입력"}
+          <small>통계 지역: {regionLabel(p)}</small>
+        </span>
         <small>환자번호 {p.number || p.id}</small>
         {allowed(user, "patient.edit") && (
           <button onClick={() => setEdit(true)}>정보 수정</button>
         )}
       </div>
+      {p.external && (
+        <details className="card">
+          <summary>베가스에서 가져온 참고정보</summary>
+          <p className="small">
+            원본 환자목록의 누적 정보입니다. 코디메이트 수납·환불·직원 실적에는
+            합산하지 않으며 VIP 자격 판정에 반영합니다. 연간 추가 적립은
+            이관일부터의 새 수납을 기준으로 합니다.
+          </p>
+          <p>
+            최초일 {p.external.firstVisit || "미기재"} · 최근일{" "}
+            {p.external.lastVisit || "미기재"} · 총내원{" "}
+            {p.external.visitCount ?? "미기재"}회
+          </p>
+          {allowed(user, "money.read") && (
+            <p>
+              베가스 총수납액{" "}
+              {p.external.totalPaid === null
+                ? "미기재"
+                : money(p.external.totalPaid)}
+            </p>
+          )}
+          {!!p.external.issues.length && (
+            <p className="error">확인 필요: {p.external.issues.join(" · ")}</p>
+          )}
+        </details>
+      )}
       {allowed(user, "money.read") && (
         <div className="summary-grid four">
           <Summary
@@ -3176,7 +3266,10 @@ function ConsultationView({
   useAppBack(directOpinionOpen, () => setDirectOpinionOpen(false), 85);
   const [exportFiles, setExportFiles] = useState<ExportDocument[]>([]);
   const [exportMessage, setExportMessage] = useState("");
-  const exportContent = JSON.stringify({ draft, theme: quoteThemeId });
+  const exportContent = useMemo(
+    () => JSON.stringify({ draft, theme: quoteThemeId }),
+    [draft, quoteThemeId],
+  );
   useEffect(() => {
     setExportFiles([]);
     setExportMessage("");
@@ -3234,33 +3327,66 @@ function ConsultationView({
   );
   const [categoryMode, setCategoryMode] =
     useState<CatalogCategoryMode>("concern");
-  const categoryCatalog = catalog && catalogCategoryView(catalog, categoryMode);
-  const categoryProducts = new Map(
-    categoryCatalog?.products.map((p) => [p.id, p]),
+  const categoryCatalog = useMemo(
+    () => catalog && catalogCategoryView(catalog, categoryMode),
+    [catalog, categoryMode],
   );
-  const availableProducts = (catalog?.products || []).filter((p) => p.active);
-  const query = search.trim().toLocaleLowerCase();
-  const products = availableProducts.filter(
-    (p) =>
-      (!category ||
-        (categoryCatalog &&
-          inFolder(
-            categoryCatalog,
-            categoryProducts.get(p.id) || p,
-            category,
-          ))) &&
-      [
-        p.name,
-        p.category,
-        query && categoryCatalog
-          ? folderPath(categoryCatalog, categoryProducts.get(p.id)?.folderId)
-              .map((f) => f.name)
-              .join(" ")
-          : "",
-        p.description,
-        p.composition,
-        ...p.options.map((o) => o.label),
-      ].some((text) => text.toLocaleLowerCase().includes(query)),
+  const categoryProducts = useMemo(
+    () => new Map(categoryCatalog?.products.map((p) => [p.id, p])),
+    [categoryCatalog],
+  );
+  const availableProducts = useMemo(
+    () => (catalog?.products || []).filter((p) => p.active),
+    [catalog],
+  );
+  const productSearchText = useMemo(
+    () =>
+      new Map(
+        availableProducts.map((p) => [
+          p.id,
+          [
+            p.name,
+            p.category,
+            categoryCatalog
+              ? folderPath(
+                  categoryCatalog,
+                  categoryProducts.get(p.id)?.folderId,
+                )
+                  .map((f) => f.name)
+                  .join(" ")
+              : "",
+            p.description,
+            p.composition,
+            ...p.options.map((o) => o.label),
+          ]
+            .join(" ")
+            .normalize("NFKC")
+            .toLocaleLowerCase(),
+        ]),
+      ),
+    [availableProducts, categoryCatalog, categoryProducts],
+  );
+  const categoryFilteredProducts = useMemo(
+    () =>
+      availableProducts.filter(
+        (p) =>
+          !category ||
+          (categoryCatalog &&
+            inFolder(
+              categoryCatalog,
+              categoryProducts.get(p.id) || p,
+              category,
+            )),
+      ),
+    [availableProducts, category, categoryCatalog, categoryProducts],
+  );
+  const query = search.trim().normalize("NFKC").toLocaleLowerCase();
+  const products = useMemo(
+    () =>
+      categoryFilteredProducts.filter((p) =>
+        productSearchText.get(p.id)?.includes(query),
+      ),
+    [categoryFilteredProducts, productSearchText, query],
   );
   useEffect(() => {
     setProductLimit(70);
@@ -3278,7 +3404,10 @@ function ConsultationView({
   } catch (e) {
     quoteError = (e as Error).message;
   }
-  const dirty = JSON.stringify(draft) !== JSON.stringify(c);
+  const dirty = useMemo(
+    () => JSON.stringify(draft) !== JSON.stringify(c),
+    [draft, c],
+  );
   const validationError =
     quoteError ||
     ((quote.discountTotal > catalogDiscount(quote.lines) ||
@@ -3504,7 +3633,8 @@ function ConsultationView({
           </h1>
           <p>
             {consultationKind(c)} · {c.category} · {sexLabel(c.patient.sex)} ·{" "}
-            {age(c.patient.dob)}세 · {c.createdAt.slice(0, 10)}
+            {c.patient.dob ? `${age(c.patient.dob)}세` : "생년월일 미입력"} ·{" "}
+            {c.createdAt.slice(0, 10)}
           </p>
           <ConsultationOwner
             state={s}
@@ -3958,12 +4088,7 @@ function ConsultationView({
                     </div>
                     <div className="search">
                       <Search size={18} />
-                      <input
-                        aria-label="시술 검색"
-                        placeholder="시술 검색"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
+                      <ProcedureSearch value={search} onSearch={setSearch} />
                     </div>
                     <select
                       aria-label="시술 카테고리"
@@ -4073,7 +4198,19 @@ function ConsultationView({
                       <details>
                         <summary>구성·설명</summary>
                         <p>{p.description}</p>
-                        {(p.packageBySession || p.options.some(o=>o.packageComposition)) ? p.options.map(o=><details key={o.id}><summary>{o.label} 패키지 구성</summary><p style={{whiteSpace:"pre-line"}}>{productComposition(p,o)}</p></details>) : <p>{productComposition(p)}</p>}
+                        {p.packageBySession ||
+                        p.options.some((o) => o.packageComposition) ? (
+                          p.options.map((o) => (
+                            <details key={o.id}>
+                              <summary>{o.label} 패키지 구성</summary>
+                              <p style={{ whiteSpace: "pre-line" }}>
+                                {productComposition(p, o)}
+                              </p>
+                            </details>
+                          ))
+                        ) : (
+                          <p>{productComposition(p)}</p>
+                        )}
                         {p.insurance?.note && <p>{p.insurance.note}</p>}
                       </details>
                       {p.options.map((o) => (
@@ -5215,8 +5352,11 @@ function CatalogView({
     [paste, setPaste] = useState("");
   const [deletingProducts, setDeletingProducts] = useState<string[]>([]);
   const [creatingProduct, setCreatingProduct] = useState(false);
-  const [typeFilter,setTypeFilter] = useState<"all"|ProductType>("all");
-  const [editingPackage, setEditingPackage] = useState<{optionId:string;plan:PackagePlan}>();
+  const [typeFilter, setTypeFilter] = useState<"all" | ProductType>("all");
+  const [editingPackage, setEditingPackage] = useState<{
+    optionId: string;
+    plan: PackagePlan;
+  }>();
   const latest = latestCatalog(s, book);
   const current =
     folderDraft ||
@@ -5268,7 +5408,8 @@ function CatalogView({
           search,
           searchScope,
         ) &&
-        matchesCatalogProductFilter(p, reviewFilter) && (typeFilter==="all" || productType(p)===typeFilter),
+        matchesCatalogProductFilter(p, reviewFilter) &&
+        (typeFilter === "all" || productType(p) === typeFilter),
     ) || [];
   const product = current?.products.find((p) => p.id === selected);
   const editable =
@@ -5904,7 +6045,21 @@ function CatalogView({
               <option value="folder">폴더명만</option>
               <option value="product">상품명만</option>
             </select>
-            <select aria-label="상품 타입 필터" value={typeFilter} onChange={e=>{setTypeFilter(e.target.value as typeof typeFilter);setBulkIds([]);}}><option value="all">모든 타입</option>{Object.entries(productTypeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select>
+            <select
+              aria-label="상품 타입 필터"
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value as typeof typeFilter);
+                setBulkIds([]);
+              }}
+            >
+              <option value="all">모든 타입</option>
+              {Object.entries(productTypeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
             <select
               aria-label="상품 필터"
               value={reviewFilter}
@@ -6189,8 +6344,77 @@ function CatalogView({
           )}
         </div>
       </div>
-      {creatingProduct && current && editable && <Modal title="새 상품 만들기" close={()=>{if(window.confirm("작성 중인 상품을 취소할까요?"))setCreatingProduct(false);}}><ProductWizard catalog={current} catalogs={[...latestCatalogs(s).filter(c=>catalogBook(c)!==book),current]} initialFolder={category} onAddBlock={p=>setDraft({...current,products:[...current.products,p]})} onCancel={()=>{if(window.confirm("작성 중인 상품을 취소할까요?"))setCreatingProduct(false);}} onCreate={p=>{setDraft({...current,products:[...current.products,p]});setCreatingProduct(false);setSelected(p.id);}}/></Modal>}
-      {editingPackage && product && current && <Modal title="패키지 블록 구성 편집" close={()=>setEditingPackage(undefined)}><PackageBuilder catalogs={[...latestCatalogs(s).filter(c=>catalogBook(c)!==book),current]} value={editingPackage.plan} onAddBlock={p=>setDraft({...current,products:[...current.products,p]})} blockCatalog={current} onChange={plan=>setEditingPackage({...editingPackage,plan})}/><button className="primary" onClick={()=>work(async()=>{const updated=packageOption(editingPackage.plan,product.options.find(o=>o.id===editingPackage.optionId)!);change({...product,options:product.options.map(o=>o.id===updated.id?updated:o)});setEditingPackage(undefined);})}>구성·가격 적용</button></Modal>}
+      {creatingProduct && current && editable && (
+        <Modal
+          title="새 상품 만들기"
+          close={() => {
+            if (window.confirm("작성 중인 상품을 취소할까요?"))
+              setCreatingProduct(false);
+          }}
+        >
+          <ProductWizard
+            catalog={current}
+            catalogs={[
+              ...latestCatalogs(s).filter((c) => catalogBook(c) !== book),
+              current,
+            ]}
+            initialFolder={category}
+            onAddBlock={(p) =>
+              setDraft({ ...current, products: [...current.products, p] })
+            }
+            onCancel={() => {
+              if (window.confirm("작성 중인 상품을 취소할까요?"))
+                setCreatingProduct(false);
+            }}
+            onCreate={(p) => {
+              setDraft({ ...current, products: [...current.products, p] });
+              setCreatingProduct(false);
+              setSelected(p.id);
+            }}
+          />
+        </Modal>
+      )}
+      {editingPackage && product && current && (
+        <Modal
+          title="패키지 블록 구성 편집"
+          close={() => setEditingPackage(undefined)}
+        >
+          <PackageBuilder
+            catalogs={[
+              ...latestCatalogs(s).filter((c) => catalogBook(c) !== book),
+              current,
+            ]}
+            value={editingPackage.plan}
+            onAddBlock={(p) =>
+              setDraft({ ...current, products: [...current.products, p] })
+            }
+            blockCatalog={current}
+            onChange={(plan) => setEditingPackage({ ...editingPackage, plan })}
+          />
+          <button
+            className="primary"
+            onClick={() =>
+              work(async () => {
+                const updated = packageOption(
+                  editingPackage.plan,
+                  product.options.find(
+                    (o) => o.id === editingPackage.optionId,
+                  )!,
+                );
+                change({
+                  ...product,
+                  options: product.options.map((o) =>
+                    o.id === updated.id ? updated : o,
+                  ),
+                });
+                setEditingPackage(undefined);
+              })
+            }
+          >
+            구성·가격 적용
+          </button>
+        </Modal>
+      )}
       {product && !editingPackage && (
         <Modal title="상품·옵션 편집" close={() => setSelected("")}>
           <div data-catalog-product-editor>
@@ -6237,7 +6461,27 @@ function CatalogView({
                   onChange={(e) => change({ ...product, name: e.target.value })}
                 />
               </Field>
-              <Field label="상품 타입"><select disabled={!editable} value={productType(product)} onChange={e=>change({...product,productType:e.target.value as ProductType,...(e.target.value==="block"?{publicVisible:false}:{})})}>{Object.entries(productTypeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></Field>
+              <Field label="상품 타입">
+                <select
+                  disabled={!editable}
+                  value={productType(product)}
+                  onChange={(e) =>
+                    change({
+                      ...product,
+                      productType: e.target.value as ProductType,
+                      ...(e.target.value === "block"
+                        ? { publicVisible: false }
+                        : {}),
+                    })
+                  }
+                >
+                  {Object.entries(productTypeLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="소속 폴더">
                 <select
                   disabled={!editable}
@@ -6267,25 +6511,63 @@ function CatalogView({
                 onChange={change}
               />
             )}
-            {product.descriptionOrigin === "generated" && <p className="small">자동 작성한 설명입니다. 실제 시술 목적·구성을 확인하고 수정할 수 있습니다.</p>}
-            {product.packageScheduleReview && <p className="error">회차 구성 확인: {product.packageScheduleReview}</p>}
+            {product.descriptionOrigin === "generated" && (
+              <p className="small">
+                자동 작성한 설명입니다. 실제 시술 목적·구성을 확인하고 수정할 수
+                있습니다.
+              </p>
+            )}
+            {product.packageScheduleReview && (
+              <p className="error">
+                회차 구성 확인: {product.packageScheduleReview}
+              </p>
+            )}
             <Field label="설명">
               <textarea
                 disabled={!editable}
                 value={product.description}
                 onChange={(e) =>
-                  change({ ...product, description: e.target.value, descriptionOrigin: undefined })
+                  change({
+                    ...product,
+                    description: e.target.value,
+                    descriptionOrigin: undefined,
+                  })
                 }
               />
-              <small>맞춤 시술 찾기에서 환자에게 보이는 설명입니다. 미용·보험의 금액 표기는 공개 화면에서 ‘맞춤 상담 후 안내’로 표시합니다.</small>
+              <small>
+                맞춤 시술 찾기에서 환자에게 보이는 설명입니다. 미용·보험의 금액
+                표기는 공개 화면에서 ‘맞춤 상담 후 안내’로 표시합니다.
+              </small>
             </Field>
             <OfferingEditor
               offering={product.offering}
               disabled={!editable}
               onChange={(offering) => change({ ...product, offering })}
             />
-            <label className="check"><input type="checkbox" disabled={!editable} checked={!!product.packageBySession} onChange={e=>change({...product,packageBySession:e.target.checked})}/>옵션 회차에 맞춰 패키지 구성 표시</label>
-            {product.packageBySession && <label className="check"><input type="checkbox" disabled={!editable} checked={!!product.packageAllowGaps} onChange={e=>change({...product,packageAllowGaps:e.target.checked})}/>간격 진료 일정: 8·10·12주차처럼 주차 건너뛰기 허용</label>}
+            <label className="check">
+              <input
+                type="checkbox"
+                disabled={!editable}
+                checked={!!product.packageBySession}
+                onChange={(e) =>
+                  change({ ...product, packageBySession: e.target.checked })
+                }
+              />
+              옵션 회차에 맞춰 패키지 구성 표시
+            </label>
+            {product.packageBySession && (
+              <label className="check">
+                <input
+                  type="checkbox"
+                  disabled={!editable}
+                  checked={!!product.packageAllowGaps}
+                  onChange={(e) =>
+                    change({ ...product, packageAllowGaps: e.target.checked })
+                  }
+                />
+                간격 진료 일정: 8·10·12주차처럼 주차 건너뛰기 허용
+              </label>
+            )}
             <Field label="패키지·회차별 구성">
               <textarea
                 disabled={!editable}
@@ -6366,7 +6648,19 @@ function CatalogView({
                     </button>
                   )}
                 </div>
-                {o.packagePlan && editable && <button className="package-edit-button" onClick={()=>setEditingPackage({optionId:o.id,plan:structuredClone(o.packagePlan!)})}>블록·회차·할인 구성 편집</button>}
+                {o.packagePlan && editable && (
+                  <button
+                    className="package-edit-button"
+                    onClick={() =>
+                      setEditingPackage({
+                        optionId: o.id,
+                        plan: structuredClone(o.packagePlan!),
+                      })
+                    }
+                  >
+                    블록·회차·할인 구성 편집
+                  </button>
+                )}
                 <Field label="옵션">
                   <input
                     disabled={!editable}
@@ -6540,11 +6834,66 @@ function CatalogView({
                     <option value="exempt">면세</option>
                   </select>
                 </Field>
-                <Field label="이 옵션만의 구성 (선택)"><textarea disabled={!editable} placeholder="공통 구성과 다를 때 입력하세요. 비워두면 공통 구성의 해당 회차까지 표시합니다." value={o.packageComposition || ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageComposition:e.target.value || undefined}:x)})}/></Field>
-                {(product.packageBySession || o.packageComposition) && <>
-                  <Field label="패키지 방문 횟수"><input type="number" min="1" max="1000" disabled={!editable} value={o.packageSessionCount ?? optionSessionCount(o) ?? ""} onChange={e=>change({...product,options:product.options.map(x=>x.id===o.id?{...x,packageSessionCount:e.target.value?Number(e.target.value):undefined}:x)})}/></Field>
-                  <details><summary>{optionSessionCount(o) || "선택"}회차 패키지 구성 미리보기</summary><p style={{whiteSpace:"pre-line"}}>{optionPackageComposition(product,o) || "회차 수와 1회차부터의 공통 구성을 확인하세요."}</p></details>
-                </>}
+                <Field label="이 옵션만의 구성 (선택)">
+                  <textarea
+                    disabled={!editable}
+                    placeholder="공통 구성과 다를 때 입력하세요. 비워두면 공통 구성의 해당 회차까지 표시합니다."
+                    value={o.packageComposition || ""}
+                    onChange={(e) =>
+                      change({
+                        ...product,
+                        options: product.options.map((x) =>
+                          x.id === o.id
+                            ? {
+                                ...x,
+                                packageComposition: e.target.value || undefined,
+                              }
+                            : x,
+                        ),
+                      })
+                    }
+                  />
+                </Field>
+                {(product.packageBySession || o.packageComposition) && (
+                  <>
+                    <Field label="패키지 방문 횟수">
+                      <input
+                        type="number"
+                        min="1"
+                        max="1000"
+                        disabled={!editable}
+                        value={
+                          o.packageSessionCount ?? optionSessionCount(o) ?? ""
+                        }
+                        onChange={(e) =>
+                          change({
+                            ...product,
+                            options: product.options.map((x) =>
+                              x.id === o.id
+                                ? {
+                                    ...x,
+                                    packageSessionCount: e.target.value
+                                      ? Number(e.target.value)
+                                      : undefined,
+                                  }
+                                : x,
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                    <details>
+                      <summary>
+                        {optionSessionCount(o) || "선택"}회차 패키지 구성
+                        미리보기
+                      </summary>
+                      <p style={{ whiteSpace: "pre-line" }}>
+                        {optionPackageComposition(product, o) ||
+                          "회차 수와 1회차부터의 공통 구성을 확인하세요."}
+                      </p>
+                    </details>
+                  </>
+                )}
                 <OfferingEditor
                   offering={o.offering}
                   option
@@ -6560,7 +6909,8 @@ function CatalogView({
                 />
                 <p className="small">
                   등급별 혜택은 옵션별 구성에 입력하세요. 옵션별 구성을 지정하면
-                  상품의 공통 멤버십 구성 대신 사용됩니다. 회차별 구성 자동 표시를 켜면 공통 구성에서 해당 옵션의 회차까지만 안내합니다.
+                  상품의 공통 멤버십 구성 대신 사용됩니다. 회차별 구성 자동
+                  표시를 켜면 공통 구성에서 해당 옵션의 회차까지만 안내합니다.
                 </p>
                 {!!o.issues.length && (
                   <p className="small">

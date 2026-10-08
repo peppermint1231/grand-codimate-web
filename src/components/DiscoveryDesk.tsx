@@ -1,3 +1,4 @@
+import { usePatientLookup } from "../hooks/usePatientLookup";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { withProgress, currentProgress } from "../lib/operationProgress";
@@ -350,8 +351,16 @@ export function DiscoveryDesk({
       }
     });
   };
+  const remotePatients = usePatientLookup(
+    selected?.person.phone || selected?.person.name || "",
+  );
+  const availablePatients = [
+    ...new Map(
+      [...state.patients, ...remotePatients].map((p) => [p.id, p]),
+    ).values(),
+  ];
   const candidates = selected
-    ? patientCandidates(state.patients, selected.person)
+    ? patientCandidates(availablePatients, selected.person)
     : [];
   return (
     <>
@@ -1113,7 +1122,7 @@ export function DiscoveryDesk({
                     onChange={(e) => setPatientId(e.target.value)}
                   >
                     <option value="">신규 환자로 등록</option>
-                    {state.patients
+                    {availablePatients
                       .filter((p) => !p.archived && !p.mergedInto)
                       .map((p) => (
                         <option key={p.id} value={p.id}>

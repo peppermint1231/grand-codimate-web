@@ -1,3 +1,4 @@
+import { regionLabel } from "./addressRegion";
 import { duplicates, gradeFor, metrics } from "./domain";
 import {
   emptyState,
@@ -33,6 +34,7 @@ export type PatientSearchFilter = {
   archived: boolean;
   duplicateOnly: boolean;
   page: number;
+  addressStatus?: string;
 };
 export function patientIndex(s: State): PatientSearchRow[] {
   const consultations = new Map<string, State["consultations"]>(),
@@ -120,6 +122,12 @@ export function searchPatients(
     .filter(
       ({ p, m, g, cs, duplicates }) =>
         !!p.archived === f.archived &&
+        (!f.addressStatus ||
+          (f.addressStatus === "missing"
+            ? !p.address.trim()
+            : f.addressStatus === "unresolved"
+              ? regionLabel(p) === "주소 확인 필요"
+              : !["주소 미입력", "주소 확인 필요"].includes(regionLabel(p)))) &&
         (!f.duplicateOnly || duplicates > 0) &&
         (!q ||
           [p.name, p.phone, p.dob, p.id, p.number || ""].some((v) =>
@@ -152,11 +160,16 @@ export function searchPatients(
     page,
     total: rows.length,
     pageSize: 30,
+    allActiveTotal: index.filter((r) => !r.p.archived && !r.p.mergedInto)
+      .length,
     rows: rows.slice(page * 30, page * 30 + 30).map((r) =>
       financial
         ? r
         : {
             ...r,
+            p: r.p.external
+              ? { ...r.p, external: { ...r.p.external, totalPaid: null } }
+              : r.p,
             m: {
               ...r.m,
               contract: 0,

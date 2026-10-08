@@ -180,6 +180,12 @@ export async function analyticsWorkbook(
         ["분류", "환자 수"],
         report.patients[key].map((r) => [r.name, r.count]),
       );
+    if (report.patientDirectory)
+      sheet(
+        "전체 환자 지역",
+        ["동·읍·면 (전체 환자목록 기준)", "환자 수"],
+        report.patientDirectory.regions.map((r) => [r.name, r.count]),
+      );
     sheet(
       "재상담 코호트",
       [

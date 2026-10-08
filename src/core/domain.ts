@@ -1,3 +1,5 @@
+import { patientImportSchema, addressRegionSchema } from "./patientImport";
+import { regionFromAddress } from "./addressRegion";
 import { packagePlanSchema } from "./packageBuilder";
 import { parsePackageSchedule, optionSessionCount } from "./packageSchedule";
 import { gradeBenefitsSchema, reconcileGradeBenefits } from "./gradeBenefits";
@@ -106,6 +108,7 @@ const discountSchema = z.object({
   value: z.number().min(0).max(1_000_000_000),
 });
 const patientSchema = z.object({
+  addressRegion: addressRegionSchema.optional(),
   acquisitionSource: z.string().trim().max(80).optional(),
   name: z.string().trim().min(1).max(80),
   sex: z.enum(["M", "F", "U"]),
@@ -805,6 +808,31 @@ export async function applyCommand(
     });
   };
   switch (cmd.type) {
+    case "patient.import": {
+      admin();
+      const imported = patientImportSchema.parse(p).rows;
+      ensure(
+        new Set(imported.map((r) => r.id)).size === imported.length,
+        "가져오기 ID가 중복됩니다",
+      );
+      for (const row of imported) {
+        const existing = s.patients.find((x) => x.id === row.id);
+        ensure(
+          !existing,
+          "이미 가져온 환자입니다. 기존 환자를 유지합니다",
+          409,
+        );
+        s.patients.push({
+          ...base,
+          ...row,
+          ownerId: "",
+          storageName: safeName(`${row.number}${row.sex}${row.name}`),
+        });
+      }
+      reconcileVip(s, now, cmd.id);
+      text = `베가스 환자 ${imported.length}명 가져오기`;
+      break;
+    }
     case "patient.create": {
       const d = patientSchema.parse(p);
       const referredBy =
@@ -842,6 +870,7 @@ export async function applyCommand(
       s.patients.push({
         ...base,
         ...d,
+        addressRegion: d.addressRegion || regionFromAddress(d.address),
         number,
         storageName: safeName(`${number}${d.sex}${d.name}`),
         ownerId: user.id,
@@ -855,7 +884,13 @@ export async function applyCommand(
       need("patient.edit");
       const x = find(s.patients);
       x.storageName ||= safeName(`${x.number || x.id}${x.sex}${x.name}`);
-      Object.assign(x, patientSchema.parse(p));
+      const changed = patientSchema.parse(p);
+      Object.assign(x, changed, {
+        addressRegion:
+          changed.addressRegion ||
+          (changed.address === x.address ? x.addressRegion : undefined) ||
+          regionFromAddress(changed.address),
+      });
       touch(x);
       patientId = id;
       text = "환자정보 수정";

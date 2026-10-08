@@ -1,3 +1,5 @@
+import { directoryRegions } from "../src/core/addressRegion";
+import { PatientDirectory } from "./patientDirectory";
 import { z } from "zod";
 import { validDay, validRequestedSlot } from "../src/core/appointments";
 import { version as appVersion } from "../package.json";
@@ -268,11 +270,23 @@ export class Clinic extends DurableObject<Env> {
       : includeHistory
         ? "1"
         : "section != 'catalogRevisions'";
-    for await (const row of this.entityRows(where, sections || [])) {
+    for await (const row of this.entityRows(
+      `(${where}) AND NOT (section='patients' AND id LIKE 'vegas-%')`,
+      sections || [],
+    )) {
       let item = await open<any>(row.value, this.env.ENCRYPTION_KEY);
       if (!includeHistory && row.section === "catalogs")
         item = lightCatalog(item, !workspace);
       (s[row.section] as unknown[]).push(item);
+    }
+    if (!sections || sections.includes("patients")) {
+      await this.includePatients(s, [
+        ...s.consultations.map((c) => c.patientId),
+        ...s.ledger.map((l) => l.patientId),
+        ...s.notes.map((n) => n.patientId),
+        ...s.vipAccounts.map((a) => a.patientId),
+        ...s.benefitAccounts.map((a) => a.patientId),
+      ]);
     }
     if (workspace) {
       const keep = new Set(latestCatalogs(s).map((c) => c.id));
@@ -308,6 +322,26 @@ export class Clinic extends DurableObject<Env> {
       }
     }
     return s;
+  }
+  private directory?: PatientDirectory;
+  private patientDirectory() {
+    return (this.directory ||= new PatientDirectory(
+      this.sql,
+      this.env.ENCRYPTION_KEY,
+    ));
+  }
+  private async includePatients(s: State, ids: string[]) {
+    const present = new Set(s.patients.map((p) => p.id));
+    for (const id of new Set(ids.filter(Boolean))) {
+      if (present.has(id)) continue;
+      const row = this.sql
+        .exec<{ value: string }>(
+          "SELECT value FROM entities WHERE section='patients' AND id=?",
+          id,
+        )
+        .toArray()[0];
+      if (row) s.patients.push(await open(row.value, this.env.ENCRYPTION_KEY));
+    }
   }
   private patientRows?: PatientSearchRow[];
   private async auditAccess(
@@ -690,6 +724,9 @@ export class Clinic extends DurableObject<Env> {
             : await seal(c.value, this.env.ENCRYPTION_KEY),
         });
       this.patientRows = undefined;
+      for (const change of op.changes)
+        if (change.section === "patients")
+          this.directory?.update(change.value as State["patients"][number]);
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
           if (isConsentDeletion(c))
@@ -1290,8 +1327,12 @@ export class Clinic extends DurableObject<Env> {
           index: this.intakeIndex,
           getSettings: () => this.secret("intake-settings"),
           saveSettings: (value) => this.setSecret("intake-settings", value),
-          patients: async () =>
-            (await this.state(false, ["patients"])).patients,
+          patients: async () => {
+            const all = new Map(await this.patientDirectory().all());
+            for (const p of (await this.state(false, ["patients"])).patients)
+              all.set(p.id, p);
+            return [...all.values()];
+          },
           audit: (action, target) => this.auditAccess(user.id, action, target),
         }),
       );
@@ -1337,6 +1378,7 @@ export class Clinic extends DurableObject<Env> {
       if (b.action === "commit") {
         const result = await store.commit(b.id);
         this.patientRows = undefined;
+        this.directory?.clear();
         const response = json(result);
         response.headers.set(
           "Set-Cookie",
@@ -1498,13 +1540,16 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/inquiries" && req.method === "GET") {
       ensure(allowed(user, "patient.edit"), "환자정보 권한이 필요합니다", 403);
-      const patients = (await this.state(false, ["patients"])).patients;
+      const patientState = await this.state(false, ["patients"]);
+      const patients = patientState.patients;
       const appointments = [];
       for await (const row of this.entityRows("section='consultations'")) {
         const c = await open<import("../src/core/model").Consultation>(
           row.value,
           this.env.ENCRYPTION_KEY,
         );
+        if (c.intakeSource)
+          await this.includePatients(patientState, [c.patientId]);
         const patient = patients.find((p) => p.id === c.patientId);
         if (
           !c.intakeSource ||
@@ -1812,6 +1857,7 @@ export class Clinic extends DurableObject<Env> {
         ),
       );
       before.catalogs = (await this.catalogState()).catalogs;
+      if (b.patientId) await this.includePatients(before, [b.patientId]);
       const consultationId = "inquiry-" + inquiry.id;
       let consultation = before.consultations.find(
         (c) => c.id === consultationId,
@@ -2286,7 +2332,7 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/patients/search") {
       if (!this.patientRows)
-        this.patientRows = patientIndex(
+        this.patientRows = await this.patientDirectory().index(
           await this.state(false, [
             "patients",
             "consultations",
@@ -2310,10 +2356,50 @@ export class Clinic extends DurableObject<Env> {
             archived: p.get("archived") === "true",
             duplicateOnly: p.get("duplicateOnly") === "true",
             page: Number(p.get("page") || 0),
+            addressStatus: p.get("addressStatus") || "",
           },
           allowed(user, "money.read"),
         ),
       );
+    }
+    if (path === "/api/patients/matches") {
+      const s = await this.state(false, ["patients"]);
+      await this.includePatients(s, [url.searchParams.get("id") || ""]);
+      const patient = s.patients.find(
+        (p) => p.id === url.searchParams.get("id"),
+      );
+      ensure(patient, "환자가 없습니다", 404);
+      const all = new Map(await this.patientDirectory().all());
+      for (const p of s.patients) all.set(p.id, p);
+      const matches = [...all.values()].filter(
+        (p) =>
+          p.id !== patient.id &&
+          !p.archived &&
+          !p.mergedInto &&
+          ((patient.dob &&
+            patient.dob === p.dob &&
+            patient.name.replace(/\s/g, "").toLowerCase() ===
+              p.name.replace(/\s/g, "").toLowerCase()) ||
+            (patient.phone && patient.phone === p.phone)),
+      );
+      const patients = matches
+        .slice(0, 100)
+        .map((p) =>
+          !allowed(user, "money.read") && p.external
+            ? { ...p, external: { ...p.external, totalPaid: null } }
+            : p,
+        );
+      return json({ patients, total: matches.length });
+    }
+    if (path.startsWith("/api/patients/") && req.method === "GET") {
+      const id = decodeURIComponent(path.slice("/api/patients/".length));
+      const s = emptyState();
+      await this.includePatients(s, [id]);
+      ensure(s.patients.length, "환자가 없습니다", 404);
+      const p = s.patients[0];
+      if (!allowed(user, "money.read") && p.external)
+        p.external = { ...p.external, totalPaid: null };
+      return json({ patient: p });
     }
     if (path === "/api/analytics") {
       ensure(allowed(user, "stats.read"), "통계 열람 권한이 필요합니다", 403);
@@ -2329,13 +2415,12 @@ export class Clinic extends DurableObject<Env> {
         "단가표 구분을 확인하세요",
       );
       try {
-        return json(
-          buildAnalytics(
-            await this.state(false),
-            filter,
-            allowed(user, "money.read"),
-          ),
-        );
+        const s = await this.state(false);
+        const report = buildAnalytics(s, filter, allowed(user, "money.read"));
+        const combined = new Map(await this.patientDirectory().all());
+        for (const p of s.patients) combined.set(p.id, p);
+        report.patientDirectory = directoryRegions(combined.values());
+        return json(report);
       } catch (e) {
         throw new DomainError((e as Error).message, 400);
       }
@@ -2386,6 +2471,8 @@ export class Clinic extends DurableObject<Env> {
         undefined,
         new URL(req.url).searchParams.get("view") === "workspace",
       );
+      if (url.searchParams.get("patientId"))
+        await this.includePatients(s, [url.searchParams.get("patientId")!]);
       if (url.searchParams.get("view") === "workspace") {
         const keep = new Set(latestCatalogs(s).map((c) => c.id));
         const versions = new Set(
@@ -2400,6 +2487,11 @@ export class Clinic extends DurableObject<Env> {
       }
       if (!allowed(user, "note.read")) s.notes = [];
       if (!allowed(user, "money.read")) {
+        s.patients = s.patients.map((p) =>
+          p.external
+            ? { ...p, external: { ...p.external, totalPaid: null } }
+            : p,
+        );
         s.ledger = [];
         s.benefitAccounts = [];
         s.vipAccounts = [];
@@ -2559,7 +2651,27 @@ export class Clinic extends DurableObject<Env> {
       await this.flush();
       const before = cmd.type.startsWith("catalog.")
         ? await this.commandCatalogState(cmd)
-        : await this.state(false);
+        : cmd.type === "patient.import"
+          ? await this.state(false, [])
+          : await this.state(false);
+      if (cmd.type === "patient.import") {
+        const ids = Array.isArray(cmd.payload.rows)
+          ? cmd.payload.rows
+              .map((p: any) => p.id)
+              .filter((id: unknown) => typeof id === "string")
+          : [];
+        ensure(ids.length <= 250, "한 번에 250명까지 가져올 수 있습니다");
+        await this.includePatients(before, ids);
+      } else {
+        await this.includePatients(before, [
+          cmd.entityId || "",
+          String(cmd.payload.patientId || ""),
+          String(cmd.payload.referredByPatientId || ""),
+          String(cmd.payload.fromId || ""),
+          String(cmd.payload.toId || ""),
+          String(cmd.payload.targetId || ""),
+        ]);
+      }
       const after = await applyCommand(before, user, cmd);
       if (
         cmd.type === "consultation.finalize" ||
@@ -2770,6 +2882,7 @@ export class Clinic extends DurableObject<Env> {
       );
       this.ctx.storage.transactionSync(() => {
         this.patientRows = undefined;
+        this.directory?.clear();
         this.sql.exec("DELETE FROM entities");
         this.sql.exec("DELETE FROM quote_shares");
         this.sql.exec("DELETE FROM operations");

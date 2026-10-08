@@ -79,6 +79,16 @@ export function visibleChanges(
       (change.value as State["catalogs"][number]).status !== "published"
     )
       return [];
+    if (change.section === "patients" && !allowed(user, "money.read")) {
+      const p = change.value as State["patients"][number];
+      if (p.external)
+        return [
+          {
+            ...change,
+            value: { ...p, external: { ...p.external, totalPaid: null } },
+          },
+        ];
+    }
     if (change.section === "consultations" && !allowed(user, "money.read"))
       return [
         {

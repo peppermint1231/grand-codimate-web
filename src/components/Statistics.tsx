@@ -345,7 +345,9 @@ export function Statistics({
             >
               <option value="">전체 구분</option>
               {catalogBookDisplayOrder.map((b) => (
-                <option key={b} value={b}>{catalogBookLabel(b)}</option>
+                <option key={b} value={b}>
+                  {catalogBookLabel(b)}
+                </option>
               ))}
             </select>
           </label>
@@ -625,7 +627,7 @@ export function Statistics({
                     ["연령대", "ages"],
                     ["성별", "sexes"],
                     ["유입경로", "sources"],
-                    ["지역", "regions"],
+                    ["상담 환자 지역 · 동·읍·면", "regions"],
                     ["재상담 관리 대상", "segments"],
                     ["환자 등급", "grades"],
                   ] as const
@@ -636,6 +638,22 @@ export function Statistics({
                   </div>
                 ))}
               </div>
+              {report.patientDirectory && (
+                <div className="card">
+                  <h3>전체 환자 지역 · 동·읍·면</h3>
+                  <p className="small">
+                    현재 환자목록 {fmt(report.patientDirectory.total)}명 기준 ·
+                    베가스 이관 {fmt(report.patientDirectory.imported)}명 포함.
+                    위 상담기간·담당자 필터와 별도로 집계합니다.
+                  </p>
+                  <p className="small">
+                    주소 확인 필요 {fmt(report.patientDirectory.unresolved)}명 ·
+                    주소 미입력 {fmt(report.patientDirectory.missing)}명.
+                    도로명만으로 동을 추정하지 않습니다.
+                  </p>
+                  <Bars rows={report.patientDirectory.regions} />
+                </div>
+              )}
               <div className="card">
                 <h3>신규 환자 재상담 코호트</h3>
                 <p className="small">

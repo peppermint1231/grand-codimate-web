@@ -1,3 +1,4 @@
+import { regionLabel, type directoryRegions } from "./addressRegion";
 import { activeLedger, calculate } from "./domain";
 import {
   age,
@@ -41,6 +42,7 @@ export type AnalyticsReport = {
   filter: AnalyticsFilter;
   financial: boolean;
   generatedAt: string;
+  patientDirectory?: ReturnType<typeof directoryRegions>;
   totals: Performance;
   employees: Performance[];
   strengths: Strength[];
@@ -468,6 +470,7 @@ export function buildAnalytics(
   const patients: AnalyticsReport["patients"] = {
     registered: patientList.filter(
       (p) =>
+        !p.external &&
         inPeriod(koreanDay(p.createdAt)) &&
         (!filter.ownerId || p.ownerId === filter.ownerId),
     ).length,
@@ -501,14 +504,7 @@ export function buildAnalytics(
         p.sex === "F" ? "여성" : p.sex === "M" ? "남성" : "미입력",
       ),
     ),
-    regions: buckets(
-      consulted.map(
-        (p) =>
-          p.address.match(
-            /^(서울|부산|대구|인천|광주|대전|울산|세종|경기|강원|충북|충청북|충남|충청남|전북|전라북|전남|전라남|경북|경상북|경남|경상남|제주)/,
-          )?.[1] || "기타·미입력",
-      ),
-    ),
+    regions: buckets(consulted.map(regionLabel)),
     sources: buckets(
       consulted.map((p) => p.acquisitionSource?.trim() || "미입력"),
     ),
@@ -644,6 +640,12 @@ export function analyticsPrompt(
         }
       : {
           ...report.patients,
+          patientDirectory: report.patientDirectory
+            ? {
+                ...report.patientDirectory,
+                regions: suppress(report.patientDirectory.regions),
+              }
+            : undefined,
           ages: suppress(report.patients.ages),
           sexes: suppress(report.patients.sexes),
           regions: suppress(report.patients.regions),

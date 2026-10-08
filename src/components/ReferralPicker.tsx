@@ -1,5 +1,7 @@
-import { useState } from "react";
-import type { State } from "../core/model";
+import { useEffect, useState } from "react";
+import { usePatientLookup } from "../hooks/usePatientLookup";
+import { api } from "../lib/api";
+import type { Patient, State } from "../core/model";
 import { currentBenefitGrade, benefitSettings } from "../core/gradeBenefits";
 export function ReferralPicker({
   state,
@@ -20,10 +22,31 @@ export function ReferralPicker({
       ? `${g!.name} 소개 혜택 ${b.referralReward.toLocaleString()}P`
       : "현재 자동 소개 혜택 없음";
   };
-  const selected = state.patients.find((p) => p.id === value);
+  const remote = usePatientLookup(query);
+  const [chosen, setChosen] = useState<Patient>();
+  useEffect(() => {
+    if (value && !state.patients.some((p) => p.id === value)) {
+      let live = true;
+      api("/patients/" + encodeURIComponent(value))
+        .then((r) => {
+          if (live) setChosen(r.patient);
+        })
+        .catch(() => {});
+      return () => {
+        live = false;
+      };
+    }
+  }, [value, state.patients]);
+  const selected =
+    state.patients.find((p) => p.id === value) ||
+    (chosen?.id === value ? chosen : undefined);
   const normalized = query.trim().toLowerCase();
   const rows = normalized
-    ? state.patients
+    ? [
+        ...new Map(
+          [...state.patients, ...remote].map((p) => [p.id, p]),
+        ).values(),
+      ]
         .filter(
           (p) =>
             !p.archived &&
@@ -73,6 +96,7 @@ export function ReferralPicker({
                 className="list-row"
                 key={p.id}
                 onClick={() => {
+                  setChosen(p);
                   onChange(p.id);
                   setQuery("");
                 }}

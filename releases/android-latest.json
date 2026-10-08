@@ -1,7 +1,7 @@
 {
-  "version": "0.18.8",
-  "versionCode": 78,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.8.apk",
-  "sha256": "b85789139226e91b6a1de49dd4480be2f808223fcfcbcfd91bdeaa9b805c862a",
-  "notes": "패키지 블록을 한 줄로 표시하고 회차 안 순서 이동과 금액의 중복 원 표시를 수정했습니다."
+  "version": "0.18.9",
+  "versionCode": 79,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.9.apk",
+  "sha256": "7a362fc7fb4e12303dedc637c77c49f67cf48b7d1031d57a2c7cdde52c69ca8f",
+  "notes": "베가스 환자 가져오기, 대용량 환자 검색, 동·읍·면 지역 통계를 지원합니다."
 }

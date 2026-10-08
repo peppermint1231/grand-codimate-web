@@ -34,7 +34,10 @@ export function marketingSummary(row: PatientSearchRow): MarketingSummary {
     sex: sexLabel(p.sex),
     region: regionLabel(p),
     source: p.acquisitionSource?.trim() || "미입력",
-    first: (p.id.startsWith("vegas-") ? history?.firstVisit || "" : patientRegisteredAt(p)).slice(0, 10),
+    first: (p.id.startsWith("vegas-")
+      ? history?.firstVisit || ""
+      : patientRegisteredAt(p)
+    ).slice(0, 10),
     last: patientLastConsultedAt(p, row.cs).slice(0, 10),
     revenue: row.m.revenue,
     baseline: importedRevenue(p),
@@ -45,17 +48,20 @@ export function marketingSummary(row: PatientSearchRow): MarketingSummary {
     grade: row.g.name,
   };
 }
-const schema = `CREATE TABLE IF NOT EXISTS patient_intake_stats(id TEXT PRIMARY KEY,seen TEXT NOT NULL,kind INTEGER NOT NULL);CREATE INDEX IF NOT EXISTS patient_intake_stats_seen ON patient_intake_stats(seen,id);CREATE TABLE IF NOT EXISTS patient_intake_counts(kind INTEGER PRIMARY KEY,n INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS patient_intake_job(id INTEGER PRIMARY KEY,tag TEXT NOT NULL,cursor INTEGER NOT NULL,total INTEGER NOT NULL,done INTEGER NOT NULL,updated TEXT NOT NULL);CREATE TABLE IF NOT EXISTS patient_marketing_members(id TEXT PRIMARY KEY,identity TEXT NOT NULL,summary TEXT NOT NULL);CREATE INDEX IF NOT EXISTS patient_marketing_identity ON patient_marketing_members(identity,id);CREATE TABLE IF NOT EXISTS patient_marketing_totals(mask INTEGER NOT NULL,dimension TEXT NOT NULL,label TEXT NOT NULL,n INTEGER NOT NULL,revenue INTEGER NOT NULL,PRIMARY KEY(mask,dimension,label));`;
+const schema = `CREATE TABLE IF NOT EXISTS patient_intake_fingerprints(id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL);CREATE TABLE IF NOT EXISTS patient_intake_stats(id TEXT PRIMARY KEY,seen TEXT NOT NULL,kind INTEGER NOT NULL);CREATE INDEX IF NOT EXISTS patient_intake_stats_seen ON patient_intake_stats(seen,id);CREATE TABLE IF NOT EXISTS patient_intake_counts(kind INTEGER PRIMARY KEY,n INTEGER NOT NULL);CREATE TABLE IF NOT EXISTS patient_intake_job(id INTEGER PRIMARY KEY,tag TEXT NOT NULL,cursor INTEGER NOT NULL,total INTEGER NOT NULL,done INTEGER NOT NULL,updated TEXT NOT NULL);CREATE TABLE IF NOT EXISTS patient_marketing_members(id TEXT PRIMARY KEY,identity TEXT NOT NULL,summary TEXT NOT NULL);CREATE INDEX IF NOT EXISTS patient_marketing_identity ON patient_marketing_members(identity,id);CREATE TABLE IF NOT EXISTS patient_marketing_totals(mask INTEGER NOT NULL,dimension TEXT NOT NULL,label TEXT NOT NULL,n INTEGER NOT NULL,revenue INTEGER NOT NULL,PRIMARY KEY(mask,dimension,label));`;
 export class PatientMarketing {
   constructor(private sql: SqlStorage) {
     sql.exec(schema);
+    sql.exec(
+      "UPDATE patient_intake_job SET cursor=0,done=0 WHERE cursor>0 AND NOT EXISTS (SELECT id FROM patient_intake_fingerprints LIMIT 1)",
+    );
   }
   private rows(q: string, ...args: any[]) {
     return this.sql.exec(q, ...args).toArray() as any[];
   }
   reset() {
     this.sql.exec(
-      "DELETE FROM patient_marketing_members;DELETE FROM patient_marketing_totals;DELETE FROM patient_intake_stats;DELETE FROM patient_intake_job;DELETE FROM patient_intake_counts;",
+      "DELETE FROM patient_marketing_members;DELETE FROM patient_marketing_totals;DELETE FROM patient_intake_stats;DELETE FROM patient_intake_job;DELETE FROM patient_intake_counts;DELETE FROM patient_intake_fingerprints;",
     );
   }
   private group(identity: string): MarketingSummary | undefined {

@@ -1395,6 +1395,7 @@ export class Clinic extends DurableObject<Env> {
           this.intakeIndex,
           status.cursor,
           current.eTag,
+          (id, fingerprint, tag) => directory.knownIntake(id, fingerprint, tag),
         );
         return json({
           configured: true,

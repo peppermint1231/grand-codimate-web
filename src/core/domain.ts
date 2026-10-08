@@ -1,3 +1,4 @@
+import { discoverySettingsSchema } from "./discoverySettings";
 import { patientIdentityKey } from "./patientIdentity";
 import { importedRevenue } from "./patientHistory";
 import {
@@ -114,6 +115,7 @@ const discountSchema = z.object({
   value: z.number().min(0).max(1_000_000_000),
 });
 const patientSchema = z.object({
+  intakeKind: z.enum(["beauty", "medical"]).optional(),
   addressRegion: addressRegionSchema.optional(),
   acquisitionSource: z.string().trim().max(80).optional(),
   name: z.string().trim().min(1).max(80),
@@ -1736,6 +1738,27 @@ export async function applyCommand(
         refund: "환불 등록",
         reversal: "금액 기록 정정 취소",
       }[kind];
+      break;
+    }
+    case "discovery.settings": {
+      need("catalog.edit");
+      const value = discoverySettingsSchema.parse(p.settings);
+      const old = s.policies[0];
+      if (old) {
+        ensure(
+          cmd.baseRev === old.rev,
+          "추천기 설정이 변경되었습니다. 다시 확인하세요",
+          409,
+        );
+        old.discovery = value;
+        touch(old);
+      } else
+        s.policies.push({
+          ...base,
+          id: "grades",
+          grades: [],
+          discovery: value,
+        });
       break;
     }
     case "vip.policy": {

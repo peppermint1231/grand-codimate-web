@@ -1,3 +1,11 @@
+import { IntakeStatisticsSync } from "./IntakeStatisticsSync";
+import { InteractiveTrend } from "./AnalyticsCharts";
+import { PatientMarketingPanel } from "./PatientMarketingPanel";
+import {
+  patientCohorts,
+  defaultPatientCohorts,
+  type PatientCohort,
+} from "../core/patientCohorts";
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, Download, RefreshCw, Copy, Sparkles } from "lucide-react";
 import { api, vaultRead, vaultWrite, vaultEnabled } from "../lib/api";
@@ -54,70 +62,6 @@ function Bars({ rows, unit = "명" }: { rows: Bucket[]; unit?: string }) {
         <p className="small">해당 기간에 기록된 자료가 없습니다.</p>
       )}
     </div>
-  );
-}
-function Trend({
-  rows,
-  financial,
-}: {
-  rows: Performance[];
-  financial: boolean;
-}) {
-  const values = rows.map((r) => (financial ? r.net : r.consultations)),
-    max = Math.max(1, ...values.map(Math.abs)),
-    w = 720,
-    h = 160,
-    step = w / Math.max(1, values.length - 1);
-  const points = values
-    .map(
-      (v, i) =>
-        `${values.length === 1 ? w / 2 : i * step},${80 - (v / max) * 70}`,
-    )
-    .join(" ");
-  return (
-    <figure className="analytics-trend">
-      <figcaption>{financial ? "월별 실수납" : "월별 상담 수"} 추이</figcaption>
-      <svg
-        viewBox={`-5 -10 ${w + 10} ${h + 40}`}
-        role="img"
-        aria-label={rows
-          .map((r, i) => `${r.name} ${fmt(values[i])}`)
-          .join(", ")}
-      >
-        <line x1="0" x2={w} y1="80" y2="80" stroke="#d2dfd9" />
-        <polyline
-          points={points}
-          fill="none"
-          stroke="#176b61"
-          strokeWidth="3"
-        />
-        {values.map((v, i) => (
-          <g key={rows[i].id}>
-            <circle
-              cx={values.length === 1 ? w / 2 : i * step}
-              cy={80 - (v / max) * 70}
-              r="4"
-              fill="#176b61"
-            />
-            <title>
-              {rows[i].name}: {fmt(v)}
-            </title>
-            {(rows.length <= 12 || i === 0 || i === rows.length - 1) && (
-              <text
-                x={values.length === 1 ? w / 2 : i * step}
-                y="180"
-                textAnchor={
-                  i === 0 ? "start" : i === rows.length - 1 ? "end" : "middle"
-                }
-                fontSize="12"
-              >
-                {rows[i].name}
-              </text>
-            )}
-          </g>
-        ))}
-      </svg>
-    </figure>
   );
 }
 function PerformanceTable({
@@ -187,6 +131,9 @@ export function Statistics({
   work: (f: () => Promise<any>) => any;
   send: (...args: any[]) => Promise<any>;
 }) {
+  const [cohorts, setCohorts] = useState<PatientCohort[]>(
+    defaultPatientCohorts,
+  );
   const today = koreanDay(new Date().toISOString());
   const [from, setFrom] = useState(today.slice(0, 7) + "-01"),
     [to, setTo] = useState(today),
@@ -232,7 +179,14 @@ export function Statistics({
     setReport(null);
     const timer = setTimeout(() => {
       api<AnalyticsReport>(
-        "/analytics?" + new URLSearchParams({ from, to, ownerId, book }),
+        "/analytics?" +
+          new URLSearchParams({
+            from,
+            to,
+            ownerId,
+            book,
+            ...(purpose === "patient" ? { cohorts: cohorts.join(",") } : {}),
+          }),
         { signal: controller.signal },
       )
         .then(setReport)
@@ -247,7 +201,7 @@ export function Statistics({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [from, to, ownerId, book, refresh]);
+  }, [from, to, ownerId, book, cohorts, purpose, refresh]);
   const incentive = useMemo(
     () => (report ? incentiveRows(report, settings) : []),
     [report, settings],
@@ -301,6 +255,32 @@ export function Statistics({
             </button>
           ))}
         </div>
+        {purpose === "patient" && (
+          <fieldset className="analytics-cohort-filters">
+            <legend>환자군 선택</legend>
+            <div className="button-row">
+              {patientCohorts.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={cohorts.includes(c.id)}
+                  className={cohorts.includes(c.id) ? "primary" : ""}
+                  onClick={() =>
+                    setCohorts((list) =>
+                      list.includes(c.id)
+                        ? list.filter((x) => x !== c.id)
+                        : [...list, c.id],
+                    )
+                  }
+                >
+                  {cohorts.includes(c.id) ? "✓ " : ""}
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <small>여러 환자군을 켜도 같은 환자는 한 번만 집계합니다.</small>
+          </fieldset>
+        )}
         <div className="analytics-filter-fields">
           <label>
             시작일
@@ -369,6 +349,9 @@ export function Statistics({
           </button>
         </div>
       </div>
+      {purpose === "patient" && (
+        <IntakeStatisticsSync onComplete={() => setRefresh((n) => n + 1)} />
+      )}
       {loading && (
         <div role="status" className="card">
           통계를 집계하고 있습니다…
@@ -443,7 +426,19 @@ export function Statistics({
               </div>
               <div className="analytics-grid">
                 <div className="card">
-                  <Trend rows={report.monthly} financial={report.financial} />
+                  <InteractiveTrend
+                    rows={report.monthly}
+                    financial={report.financial}
+                    onPeriod={(month) => {
+                      setFrom(month + "-01");
+                      const last = new Date(
+                        Number(month.slice(0, 4)),
+                        Number(month.slice(5, 7)),
+                        0,
+                      ).getDate();
+                      setTo(month + "-" + last);
+                    }}
+                  />
                 </div>
                 <div className="card">
                   <h3>
@@ -601,6 +596,8 @@ export function Statistics({
             </>
           ) : (
             <>
+              <PatientMarketingPanel report={report} />
+              <h2>코디메이트 · 기간 내 상담 현황</h2>
               <div className="analytics-kpis">
                 {card(
                   "상담 환자",
@@ -613,7 +610,11 @@ export function Statistics({
                   fmt(report.patients.returning) + "명",
                   `재상담 비중 ${pct(report.patients.revisitRate)}`,
                 )}
-                {card("신규 등록", fmt(report.patients.registered) + "명")}
+                {card(
+                  "신규 등록 · 선택 환자군",
+                  fmt(report.patients.registered) + "명",
+                  "설문 제출·이관 최초일 포함",
+                )}
                 {report.financial &&
                   card(
                     "환자당 누적 실수납",

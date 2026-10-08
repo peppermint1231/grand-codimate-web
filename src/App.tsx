@@ -1,3 +1,4 @@
+import { ReadProtectionStatus } from "./components/ReadProtectionStatus";
 import {
   importedHistory,
   importedRevenue,
@@ -1611,6 +1612,8 @@ export function App() {
           {page === "discovery" && (
             <DiscoveryDesk
               state={state}
+              user={user}
+              send={send}
               publicUrl={health.publicUrl || location.origin + "/discover"}
               work={work}
               openConsult={async (patientId, consultationId) => {
@@ -1865,7 +1868,8 @@ function Patients({
           .catch((e) => {
             if (e.name !== "AbortError")
               setListError(
-                "서버 목록을 불러오지 못해 기기에 있는 자료를 표시합니다.",
+                e.message ||
+                  "서버 목록을 불러오지 못해 기기에 있는 자료를 표시합니다.",
               );
           })
           .finally(() => {
@@ -7387,6 +7391,9 @@ function SettingsView({
           send={send}
           work={work}
         />
+      )}
+      {isAdministrator(user) && activeTab === "connection" && (
+        <ReadProtectionStatus />
       )}
       {activeTab === "connection" && (
         <div className="detail-grid">

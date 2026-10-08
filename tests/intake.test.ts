@@ -496,3 +496,100 @@ it("keeps only latest headers, respects trailing tombstones, UTF-8 chunks and re
     readIntakeStream(new Response('{"records":{}}')),
   ).rejects.toThrow("형식");
 });
+
+it("includes unregistered questionnaires in deduplicated analytics with bounded extraction, no patient creation and no clinical fields", async () => {
+  const f = await fixture();
+  f.exists.mockResolvedValue({
+    id: "source-file",
+    name: "records.json",
+    size: 1000,
+    eTag: "version-1",
+  });
+  const base = {
+    createdAt: "2026-09-01T00:00:00Z",
+    gender: "F",
+    dob: "1990-01-01",
+    address: "석사동",
+    consultType: "미용시술 상담 희망",
+    signature: "never-store-signature",
+    rrn: "900101-2123456",
+  };
+  const original = f.state.patients[0];
+  const rows = [
+    {
+      ...base,
+      id: "linked-survey",
+      name: original.name,
+      phone: original.phone,
+    },
+    { ...base, id: "new-beauty", name: "설문미용", phone: "01022223333" },
+    {
+      ...base,
+      id: "duplicate-survey",
+      name: "설문미용",
+      phone: "010-2222-3333",
+    },
+    {
+      ...base,
+      id: "new-medical",
+      name: "설문진료",
+      phone: "01044445555",
+      consultType: "피부질환 진료만 희망",
+    },
+  ].map((data) => ({
+    recordId: data.id,
+    createdAt: data.createdAt,
+    plain: true,
+    data,
+  }));
+  f.payload({ records: rows });
+  await f.configure();
+  const sync = await f.request(f.admin, "/intake/analytics-sync", {});
+  expect(sync.status, await sync.clone().text()).toBe(200);
+  expect(await sync.json()).toMatchObject({ done: 1, cursor: 4, total: 4 });
+  const report = (await (
+    await f.request(f.admin, "/analytics?from=2026-09-01&to=2026-09-30")
+  ).json()) as any;
+  expect(report.audience).toMatchObject({ total: 2, converted: 1 });
+  const all = (await (
+    await f.request(
+      f.admin,
+      "/analytics?from=2026-09-01&to=2026-09-30&cohorts=codimate,vegas,intakeBeauty,intakeMedical",
+    )
+  ).json()) as any;
+  expect(all.audience.total).toBe(3);
+  const onlyIntake = (await (
+    await f.request(
+      f.admin,
+      "/analytics?from=2026-09-01&to=2026-09-30&cohorts=intakeBeauty",
+    )
+  ).json()) as any;
+  expect(onlyIntake.audience.total).toBe(2);
+  expect(onlyIntake.patients.consulted).toBe(1);
+  expect(
+    f.db
+      .prepare("SELECT COUNT(*) AS n FROM entities WHERE section='patients'")
+      .get(),
+  ).toMatchObject({ n: 1 });
+  const summaries = JSON.stringify(
+    f.db.prepare("SELECT summary FROM patient_marketing_members").all(),
+  );
+  expect(summaries).not.toMatch(
+    /never-store-signature|900101-2123456|설문미용|01022223333/,
+  );
+  f.exists.mockResolvedValue({
+    id: "source-file",
+    name: "records.json",
+    size: 1000,
+    eTag: "version-2",
+  });
+  f.payload({ records: rows, deletedKeys: ["new-beauty", "duplicate-survey"] });
+  expect((await f.request(f.admin, "/intake/analytics-sync", {})).status).toBe(
+    200,
+  );
+  const after = (await (
+    await f.request(f.admin, "/analytics?from=2026-09-01&to=2026-09-30")
+  ).json()) as any;
+  expect(after.audience.total).toBe(1);
+  expect(f.writes).not.toHaveBeenCalled();
+});

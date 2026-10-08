@@ -2,7 +2,13 @@ import type { Patient } from "./model";
 
 export type IntakeFields = Pick<
   Patient,
-  "name" | "sex" | "dob" | "phone" | "address" | "acquisitionSource"
+  | "name"
+  | "sex"
+  | "dob"
+  | "phone"
+  | "address"
+  | "acquisitionSource"
+  | "intakeKind"
 >;
 export interface IntakeSearchRow {
   id: string;
@@ -74,6 +80,11 @@ export function intakeFields(record: Record<string, unknown>): IntakeFields {
     ? record.routes.filter((r): r is string => typeof r === "string")
     : [];
   return {
+    ...(text(record.consultType).includes("미용")
+      ? { intakeKind: "beauty" as const }
+      : text(record.consultType) === "피부질환 진료만 희망"
+        ? { intakeKind: "medical" as const }
+        : {}),
     name: text(record.name).slice(0, 80),
     sex,
     dob,

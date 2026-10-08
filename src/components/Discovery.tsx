@@ -1,3 +1,4 @@
+import { discoveryPriceVisible } from "../core/discoverySettings";
 import { AddressSearch } from "./AddressSearch";
 import { BookingPicker } from "./BookingPicker";
 import { formatMobilePhone, formatBirthDate } from "../core/phone";
@@ -408,7 +409,7 @@ export function Discovery() {
                     <Search size={20} />
                     <input
                       aria-label="고민 검색"
-                      placeholder="예: 기미, 주름, 가려움"
+                      placeholder="예: 기미, 주름, 무좀"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                     />
@@ -423,7 +424,7 @@ export function Discovery() {
                   </label>
                 </div>
                 <div className="pd-keywords" aria-label="자주 찾는 고민">
-                  {["기미", "여드름", "모공", "주름", "탈모", "가려움"].map(
+                  {["기미", "여드름", "모공", "주름", "탈모", "무좀"].map(
                     (s) => (
                       <button
                         key={s}
@@ -661,7 +662,7 @@ export function Discovery() {
                                 </p>
                               )}
                               <div className="pd-price">
-                                {p.book !== "이벤트" ? (
+                                {!discoveryPriceVisible(p) ? (
                                   "맞춤 상담 후 안내"
                                 ) : from === null ? (
                                   "맞춤 상담 후 안내"
@@ -674,7 +675,7 @@ export function Discovery() {
                                   </>
                                 )}
                                 <small>
-                                  {p.book === "이벤트"
+                                  {discoveryPriceVisible(p)
                                     ? "구성별 금액과 부가세는 아래에서 확인해주세요."
                                     : "나에게 필요한 시술 구성을 상담으로 확인하세요."}
                                 </small>
@@ -690,7 +691,7 @@ export function Discovery() {
                                   }
                                 >
                                   <summary>
-                                    {p.book === "이벤트"
+                                    {discoveryPriceVisible(p)
                                       ? "구성·가격 보기"
                                       : "시술 구성 보기"}{" "}
                                     <ChevronRight size={18} />
@@ -729,7 +730,7 @@ export function Discovery() {
                                             <small>{o.unit}</small>
                                           </span>
                                           <span className="pd-option-price">
-                                            {p.book !== "이벤트" ? (
+                                            {!discoveryPriceVisible(p) ? (
                                               "맞춤 상담 후 안내"
                                             ) : o.price === null ? (
                                               "맞춤 상담 후 안내"
@@ -739,7 +740,7 @@ export function Discovery() {
                                               money(o.price)
                                             )}
                                             <small>
-                                              {p.book !== "이벤트"
+                                              {!discoveryPriceVisible(p)
                                                 ? ""
                                                 : o.tax === "inclusive"
                                                   ? "부가세 포함"

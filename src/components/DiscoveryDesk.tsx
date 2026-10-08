@@ -1,3 +1,4 @@
+import { DiscoverySettings } from "./DiscoverySettings";
 import { usePatientLookup } from "../hooks/usePatientLookup";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
@@ -71,11 +72,20 @@ const blankPerson = () => ({
 });
 export function DiscoveryDesk({
   state,
+  user,
+  send,
   publicUrl,
   work,
   openConsult,
 }: {
   state: State;
+  user: import("../core/model").User;
+  send: (
+    type: string,
+    payload: Record<string, unknown>,
+    id?: string,
+    rev?: number,
+  ) => Promise<unknown>;
   publicUrl: string;
   work: (fn: () => Promise<unknown>) => unknown;
   openConsult: (patientId: string, consultationId: string) => Promise<void>;
@@ -371,6 +381,14 @@ export function DiscoveryDesk({
         </div>
         <button onClick={() => void run(refresh)}>새로고침</button>
       </div>
+      {allowed(user, "catalog.edit") && (
+        <DiscoverySettings
+          state={state}
+          save={(settings, rev) =>
+            send("discovery.settings", { settings }, state.policies[0]?.id, rev)
+          }
+        />
+      )}
       <details className="card">
         <summary>환자용 추천기 주소 · 태블릿</summary>
         <p>

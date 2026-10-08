@@ -125,6 +125,7 @@ export async function clinicFixture() {
       value.id,
       await seal(value, key),
     );
+    (clinic as any).patientDirectory().track([{section,id:value.id,value}]);
   };
   for (const section of Object.keys(state) as (keyof State)[])
     if (section !== "users")

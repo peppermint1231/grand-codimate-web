@@ -1,7 +1,7 @@
 {
-  "version": "0.18.11",
-  "versionCode": 81,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.11.apk",
-  "sha256": "c837aa0baf50771c7def4c7501496c0ed154ac6b749ee89a696859a1605567c7",
-  "notes": "중복 의심을 이름·전화번호 일치로 통일하고 이관 총수납액·최초일·최근일을 환자 실적과 날짜에 반영합니다."
+  "version": "0.18.12",
+  "versionCode": 82,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.12.apk",
+  "sha256": "4b99260f1dd0b45c1331b1e7537f69a9e8316a8a969f9bbb81e9d3a7db83db2a",
+  "notes": "환자 조회 보호, 설문·이관 환자군 통합 통계와 상호작용 그래프, SSOT별 추천 노출 설정을 추가했습니다."
 }

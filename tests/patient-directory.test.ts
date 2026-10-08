@@ -263,3 +263,25 @@ it("age and sex cross analysis counts a repeated patient once and excludes cance
     }),
   ).toEqual([]);
 });
+
+it("does not execute a page query for zero results and forces selective filter indexes instead of an ordered full scan", async () => {
+  const f = fixture();
+  await f.save("patients", patient("same-a", "같은환자"));
+  await f.save("patients", patient("same-b", "같은환자"));
+  const d = f.dir();
+  while (!d.status().ready) await d.step();
+  f.queries.length = 0;
+  expect((await d.search({ ...filter, grade: "missing" })).rows).toEqual([]);
+  expect(f.queries.some((q) => q.q.startsWith("SELECT d.value"))).toBe(false);
+  f.queries.length = 0;
+  expect((await d.search({ ...filter, duplicateOnly: true })).total).toBe(2);
+  const duplicate = f.queries.find((q) => q.q.startsWith("SELECT d.value"))!.q;
+  expect(duplicate).toContain("INDEXED BY patient_directory_identity_lookup");
+  const plan = f.db.prepare("EXPLAIN QUERY PLAN " + duplicate).all(0, 0);
+  expect(JSON.stringify(plan)).toContain("identity=?");
+  f.queries.length = 0;
+  expect((await d.search({ ...filter, search: "같은" })).total).toBe(2);
+  const phrase = f.queries.find((q) => q.q.startsWith("SELECT d.value"))!.q;
+  expect(phrase).toContain("NOT INDEXED");
+  f.db.close();
+});

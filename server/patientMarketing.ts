@@ -11,6 +11,7 @@ import {
   importedRevenue,
 } from "../src/core/patientHistory";
 import { regionLabel } from "../src/core/addressRegion";
+import { groupSmallPatientRegions } from "./patientRegionGroups";
 import type { PatientSearchRow } from "../src/core/patientSearch";
 export type MarketingSummary = {
   mask: number;
@@ -246,7 +247,7 @@ export class PatientMarketing {
       groups: bucket(groupCounts),
       ages: bucket(ages),
       sexes: bucket(maps.get("sex")),
-      regions: bucket(maps.get("region")),
+      regions: groupSmallPatientRegions(bucket(maps.get("region"))),
       sources: bucket(maps.get("source")),
       visits: bucket(maps.get("visits")),
       segments: bucket(recency),

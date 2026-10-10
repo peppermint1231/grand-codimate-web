@@ -1,3 +1,4 @@
+import { lookupRoad } from "./addressLookup";
 import {
   patientCohorts,
   defaultPatientCohorts,
@@ -490,6 +491,7 @@ export class Clinic extends DurableObject<Env> {
           await this.flush();
           await this.flushAccess();
           await this.runVipDay();
+          this.patientDirectory().scanAddresses(100);
           await this.patientDirectory().step(200);
           const store = await this.inquiryStore();
           await store.purge();
@@ -508,7 +510,8 @@ export class Clinic extends DurableObject<Env> {
               .toArray().length;
           await this.ctx.storage.setAlarm(
             !this.patientDirectory().status().ready ||
-              this.patientDirectory().status().dirty
+              this.patientDirectory().status().dirty ||
+              this.patientDirectory().addresses.pending()
               ? Date.now() + 1000
               : queued
                 ? Date.now() + 60000
@@ -524,6 +527,56 @@ export class Clinic extends DurableObject<Env> {
     );
     this.queue = run.catch(() => undefined);
     await run;
+    // Network address lookup runs outside the write queue so slow providers cannot block login or consultation saves.
+    await this.readProtection.run("address-lookup", "POST", async () => {
+      if (
+        (await this.secret("restore-required")) ||
+        this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+      )
+        return;
+      const key = await this.secret<string>("address-lookup-key");
+      if (!key) return;
+      const addresses = this.patientDirectory().addresses;
+      const jobs = await this.serializeDirectory(async () => {
+        const result = [];
+        for (let i = 0; i < 3; i++) {
+          const job = await addresses.next();
+          if (!job) break;
+          result.push(job);
+        }
+        return result;
+      });
+      const results = await Promise.all(
+        jobs.map(async (job) => ({
+          job,
+          result: await lookupRoad(job.query, key),
+        })),
+      );
+      await this.serializeDirectory(async () => {
+        if (
+          (await this.secret("restore-required")) ||
+          this.sql.exec("SELECT id FROM restore_job LIMIT 1").toArray().length
+        )
+          return;
+        for (const { job, result } of results)
+          addresses.complete(job.id, result, job.attempts);
+        const next = addresses.nextTime();
+        if (
+          addresses.pending() ||
+          this.patientDirectory().status().dirty ||
+          next !== undefined
+        ) {
+          const at =
+            addresses.pending() || this.patientDirectory().status().dirty
+              ? Date.now() + 1000
+              : Math.max(Date.now() + 2000, next!);
+          const existing = await this.ctx.storage.getAlarm?.();
+          await this.ctx.storage.setAlarm(
+            !existing || at < existing ? at : existing,
+          );
+        }
+      });
+    });
   }
   private serializeDirectory<T>(fn: () => Promise<T> | T): Promise<T> {
     const run = this.queue.then(fn);
@@ -2417,6 +2470,39 @@ export class Clinic extends DurableObject<Env> {
       );
       return json({ ok: true });
     }
+    if (path === "/api/address-regions") {
+      admin();
+      const directory = this.patientDirectory();
+      if (req.method === "POST") {
+        const b = await body();
+        if (b.key !== undefined) {
+          ensure(
+            typeof b.key === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(b.key),
+            "카카오 로컬 REST API 키를 확인해주세요",
+          );
+          await this.setSecret("address-lookup-key", b.key);
+        }
+        if (b.remove) await this.setSecret("address-lookup-key", "");
+        if (b.restart || b.key) directory.addresses.restart();
+        await this.auditAccess(
+          user.id,
+          "address.regions.refresh",
+          "",
+          b.key
+            ? "조회 연결 설정"
+            : b.remove
+              ? "조회 연결 해제"
+              : "지역 재점검",
+        );
+        await this.ctx.storage.setAlarm(Date.now() + 1000);
+      } else ensure(req.method === "GET", "지원하지 않는 요청입니다", 405);
+      const status = directory.addresses.status();
+      return json({
+        ...status,
+        configured: !!(await this.secret("address-lookup-key")),
+        directoryReady: directory.status().ready,
+      });
+    }
     if (path === "/api/read-protection") {
       admin();
       return json({
@@ -2483,6 +2569,7 @@ export class Clinic extends DurableObject<Env> {
       const s = emptyState();
       await this.includePatients(s, [id]);
       ensure(s.patients.length, "환자가 없습니다", 404);
+      this.patientDirectory().enrichRegions(s.patients);
       const p = s.patients[0];
       if (!allowed(user, "money.read") && p.external)
         p.external = { ...p.external, totalPaid: null };
@@ -2584,6 +2671,7 @@ export class Clinic extends DurableObject<Env> {
       );
       if (url.searchParams.get("patientId"))
         await this.includePatients(s, [url.searchParams.get("patientId")!]);
+      this.patientDirectory().enrichRegions(s.patients);
       if (url.searchParams.get("view") === "workspace") {
         const keep = new Set(latestCatalogs(s).map((c) => c.id));
         const versions = new Set(

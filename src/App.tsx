@@ -1,3 +1,4 @@
+import { AddressRegionSettings } from "./components/AddressRegionSettings";
 import { ReadProtectionStatus } from "./components/ReadProtectionStatus";
 import {
   importedHistory,
@@ -2475,7 +2476,9 @@ function PatientForm({
               {k === "address" ? (
                 <AddressSearch
                   value={data.address}
-                  onChange={(address) => setData({ ...data, address })}
+                  onChange={(address) =>
+                    setData({ ...data, address })
+                  }
                 />
               ) : (
                 <input
@@ -7393,7 +7396,10 @@ function SettingsView({
         />
       )}
       {isAdministrator(user) && activeTab === "connection" && (
-        <ReadProtectionStatus />
+        <>
+          <AddressRegionSettings />
+          <ReadProtectionStatus />
+        </>
       )}
       {activeTab === "connection" && (
         <div className="detail-grid">

@@ -18,7 +18,8 @@ import {
   patientLastConsultedAt,
   patientRegisteredAt,
 } from "../src/core/patientHistory";
-import { regionLabel } from "../src/core/addressRegion";
+import { regionLabel, regionFromAddress } from "../src/core/addressRegion";
+import { AddressLookup } from "./addressLookup";
 import { groupSmallPatientRegions } from "./patientRegionGroups";
 import { DomainError } from "../src/core/domain";
 type Meta = {
@@ -53,6 +54,7 @@ const norm = (value: string) =>
 const relationSections = ["consultations", "ledger", "vipAccounts"] as const;
 /** Durable encrypted page rows + indexed metadata; never reconstruct an all-patient JS cache. */
 export class PatientDirectory {
+  readonly addresses: AddressLookup;
   private marketing: PatientMarketing;
   private tokenCache = new Map<string, string>();
   constructor(
@@ -62,6 +64,7 @@ export class PatientDirectory {
   ) {
     sql.exec(patientDirectorySchema);
     this.marketing = new PatientMarketing(sql);
+    this.addresses = new AddressLookup(sql, key);
   }
   private rows<T = any>(q: string, ...args: any[]): T[] {
     return this.sql.exec(q, ...args).toArray() as T[];
@@ -194,10 +197,18 @@ export class PatientDirectory {
           "SELECT value FROM entities WHERE section='patients' AND id=?",
           id,
         )[0];
-    const p =
+    const original =
       source ||
       (saved ? await open<Patient>(saved.value, this.key) : undefined);
-    if (!p) return;
+    if (!original) {
+      this.addresses.detach(id);
+      return;
+    }
+    let region = original.addressRegion || regionFromAddress(original.address);
+    if (region || original.archived || original.mergedInto)
+      this.addresses.detach(id);
+    else region = await this.addresses.resolve(id, original.address);
+    const p = region ? { ...original, addressRegion: region } : original;
     const state = emptyState();
     state.patients = [p];
     state.policies = policies;
@@ -220,11 +231,11 @@ export class PatientDirectory {
     const archived = Number(!!p.archived),
       merged = Number(!!p.mergedInto),
       prefix = String(archived) + ":";
-    const region = regionLabel(p),
+    const regionName = regionLabel(p),
       address_status =
-        region === "주소 미입력"
+        regionName === "주소 미입력"
           ? "missing"
-          : region === "주소 확인 필요"
+          : regionName === "주소 확인 필요"
             ? "unresolved"
             : "resolved";
     const facets = new Set([
@@ -240,7 +251,7 @@ export class PatientDirectory {
     ]);
     if (row.m.outstanding > 0) facets.add(prefix + "unpaid");
     if (!archived) {
-      facets.add("region:" + region);
+      facets.add("region:" + regionName);
       if (p.external || p.id.startsWith("vegas-")) facets.add("imported");
       const day = patientRegisteredAt(p).slice(0, 10);
       if (!p.id.startsWith("vegas-") || p.external?.firstVisit) {
@@ -268,7 +279,7 @@ export class PatientDirectory {
       outstanding: row.m.outstanding,
       grade: row.g.id,
       address_status,
-      region,
+      region: regionName,
       imported: Number(!!p.external || p.id.startsWith("vegas-")),
       facets: JSON.stringify(merged ? [] : [...facets]),
       tokens: [p.name, p.phone, p.dob, p.id, p.number || ""]
@@ -463,6 +474,31 @@ export class PatientDirectory {
         503,
       );
     return state;
+  }
+  scanAddresses(limit = 100) {
+    if (!this.status().ready) return;
+    const scan = this.addresses.scan();
+    if (!scan.done) {
+      const rows = this.rows(
+        "SELECT id FROM patient_directory_tags WHERE facet=? AND id>? ORDER BY id LIMIT ?",
+        "0:address:unresolved",
+        scan.cursor,
+        limit,
+      );
+      this.transaction(() => {
+        for (const r of rows)
+          this.sql.exec(
+            "INSERT OR IGNORE INTO patient_directory_dirty VALUES(?)",
+            r.id,
+          );
+        this.addresses.scanned(
+          rows.at(-1)?.id || scan.cursor,
+          rows.length,
+          rows.length < limit,
+        );
+      });
+    }
+    this.transaction(() => this.addresses.applyResolved(limit));
   }
   private total(facet: string) {
     return (
@@ -857,8 +893,15 @@ export class PatientDirectory {
     });
     return this.intakeStatus();
   }
+  enrichRegions(patients: Patient[]) {
+    for (const p of patients)
+      p.addressRegion ||=
+        regionFromAddress(p.address) || this.addresses.cached(p.address);
+  }
   enrichCohorts(patients: Patient[]) {
     for (const p of patients) {
+      p.addressRegion ||=
+        regionFromAddress(p.address) || this.addresses.cached(p.address);
       const key = patientIdentityKey(p);
       p.analyticsCohorts = this.marketing.mask(
         key ? this.hash("identity:" + key) : this.hash("id:" + p.id),

@@ -18,15 +18,30 @@ export interface AddressRegion {
   neighborhood: string;
   basis: "search" | "source-text" | "confirmed-map";
 }
+export function normalizeRegionAddress(address: string) {
+  return address
+    .normalize("NFKC")
+    .replace(/^\s*[[(]?\d{3}-?\d{3}[\])]?(?:\s+|(?=[가-힣]))/, "")
+    .replace(/^\s*[[(]?\d{5}[\])]?(?:\s+|(?=[가-힣]))/, "")
+    .replace(
+      new RegExp(
+        "^(강원특별자치도|강원도|강원)?\\s*춘천(?:시(?=\\s|[가-힣]|$)|(?=\\s|" +
+          [...chuncheonAreas].join("|") +
+          "|$))",
+      ),
+      "강원특별자치도 춘천시 ",
+    )
+    .replace(/(강원특별자치도|강원도|춘천시)(?=[가-힣])/g, "$1 ")
+    .replace(/후평\s+([123])\s*동/g, "후평$1동")
+    .replace(/효자\s+([123])\s*동/g, "효자$1동")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 export function regionFromAddress(
   address: string,
   defaultCity = "춘천시",
 ): AddressRegion | undefined {
-  const text = address
-    .normalize("NFKC")
-    .replace(/(강원특별자치도|강원도|춘천시)(?=[가-힣])/g, "$1 ")
-    .replace(/\s+/g, " ")
-    .trim();
+  const text = normalizeRegionAddress(address);
   if (!text) return;
   const sido =
     text.match(
@@ -52,7 +67,9 @@ export function regionFromAddress(
     const known = [...chuncheonAreas]
       .sort((a, b) => b.length - a.length)
       .find(
-        (n) => local.startsWith(n) && !/^[로길]/.test(local.slice(n.length)),
+        (n) =>
+          local.startsWith(n) &&
+          !/^[로길]/.test(local.slice(n.length)),
       );
     if (known) neighborhood = known;
   }

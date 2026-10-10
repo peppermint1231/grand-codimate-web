@@ -285,3 +285,58 @@ it("does not execute a page query for zero results and forces selective filter i
   expect(phrase).toContain("NOT INDEXED");
   f.db.close();
 });
+
+it("backfills matching road regions in bounded batches without changing source patients, financial totals or an edited address", async () => {
+  const f = fixture();
+  for (let i = 0; i < 3; i++)
+    await f.save("patients", {
+      ...patient("road" + i),
+      address: "중앙로 68 " + i + "호",
+    });
+  const d = f.dir();
+  while (!d.status().ready) await d.step(2);
+  const before = f.db
+    .prepare("SELECT value FROM entities WHERE section='patients' ORDER BY id")
+    .all();
+  const prior = await d.statistics("2026-01-01", "2026-12-31");
+  expect(prior.directory.unresolved).toBe(3);
+  const job = (await d.addresses.next())!;
+  const changed = { ...patient("road2"), address: "후평동", rev: 2 };
+  await f.save("patients", changed);
+  d.track([{ section: "patients", id: changed.id, value: changed }]);
+  await d.step();
+  d.addresses.complete(
+    job.id,
+    {
+      region: {
+        sido: "강원특별자치도",
+        sigungu: "춘천시",
+        neighborhood: "조양동",
+        basis: "confirmed-map",
+      },
+    },
+    0,
+  );
+  for (let i = 0; i < 8; i++) {
+    d.scanAddresses(1);
+    await d.step(1);
+  }
+  const after = await d.statistics("2026-01-01", "2026-12-31");
+  expect(after.directory.unresolved).toBe(0);
+  expect(after.directory.total).toBe(3);
+  const rows = (await d.search(filter)).rows;
+  expect(
+    rows.find((r) => r.p.id === "road2")?.p.addressRegion?.neighborhood,
+  ).toBe("후평동");
+  expect(
+    rows.find((r) => r.p.id === "road0")?.p.addressRegion?.neighborhood,
+  ).toBe("조양동");
+  expect(
+    f.db
+      .prepare(
+        "SELECT value FROM entities WHERE section='patients' AND id IN ('road0','road1') ORDER BY id",
+      )
+      .all(),
+  ).toEqual(before.slice(0, 2));
+  expect(rows.every((r) => r.m.revenue === 0)).toBe(true);
+});

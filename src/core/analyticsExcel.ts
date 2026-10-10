@@ -157,6 +157,14 @@ export async function analyticsWorkbook(
         [
           ["중복 제외 환자", report.audience.total],
           ["코디메이트 전환 포함", report.audience.converted],
+          [
+            "유입경로 응답 환자 · 중복 제외",
+            report.audience.sourceRespondents ?? null,
+          ],
+          [
+            "유입경로 집계 기준",
+            "복수 선택은 각 경로에 1명씩 포함. 경로별 환자·상담·매출은 합산하지 않음.",
+          ],
           ...(report.financial
             ? [
                 ["누적 기여매출", report.audience.revenue] as [
@@ -179,7 +187,11 @@ export async function analyticsWorkbook(
       ] as const)
         sheet(
           name,
-          ["구분", "환자 수", "비교 포함 여부"],
+          [
+            "구분",
+            key === "sources" ? "환자 수 · 복수 선택" : "환자 수",
+            "비교 포함 여부",
+          ],
           report.audience[key].map((r) => [
             r.name,
             r.count,
@@ -256,7 +268,11 @@ export async function analyticsWorkbook(
     ] as const)
       sheet(
         title,
-        ["분류", "환자 수", "비교 포함 여부"],
+        [
+          "분류",
+          key === "sources" ? "환자 수 · 복수 선택" : "환자 수",
+          "비교 포함 여부",
+        ],
         report.patients[key].map((r) => [
           r.name,
           r.count,

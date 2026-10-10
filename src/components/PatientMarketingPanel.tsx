@@ -1,3 +1,4 @@
+import { SourceComparisonSummary } from "./SourceComparisonSummary";
 import {
   comparisonBuckets,
   isMissingComparisonValue,
@@ -13,12 +14,24 @@ import { useMemo, useState } from "react";
 import { money } from "../core/model";
 import type { AnalyticsReport, Bucket } from "../core/analytics";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
-function Bars({ rows: allRows }: { rows: Bucket[] }) {
+function Bars({
+  rows: allRows,
+  source = false,
+  respondents,
+}: {
+  rows: Bucket[];
+  source?: boolean;
+  respondents?: number;
+}) {
   const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const max = Math.max(1, ...rows.map((r) => r.count));
   return (
     <div className="analytics-bars">
-      <ComparisonSummary excluded={excluded} total={total} />
+      {source ? (
+        <SourceComparisonSummary rows={allRows} respondents={respondents} />
+      ) : (
+        <ComparisonSummary excluded={excluded} total={total} />
+      )}
       {rows.slice(0, 15).map((r) => (
         <div className="analytics-bar" key={r.name}>
           <span>{r.name}</span>
@@ -129,7 +142,11 @@ export function PatientMarketingPanel({ report }: { report: AnalyticsReport }) {
                 ) : key === "ages" ? (
                   <AgeChart rows={audience.ages} onSelect={setAge} />
                 ) : (
-                  <Bars rows={audience[key] as Bucket[]} />
+                  <Bars
+                    rows={audience[key] as Bucket[]}
+                    source={key === "sources"}
+                    respondents={audience.sourceRespondents}
+                  />
                 )}
               </div>
             ))}
@@ -144,8 +161,8 @@ export function PatientMarketingPanel({ report }: { report: AnalyticsReport }) {
         <h2>코디메이트 상담 · 연령과 성별로 비교</h2>
         <p className="small">
           선택한 기간에 작성한 상담 기준입니다. 여러 카테고리를 고른 환자는 각
-          카테고리에 한 번씩 포함됩니다. 성공률은 성공 ÷ (성공+실패), 보류는
-          제외합니다.
+          카테고리와 유입경로에 각각 한 번씩 포함됩니다. 성공률은 성공 ÷
+          (성공+실패), 보류는 제외합니다.
         </p>
         <div className="analytics-filter-fields">
           <label>
@@ -249,8 +266,9 @@ export function PatientMarketingPanel({ report }: { report: AnalyticsReport }) {
         </div>
         <p className="small">
           유입경로별 실수납은 조회 종료일까지 해당 상담에 기록된 현금성 수납에서
-          환불을 뺀 금액입니다. 표본이 적은 그룹은 순위·성공률 해석에 주의해
-          주세요.
+          환불을 뺀 금액입니다. 복수 선택한 경로에는 같은 환자·상담·금액이 각각
+          포함되므로 경로별 값을 전체 매출로 합산하지 않습니다. 표본이 적은
+          그룹은 순위·성공률 해석에 주의해 주세요.
         </p>
       </section>
     </>

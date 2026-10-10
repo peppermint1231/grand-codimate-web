@@ -1,4 +1,4 @@
-import { acquisitionSourceLabel } from "./acquisitionSource";
+import { acquisitionSourceSummary } from "./acquisitionSource";
 import { patientIdentityKey } from "./patientIdentity";
 import {
   buildMarketing,
@@ -78,6 +78,7 @@ export type AnalyticsReport = {
     sexes: Bucket[];
     regions: Bucket[];
     sources: Bucket[];
+    sourceRespondents?: number;
     segments: Bucket[];
     grades: Bucket[];
     cohorts: {
@@ -541,6 +542,9 @@ export function buildAnalytics(
           entry[days === 30 ? "returned30" : "returned90"]++;
       }
   }
+  const sourceSummary = acquisitionSourceSummary(
+    buckets(consulted.map((p) => p.acquisitionSource || "미입력")),
+  );
   const patients: AnalyticsReport["patients"] = {
     registered: patientList.filter(
       (p) =>
@@ -581,9 +585,8 @@ export function buildAnalytics(
       ),
     ),
     regions: buckets(consulted.map(regionLabel)),
-    sources: buckets(
-      consulted.map((p) => acquisitionSourceLabel(p.acquisitionSource)),
-    ),
+    sources: sourceSummary.rows,
+    sourceRespondents: sourceSummary.respondents,
     grades: buckets(
       consulted.map((p) =>
         p.gradeOverride
@@ -641,10 +644,10 @@ export function buildAnalytics(
     ),
     methods: [...methods.values()],
     definitions: [
-      "유입경로는 띄어쓰기 차이를 통합합니다. 네이버 검색광고·네이버 플레이스는 네이버 검색, 기존 환자는 재방문으로 집계합니다. 네이버 예약·네이버 블로그는 각각 별도 경로입니다. 원본 입력값은 유지합니다.",
+      "유입경로는 띄어쓰기 차이를 통합합니다. 네이버 검색광고·네이버 플레이스는 네이버 검색, 기존 환자는 재방문으로 집계합니다. 네이버 예약·네이버 블로그·AI챗봇은 유지하며, 없음은 현장 방문, 카카오는 기타로 집계합니다. 복수 선택은 각 경로에 1회씩 포함하고 같은 경로로 합쳐지는 선택지는 중복 제거합니다. 응답 환자 수는 중복 제외, 경로 선택 건수는 복수 선택 포함이며 원본 입력값은 유지합니다.",
       "환자군 전체 분석은 등록 전 초진설문 제출자를 포함한 현재 누적 자료이며 기간·담당자·단가표 필터와 별도로 집계합니다. 같은 이름+연락처는 한 명으로 통합하며 중복된 환자군은 코디메이트상담→베가스이관→미용설문→진료설문 순으로 한 곳에 표시합니다.",
       "베가스 이관 총수납액은 누적 매출에만 반영하며 월별 수납·직원 성과·시술 내역으로 추정하지 않습니다. 최초·최근 방문일만으로 30일/90일 재방문을 추정하지 않습니다.",
-      "전체 환자군 연령은 현재 연도−출생연도 기준, 코디메이트 교차 분석은 조회 종료일 만 나이입니다. 유입경로별 금액은 해당 기간에 작성한 상담의 종료일까지 실수납이며, 선택한 단가표가 포함된 상담 전체 금액입니다. 카테고리별 환자 수는 중복 선택이 가능하므로 합산하지 않습니다.",
+      "전체 환자군 연령은 현재 연도−출생연도 기준, 코디메이트 교차 분석은 조회 종료일 만 나이입니다. 유입경로별 금액은 해당 기간에 작성한 상담의 종료일까지 실수납이며, 선택한 단가표가 포함된 상담 전체 금액입니다. 카테고리별 및 유입경로별 환자 수는 중복 선택을 포함하므로 합산하지 않습니다. 유입경로별 금액도 선택된 각 경로에 포함되어 중복될 수 있으며 전체 매출로 합산하지 않습니다.",
       "VIP 포인트 수납·반환은 실수납·기여매출·직원 매출 및 인센티브에서 제외하고, 미수금에는 결제수단으로 반영합니다.",
       "상담·계약은 상담 작성일(한국시간) 기준이며 취소·중간상담을 제외합니다. 현재 상태를 집계하므로 과거 기간도 이후 결과 변경에 따라 달라질 수 있습니다.",
       "전환율 = 성공 ÷ (성공+실패). 보류를 제외하며, 같은 상담에 여러 분야가 있으면 분야별 상담 수의 합은 전체보다 클 수 있습니다.",

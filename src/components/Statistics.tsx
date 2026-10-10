@@ -1,3 +1,4 @@
+import { SourceComparisonSummary } from "./SourceComparisonSummary";
 import { PatientRegionExplorer } from "./PatientRegionExplorer";
 import { comparisonBuckets } from "../core/analyticsComparison";
 import { ComparisonSummary } from "./ComparisonSummary";
@@ -36,15 +37,23 @@ const fmt = (n: number) => n.toLocaleString("ko-KR"),
 function Bars({
   rows: allRows,
   unit = "명",
+  source = false,
+  respondents,
 }: {
   rows: Bucket[];
   unit?: string;
+  source?: boolean;
+  respondents?: number;
 }) {
   const { included: rows, excluded, total } = comparisonBuckets(allRows);
   const max = Math.max(1, ...rows.map((r) => Math.abs(r.count)));
   return (
     <div className="analytics-bars">
-      <ComparisonSummary excluded={excluded} total={total} unit={unit} />
+      {source ? (
+        <SourceComparisonSummary rows={allRows} respondents={respondents} />
+      ) : (
+        <ComparisonSummary excluded={excluded} total={total} unit={unit} />
+      )}
       {rows.length ? (
         rows.map((r, i) => (
           <div className="analytics-bar" key={r.name}>
@@ -646,7 +655,11 @@ export function Statistics({
                 ).map(([title, key]) => (
                   <div className="card" key={key}>
                     <h3>{title}</h3>
-                    <Bars rows={report.patients[key]} />
+                    <Bars
+                      rows={report.patients[key]}
+                      source={key === "sources"}
+                      respondents={report.patients.sourceRespondents}
+                    />
                   </div>
                 ))}
               </div>

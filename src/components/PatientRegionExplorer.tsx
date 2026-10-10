@@ -73,7 +73,7 @@ export function PatientRegionExplorer({
     () => comparisonBuckets(mergeRegionCounts(rawRows)).included,
     [rawRows],
   );
-  const mapped = rows.filter((r) => regionParts(r.name));
+  const mapped = useMemo(() => rows.filter((r) => regionParts(r.name)), [rows]);
   const known = mapped.reduce((n, r) => n + r.count, 0);
   const cities = useMemo(() => regionBreakdown(rows, "city"), [rows]);
   const local = useMemo(

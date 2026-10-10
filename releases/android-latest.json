@@ -1,7 +1,7 @@
 {
-  "version": "0.18.17",
-  "versionCode": 87,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.17.apk",
-  "sha256": "531360385599400d89fa82b7ab1865f6950b3aa4b135a094b72fed044e7080e2",
-  "notes": "지역 통계를 법정동으로 통합하고 시군구·춘천 동별 도넛과 전국 확대 지도를 추가했습니다."
+  "version": "0.18.18",
+  "versionCode": 88,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.18.apk",
+  "sha256": "e07daeb07f3adfe160e428012a2afecdf1a52630829f6140e7c355448b653646",
+  "notes": "유입경로 복수 선택을 각 경로로 집계하고, 없음·카카오 분류 및 응답 환자/선택 건수 안내를 개선했습니다."
 }

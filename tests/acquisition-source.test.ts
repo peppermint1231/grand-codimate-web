@@ -1,7 +1,11 @@
 import { expect, it } from "vitest";
 import ExcelJS from "exceljs";
 import { DatabaseSync } from "node:sqlite";
-import { acquisitionSourceLabel } from "../src/core/acquisitionSource";
+import {
+  acquisitionSourceLabel,
+  acquisitionSourceLabels,
+  acquisitionSourceSummary,
+} from "../src/core/acquisitionSource";
 import { PatientMarketing } from "../server/patientMarketing";
 import { buildAnalytics } from "../src/core/analytics";
 import { analyticsWorkbook } from "../src/core/analyticsExcel";
@@ -157,4 +161,143 @@ it("uses one grouping for consultation statistics, demographic conversions and e
     "네이버 검색",
   );
   expect(JSON.stringify(s.patients)).toBe(before);
+});
+
+it("counts every selected channel once per respondent, maps none/Kakao, and preserves respondent and revenue totals", () => {
+  const summary = acquisitionSourceSummary([
+    { name: "기타 · 네이버 검색", count: 1 },
+    { name: "네이버 검색광고,네이버 플레이스,네이버 예약", count: 1 },
+    { name: "네이버 블로그 · 지인 소개", count: 1 },
+    { name: "네이버 예약 · 지인 소개", count: 1 },
+    { name: "없음", count: 2 },
+    { name: "카카오", count: 2 },
+    { name: "AI챗봇(Chatgpt등)", count: 2 },
+    { name: "미입력", count: 20 },
+  ]);
+  expect(summary.respondents).toBe(10);
+  const counts = Object.fromEntries(summary.rows.map((r) => [r.name, r.count]));
+  expect(counts).toEqual({
+    기타: 3,
+    "네이버 검색": 2,
+    "네이버 예약": 2,
+    "네이버 블로그": 1,
+    "지인 소개": 2,
+    "현장 방문": 2,
+    "AI챗봇(Chatgpt등)": 2,
+    미입력: 20,
+  });
+  expect(acquisitionSourceLabels("카카오,기타")).toEqual(["기타"]);
+  expect(acquisitionSourceLabels("미입력,네이버 예약")).toEqual([
+    "네이버 예약",
+  ]);
+  const db = new DatabaseSync(":memory:");
+  const sql = {
+    exec(q: string, ...args: any[]) {
+      if (q.includes(";")) {
+        db.exec(q);
+        return { toArray: () => [] };
+      }
+      return { toArray: () => db.prepare(q).all(...args) };
+    },
+  };
+  const m = new PatientMarketing(sql as any);
+  db.prepare(
+    "INSERT INTO patient_marketing_totals VALUES(2,'all','',3,6000)",
+  ).run();
+  db.prepare(
+    "INSERT INTO patient_marketing_totals VALUES(2,'source','네이버 플레이스,네이버 검색광고,기타',2,0)",
+  ).run();
+  db.prepare(
+    "INSERT INTO patient_marketing_totals VALUES(2,'source','미입력',1,0)",
+  ).run();
+  const before = JSON.stringify(
+    db.prepare("SELECT * FROM patient_marketing_totals").all(),
+  );
+  expect(m.report(["vegas"], true)).toMatchObject({
+    total: 3,
+    revenue: 6000,
+    sourceRespondents: 2,
+    sources: expect.arrayContaining([
+      { name: "네이버 검색", count: 2 },
+      { name: "기타", count: 2 },
+      { name: "미입력", count: 1 },
+    ]),
+  });
+  expect(
+    JSON.stringify(db.prepare("SELECT * FROM patient_marketing_totals").all()),
+  ).toBe(before);
+  db.close();
+});
+
+it("splits consultation and demographic channels while keeping overall money and unique patient totals unchanged", async () => {
+  const s = emptyState();
+  const base = {
+    rev: 1,
+    createdAt: "2026-10-01T00:00:00Z",
+    updatedAt: "2026-10-01T00:00:00Z",
+  };
+  s.patients = ["네이버 검색광고,네이버 플레이스,네이버 예약", "카카오"].map(
+    (acquisitionSource, i) => ({
+      ...base,
+      id: "multi" + i,
+      name: "집계시험" + i,
+      phone: "0101111111" + i,
+      dob: "1990-01-01",
+      sex: "F",
+      address: "석사동",
+      ownerId: "staff",
+      acquisitionSource,
+    }),
+  );
+  s.consultations = s.patients.map((p, i) => ({
+    ...base,
+    id: "mc" + i,
+    patientId: p.id,
+    patient: p,
+    ownerId: "staff",
+    kind: "first",
+    category: "미용",
+    status: "P",
+    catalogVersion: "",
+    quote: { ...emptyQuote(), total: 100 },
+    photos: [],
+    memo: "",
+    appointment: "",
+    attendance: "미정",
+  })) as any;
+  const f = { from: "2026-10-01", to: "2026-10-31" };
+  const before = buildAnalytics(s, f);
+  s.patients[0].acquisitionSource = "네이버 검색";
+  const single = buildAnalytics(s, f);
+  expect(before.totals).toEqual(single.totals);
+  expect(before.patients.consulted).toBe(2);
+  expect(before.patients.sourceRespondents).toBe(2);
+  expect(before.patients.sources).toHaveLength(3);
+  const names = before.marketing.filter((r) => r.dimension === "source");
+  expect(names.map((r) => r.name).sort()).toEqual(
+    ["기타", "네이버 검색", "네이버 예약"].sort(),
+  );
+  for (const row of names)
+    expect(row).toMatchObject({
+      patients: 1,
+      consultations: 1,
+      contract: 100,
+      conversion: 100,
+    });
+  const blob = await analyticsWorkbook(before, "patient", {
+    basis: "net",
+    defaultRate: 3,
+    floorZero: true,
+    rates: {},
+  });
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(await blob.arrayBuffer());
+  expect(wb.getWorksheet("유입경로")!.getCell("B3").value).toBe(
+    "환자 수 · 복수 선택",
+  );
+  const labels: string[] = [];
+  wb.getWorksheet("유입경로")!.eachRow((row, i) => {
+    if (i > 3) labels.push(String(row.getCell(1).value));
+  });
+  expect(labels.sort()).toEqual(["기타", "네이버 검색", "네이버 예약"].sort());
 });

@@ -1,4 +1,7 @@
-import { acquisitionSourceLabel } from "../src/core/acquisitionSource";
+import {
+  acquisitionSourceLabel,
+  acquisitionSourceSummary,
+} from "../src/core/acquisitionSource";
 import {
   cohortSelectionMask,
   patientCohorts,
@@ -242,6 +245,7 @@ export class PatientMarketing {
                 : "최근 30일 방문";
       recency.set(band, (recency.get(band) || 0) + n);
     }
+    const sourceSummary = acquisitionSourceSummary(bucket(maps.get("source")));
     return {
       total,
       converted,
@@ -251,7 +255,8 @@ export class PatientMarketing {
       ages: bucket(ages),
       sexes: bucket(maps.get("sex")),
       regions: groupSmallPatientRegions(bucket(maps.get("region"))),
-      sources: bucket(maps.get("source")),
+      sources: sourceSummary.rows,
+      sourceRespondents: sourceSummary.respondents,
       visits: bucket(maps.get("visits")),
       segments: bucket(recency),
       spend: financial ? bucket(maps.get("spend")) : [],

@@ -1,4 +1,4 @@
-import { acquisitionSourceLabel } from "./acquisitionSource";
+import { acquisitionSourceLabels } from "./acquisitionSource";
 import { activeLedger } from "./domain";
 import {
   ageBand,
@@ -21,6 +21,7 @@ export type PatientAudience = {
   sexes: Bucket[];
   regions: Bucket[];
   sources: Bucket[];
+  sourceRespondents?: number;
   visits: Bucket[];
   segments: Bucket[];
   spend: Bucket[];
@@ -124,7 +125,7 @@ export function buildMarketing(
       sex = sexLabel(person.p.sex);
     for (const [dimension, names] of [
       ["category", [...categories]],
-      ["source", [acquisitionSourceLabel(person.p.acquisitionSource)]],
+      ["source", acquisitionSourceLabels(person.p.acquisitionSource)],
     ] as const) {
       for (const name of names) {
         const key = JSON.stringify([a, sex, dimension, name]);

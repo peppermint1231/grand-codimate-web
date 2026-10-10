@@ -1,7 +1,7 @@
 {
-  "version": "0.18.14",
-  "versionCode": 84,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.14.apk",
-  "sha256": "c2fdfeb18545173dfbc18b053187389803d954a27d0e21f73e176ab362d310ba",
-  "notes": "도로명 주소 자동 연결 설정, 춘천 동·읍·면 주소 표기 보완과 기존 주소 백그라운드 점검을 추가했습니다."
+  "version": "0.18.15",
+  "versionCode": 85,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.15.apk",
+  "sha256": "d3a3215100e80a2bcdd751381c70c827f871d0121eda3a9a8f99c0bac764941b",
+  "notes": "번길 도로명의 띄어쓰기 자동 보정과 주소 조회 상태 안내를 개선했습니다."
 }

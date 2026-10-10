@@ -2475,6 +2475,22 @@ export class Clinic extends DurableObject<Env> {
       const directory = this.patientDirectory();
       if (req.method === "POST") {
         const b = await body();
+        if (b.recheckPatientIds !== undefined) {
+          ensure(
+            Array.isArray(b.recheckPatientIds) &&
+              b.recheckPatientIds.length <= 200 &&
+              b.recheckPatientIds.every(
+                (id: unknown) =>
+                  typeof id === "string" && id.length > 0 && id.length <= 200,
+              ),
+            "주소 재점검은 한 번에 200명까지 가능합니다",
+          );
+          for (const id of new Set(b.recheckPatientIds as string[]))
+            this.sql.exec(
+              "INSERT OR IGNORE INTO patient_directory_dirty SELECT id FROM patient_directory WHERE id=?",
+              id,
+            );
+        }
         if (b.key !== undefined) {
           ensure(
             typeof b.key === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(b.key),

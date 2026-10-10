@@ -13,9 +13,14 @@ export type RoadQuery = {
   sub: string;
 };
 export function roadQuery(address: string): RoadQuery | undefined {
-  const text = normalizeRegionAddress(address);
+  // Numbered side streets are often entered with spaces, e.g. 후석로 369 번길.
+  // Join only a road + numbered 길 suffix, never a building or apartment number.
+  const text = normalizeRegionAddress(address).replace(
+    /([가-힣0-9·.]+(?:로|길))\s*(\d+)\s*(번길|길)(?=\s|\d|$)/g,
+    "$1$2$3",
+  );
   const match = text.match(
-    /(?:^|\s)([가-힣0-9·.]+(?:로|길)(?:\d+(?:번길|길))?)\s*(\d+)(?:\s*-\s*(\d+))?(?=\s|[(),]|$)/,
+    /(?:^|\s)([가-힣0-9·.]+(?:로|길)(?:\d+(?:번길|길))?)\s*(\d+)(?:\s*-\s*(\d+))?(?=\s|[(),]|\.\d+동|$)/,
   );
   if (!match || Number(match[2]) < 1) return;
   let prefix = text.slice(0, match.index).trim();

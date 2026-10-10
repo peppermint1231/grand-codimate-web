@@ -728,6 +728,7 @@ export function analyticsPrompt(
             ? {
                 ...report.patientDirectory,
                 regions: suppress(report.patientDirectory.regions),
+                regionDetails: undefined,
               }
             : undefined,
           ages: suppress(report.patients.ages),

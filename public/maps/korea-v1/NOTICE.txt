@@ -1,0 +1,11 @@
+대한민국 법정동 경계 지도 · 통계 시각화용
+원본: 국가공간정보포털(V-World) 행정구역 경계, 2023-07-29 배포.
+GeoJSON 가공: KnellBalm/kr-admin-geojson (출처 표시 조건 자유 이용)
+https://github.com/KnellBalm/kr-admin-geojson
+코디메이트 가공: WGS84를 화면 좌표로 투영, 표시용 경계 단순화, 시도/시군구별 분할.
+전라북도 명칭 및 코드 접두어를 전북특별자치도(52)로 표기. 원본 경계는 2023 기준.
+통계는 환자 수이며 지역 인구 대비 비율이 아닙니다. 법정동 경계로 매칭되지 않는 주소는 지도에서 임의 배정하지 않습니다.
+Source SHA256:
+ctprvn c90ca4db1c97435da3946b4fce738efe65a9cf32936e9685cda2152cdb2cc62b
+sig 76b2c60ded464e7adeaab36e69b9032ed868845374d53d98186ac22483195b8e
+emd ca8d03b0df83e5d90f78b83090ef0ef03143c1be339cce9c448260005ac1e004

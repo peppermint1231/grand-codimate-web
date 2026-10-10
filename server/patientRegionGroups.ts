@@ -1,3 +1,4 @@
+import { mergeRegionCounts } from "../src/core/regionStatistics";
 type RegionCount = { name: string; count: number };
 const gangwon = new Set(
   "원주시 강릉시 동해시 태백시 속초시 삼척시 홍천군 횡성군 영월군 평창군 정선군 철원군 화천군 양구군 인제군 고성군 양양군".split(
@@ -13,7 +14,7 @@ const gyeonggi = new Set(
 /** Display grouping only: retain detailed stored regions for later filtering. */
 export function groupSmallPatientRegions(rows: RegionCount[]): RegionCount[] {
   const counts = new Map<string, number>();
-  for (const row of rows)
+  for (const row of mergeRegionCounts(rows))
     counts.set(row.name, (counts.get(row.name) || 0) + row.count);
   const grouped = new Map<string, number>();
   for (const [name, count] of counts) {

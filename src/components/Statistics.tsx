@@ -1,3 +1,4 @@
+import { PatientRegionExplorer } from "./PatientRegionExplorer";
 import { comparisonBuckets } from "../core/analyticsComparison";
 import { ComparisonSummary } from "./ComparisonSummary";
 import { IntakeStatisticsSync } from "./IntakeStatisticsSync";
@@ -667,7 +668,17 @@ export function Statistics({
                     명 · 주소 미입력 {fmt(report.patientDirectory.missing)}명).
                     주소가 불완전해도 환자 등록은 유지합니다.
                   </p>
-                  <Bars rows={report.patientDirectory.regions} />
+                  <PatientRegionExplorer
+                    rows={
+                      report.patientDirectory.regionDetails ||
+                      report.patientDirectory.regions
+                    }
+                    total={report.patientDirectory.total}
+                  />
+                  <details>
+                    <summary>동·읍·면 전체 목록 · 100명 미만 지역 묶음</summary>
+                    <Bars rows={report.patientDirectory.regions} />
+                  </details>
                 </div>
               )}
               <div className="card">

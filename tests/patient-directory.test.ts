@@ -340,3 +340,34 @@ it("backfills matching road regions in bounded batches without changing source p
   ).toEqual(before.slice(0, 2));
   expect(rows.every((r) => r.m.revenue === 0)).toBe(true);
 });
+
+it("normalizes historical region facets on read without rebuilding or reading patient records", async () => {
+  const f = fixture(),
+    d = f.dir();
+  while (!d.status().ready) await d.step();
+  f.db.exec(
+    "INSERT INTO patient_directory_totals VALUES('0:all',300,0),('region:강원도 춘천시 후평1동',120,0),('region:강원특별자치도 춘천시 후평동',100,0),('region:주소 미입력',80,0)",
+  );
+  const before = f.db.prepare("SELECT * FROM patient_directory_totals").all();
+  f.queries.length = 0;
+  const r = await d.statistics("2026-01-01", "2026-12-31");
+  expect(r.directory.total).toBe(300);
+  expect(r.directory.regionDetails).toContainEqual({
+    name: "강원특별자치도 춘천시 후평동",
+    count: 220,
+  });
+  expect(r.directory.regions).toContainEqual({
+    name: "강원특별자치도 춘천시 후평동",
+    count: 220,
+  });
+  expect(r.directory.missing).toBe(80);
+  expect(
+    f.queries.some((q) =>
+      /FROM entities|FROM patient_directory WHERE/.test(q.q),
+    ),
+  ).toBe(false);
+  expect(f.db.prepare("SELECT * FROM patient_directory_totals").all()).toEqual(
+    before,
+  );
+  f.db.close();
+});

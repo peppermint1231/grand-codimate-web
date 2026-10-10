@@ -80,6 +80,37 @@ it("accepts exact building matches only and leaves conflicting or truncated resu
     matchRoadRegion(q, { documents: [doc()], meta: { total_count: 2 } }),
   ).toBeUndefined();
 });
+it("normalizes spaced numbered side streets without confusing the street number with the building or floor", () => {
+  const canonical = roadQuery("춘천시 후석로369번길 40");
+  for (const address of [
+    "춘천시 후석로 369번길 40 2층",
+    "춘천시 후석로 369 번길 40 201호",
+    "후석로369 번길40 2층",
+  ]) {
+    expect(roadQuery(address)?.query).toBe(canonical?.query);
+    expect(roadQuery(address)).toMatchObject({
+      road: "후석로369번길",
+      main: "40",
+      sub: "0",
+    });
+  }
+  expect(roadQuery("후석로 369번길")).toBeUndefined();
+  expect(roadQuery("동면 후석로 326 번길")).toBeUndefined();
+  expect(roadQuery("동면 후석로 326 번길 31.302동1105호")).toMatchObject({
+    road: "후석로326번길",
+    main: "31",
+  });
+  expect(roadQuery("후석로 369 2층")).toMatchObject({
+    road: "후석로",
+    main: "369",
+  });
+  expect(roadQuery("후석로 369번길 40-2 3층")).toMatchObject({
+    road: "후석로369번길",
+    main: "40",
+    sub: "2",
+  });
+  expect(roadQuery("중앙로 68 4층")?.main).toBe("68");
+});
 it("encrypts shared lookup queries, drains fan-out in bounded steps and reuses results after restart without a repeat queue", async () => {
   const db = new DatabaseSync(":memory:");
   db.exec("CREATE TABLE patient_directory_dirty(id TEXT PRIMARY KEY)");
@@ -145,6 +176,13 @@ it("only lets administrators configure the encrypted key and never returns it in
   const { clinicFixture } = await import("./fixtures/clinic");
   const f = await clinicFixture();
   try {
+    expect(
+      (
+        await f.request(f.admin, "/address-regions", {
+          recheckPatientIds: Array(201).fill("example"),
+        })
+      ).status,
+    ).toBe(400);
     expect((await f.request(f.staff, "/address-regions")).status).toBe(403);
     expect(
       (await f.request(f.staff, "/address-regions", { key: "a".repeat(32) }))

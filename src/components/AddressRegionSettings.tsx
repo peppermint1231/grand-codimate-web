@@ -53,18 +53,30 @@ export function AddressRegionSettings() {
               ? "도로명 자동 조회 연결됨"
               : "도로명 자동 조회 연결 필요"}{" "}
             ·{" "}
-            {data.scan.done
-              ? "기존 주소 점검 완료"
-              : `기존 주소 점검 중 · ${data.scan.processed.toLocaleString()}명`}
+            {!data.scan.done
+              ? `기존 주소 점검 중 · ${data.scan.processed.toLocaleString()}명`
+              : !data.configured
+                ? "주소 목록 점검 완료 · 조회 키 연결 필요"
+                : data.error
+                  ? "자동 조회 중단 · 연결 설정 확인 필요"
+                  : data.counts.pending || data.counts.applying
+                    ? "주소 목록 점검 완료 · 조회·통계 반영 진행 중"
+                    : "자동 처리 종료 · 미연결 주소는 확인 필요"}
           </p>
           <p className="small">
-            도로명 주소 기준: 연결{" "}
-            {(data.counts.resolved || 0) + (data.counts.applying || 0)}개 · 대기{" "}
-            {data.counts.pending || 0}개 · 확인 필요{" "}
+            도로명 주소 기준: 연결 {data.counts.resolved || 0}개 · 조회 대기{" "}
+            {data.counts.pending || 0}개 · 통계 반영 중{" "}
+            {data.counts.applying || 0}개 · 조회 결과 미연결{" "}
             {(data.counts.unresolved || 0) +
               (data.counts.failed || 0) +
               (data.counts.blocked || 0)}
             개
+          </p>
+          <p className="small">
+            위 수치는 도로명 조회 대상으로 인식한 주소 기준입니다. 자동 처리
+            종료가 모든 환자의 지역 연결 완료를 뜻하지는 않습니다. 주소 누락,
+            건물번호 누락 또는 조회 결과가 불명확한 주소는 ‘주소 확인 필요’로
+            남습니다.
           </p>
         </>
       )}

@@ -1,3 +1,4 @@
+import { acquisitionSourceLabel } from "./acquisitionSource";
 import { activeLedger } from "./domain";
 import {
   ageBand,
@@ -123,7 +124,7 @@ export function buildMarketing(
       sex = sexLabel(person.p.sex);
     for (const [dimension, names] of [
       ["category", [...categories]],
-      ["source", [person.p.acquisitionSource?.trim() || "미입력"]],
+      ["source", [acquisitionSourceLabel(person.p.acquisitionSource)]],
     ] as const) {
       for (const name of names) {
         const key = JSON.stringify([a, sex, dimension, name]);

@@ -1,3 +1,4 @@
+import { acquisitionSourceLabel } from "./acquisitionSource";
 import { patientIdentityKey } from "./patientIdentity";
 import {
   buildMarketing,
@@ -581,7 +582,7 @@ export function buildAnalytics(
     ),
     regions: buckets(consulted.map(regionLabel)),
     sources: buckets(
-      consulted.map((p) => p.acquisitionSource?.trim() || "미입력"),
+      consulted.map((p) => acquisitionSourceLabel(p.acquisitionSource)),
     ),
     grades: buckets(
       consulted.map((p) =>
@@ -640,6 +641,7 @@ export function buildAnalytics(
     ),
     methods: [...methods.values()],
     definitions: [
+      "유입경로는 띄어쓰기 차이를 통합합니다. 네이버 검색광고·네이버 플레이스는 네이버 검색, 기존 환자는 재방문으로 집계합니다. 네이버 예약·네이버 블로그는 각각 별도 경로입니다. 원본 입력값은 유지합니다.",
       "환자군 전체 분석은 등록 전 초진설문 제출자를 포함한 현재 누적 자료이며 기간·담당자·단가표 필터와 별도로 집계합니다. 같은 이름+연락처는 한 명으로 통합하며 중복된 환자군은 코디메이트상담→베가스이관→미용설문→진료설문 순으로 한 곳에 표시합니다.",
       "베가스 이관 총수납액은 누적 매출에만 반영하며 월별 수납·직원 성과·시술 내역으로 추정하지 않습니다. 최초·최근 방문일만으로 30일/90일 재방문을 추정하지 않습니다.",
       "전체 환자군 연령은 현재 연도−출생연도 기준, 코디메이트 교차 분석은 조회 종료일 만 나이입니다. 유입경로별 금액은 해당 기간에 작성한 상담의 종료일까지 실수납이며, 선택한 단가표가 포함된 상담 전체 금액입니다. 카테고리별 환자 수는 중복 선택이 가능하므로 합산하지 않습니다.",

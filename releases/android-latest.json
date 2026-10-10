@@ -1,7 +1,7 @@
 {
-  "version": "0.18.15",
-  "versionCode": 85,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.15.apk",
-  "sha256": "d3a3215100e80a2bcdd751381c70c827f871d0121eda3a9a8f99c0bac764941b",
-  "notes": "번길 도로명의 띄어쓰기 자동 보정과 주소 조회 상태 안내를 개선했습니다."
+  "version": "0.18.16",
+  "versionCode": 86,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.16.apk",
+  "sha256": "00d05fb111676e9f517aee3e668e76af5d321a591ede44b2a52a8ca18276a707",
+  "notes": "유입경로 띄어쓰기와 네이버 검색·재방문 분류를 통계 및 엑셀에서 통합했습니다."
 }

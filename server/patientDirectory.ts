@@ -1,3 +1,4 @@
+import { mergeRegionCounts } from "../src/core/regionStatistics";
 import {
   PatientMarketing,
   marketingSummary,
@@ -944,6 +945,7 @@ export class PatientDirectory {
         imported: this.total("imported").n,
         missing,
         unresolved,
+        regionDetails: mergeRegionCounts(regions),
         regions: groupSmallPatientRegions([
           ...regions.filter(
             (r) => !["주소 미입력", "주소 확인 필요"].includes(r.name),

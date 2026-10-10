@@ -1,3 +1,4 @@
+import { regionBreakdown } from "./regionStatistics";
 import { isMissingComparisonValue } from "./analyticsComparison";
 import { catalogBookLabel } from "./model";
 import ExcelJS from "exceljs";
@@ -272,6 +273,27 @@ export async function analyticsWorkbook(
           isMissingComparisonValue(r.name) ? "제외 · 인원 참고" : "포함",
         ]),
       );
+    if (report.patientDirectory?.regionDetails) {
+      const rows = report.patientDirectory.regionDetails;
+      for (const [title, level] of [
+        ["전체 지역 시군구", "city"],
+        ["전체 지역 권역", "catchment"],
+      ] as const)
+        sheet(
+          title,
+          ["지역", "환자 수"],
+          regionBreakdown(rows, level).map((r) => [r.name, r.count]),
+        );
+      sheet(
+        "전체 지역 법정동 상세",
+        ["법정동", "환자 수", "비교 포함 여부"],
+        rows.map((r) => [
+          r.name,
+          r.count,
+          isMissingComparisonValue(r.name) ? "제외 · 인원 참고" : "포함",
+        ]),
+      );
+    }
     sheet(
       "재상담 코호트",
       [

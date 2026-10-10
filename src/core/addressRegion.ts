@@ -1,3 +1,8 @@
+import {
+  canonicalRegionLabel,
+  mergeRegionCounts,
+  type RegionCount,
+} from "./regionStatistics";
 // Chuncheon city maps and city digital archive place-name index:
 // https://www.chuncheon.go.kr/cityhall/about-chuncheon/introduction/administrative-map/eup-myeon-dong/
 // https://cc-archives.or.kr/kr/locations/view.php?idx=321
@@ -67,9 +72,7 @@ export function regionFromAddress(
     const known = [...chuncheonAreas]
       .sort((a, b) => b.length - a.length)
       .find(
-        (n) =>
-          local.startsWith(n) &&
-          !/^[로길]/.test(local.slice(n.length)),
+        (n) => local.startsWith(n) && !/^[로길]/.test(local.slice(n.length)),
       );
     if (known) neighborhood = known;
   }
@@ -103,7 +106,9 @@ export function regionLabel(patient: {
 }) {
   const r = patient.addressRegion || regionFromAddress(patient.address);
   return r
-    ? [r.sido, r.sigungu, r.neighborhood].filter(Boolean).join(" ")
+    ? canonicalRegionLabel(
+        [r.sido, r.sigungu, r.neighborhood].filter(Boolean).join(" "),
+      )
     : patient.address.trim()
       ? "주소 확인 필요"
       : "주소 미입력";
@@ -131,6 +136,9 @@ export function directoryRegions(
   return {
     total,
     imported,
+    regionDetails: mergeRegionCounts(
+      [...counts].map(([name, count]) => ({ name, count })),
+    ) as RegionCount[] | undefined,
     regions: [
       ...[...counts].filter(
         ([name]) => name !== "주소 확인 필요" && name !== "주소 미입력",

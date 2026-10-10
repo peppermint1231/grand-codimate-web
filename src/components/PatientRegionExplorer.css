@@ -1,0 +1,258 @@
+.patient-region-explorer {
+  min-width: 0;
+}
+.region-explainer {
+  padding: 12px 16px;
+  background: #f1f6f3;
+  border-radius: 12px;
+  font-size: 13px;
+  color: #416458;
+  line-height: 1.7;
+}
+.region-donuts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.region-donuts section {
+  border: 1px solid #dfebe5;
+  border-radius: 16px;
+  padding: 16px;
+  min-width: 0;
+}
+.region-donuts h4,
+.region-heading h4,
+.region-map-details h4 {
+  margin: 0 0 8px;
+}
+.region-donuts .insight-donut {
+  grid-template-columns: minmax(0, 1fr);
+}
+.region-donuts .insight-donut svg {
+  max-width: 200px;
+  margin: auto;
+}
+.region-donuts .insight-donut figcaption button {
+  padding: 5px 3px;
+  font-size: 12px;
+}
+.region-donuts .insight-donut figcaption button span {
+  overflow-wrap: anywhere;
+}
+.region-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.region-heading p {
+  margin: 0;
+}
+.region-selection {
+  border: 1px solid #8eafa3;
+  border-radius: 14px;
+  padding: 16px;
+  margin: 18px 0;
+  background: #fafcfb;
+  animation: insight-appear 0.25s ease-out;
+}
+.region-breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 16px 0;
+}
+.region-breadcrumb button {
+  padding: 7px 11px;
+  font-size: 13px;
+}
+.region-breadcrumb [aria-current] {
+  background: #175e55;
+  color: white;
+}
+.region-map-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr);
+  gap: 24px;
+}
+.region-map-panel {
+  position: relative;
+  background: #f6f9fb;
+  border-radius: 18px;
+  border: 1px solid #dfe8e7;
+  padding: 12px;
+  min-width: 0;
+}
+.region-map {
+  width: 100%;
+  height: 490px;
+  display: block;
+  animation: insight-appear 0.3s ease-out;
+}
+.region-map path {
+  cursor: pointer;
+  transition:
+    fill 0.2s,
+    stroke 0.2s;
+}
+.region-map path:focus-visible {
+  stroke: #d48018;
+  outline: none;
+  stroke-width: 3px;
+}
+.region-map-tools {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.region-map-tools button {
+  min-width: 36px;
+  padding: 6px;
+}
+.region-map-hover {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 650;
+  min-height: 26px;
+  margin: 5px 0;
+}
+.region-map-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.region-map-legend i {
+  width: 130px;
+  height: 9px;
+  background: linear-gradient(
+    90deg,
+    #eef1f3,
+    hsl(170 46% 70%),
+    hsl(170 46% 23%)
+  );
+  border-radius: 8px;
+}
+.region-map-legend small {
+  flex-basis: 100%;
+  text-align: center;
+}
+.region-map-source {
+  font-size: 11px !important;
+  margin: 12px 2px 0;
+}
+.region-detail-bars {
+  display: grid;
+  gap: 5px;
+  max-height: 480px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 3px;
+  scrollbar-gutter: stable;
+}
+.region-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  text-align: left;
+  background: white;
+  border: 1px solid transparent;
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-width: 0;
+}
+.region-bar:hover:not(:disabled) {
+  border-color: #b8d2c7;
+  background: #f1f7f3;
+}
+.region-bar:disabled {
+  opacity: 1;
+  color: inherit;
+  cursor: default;
+}
+.region-bar span {
+  overflow-wrap: anywhere;
+}
+.region-bar strong {
+  white-space: nowrap;
+  font-size: 13px;
+}
+.region-bar small {
+  font-size: 11px;
+  color: #647a74;
+}
+.region-bar > i {
+  grid-column: 1/-1;
+  background: #e9f0ec;
+  height: 7px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.region-bar > i > i {
+  display: block;
+  height: 100%;
+  background: #246f61;
+  border-radius: 5px;
+  transition: width 0.35s ease-out;
+}
+.region-map-details {
+  min-width: 0;
+}
+.region-map-details summary {
+  cursor: pointer;
+  margin: 12px 0;
+  font-size: 13px;
+  color: #966629;
+}
+@media (max-width: 1100px) {
+  .region-donuts {
+    gap: 8px;
+  }
+  .region-donuts section {
+    padding: 10px;
+  }
+  .region-map-layout {
+    grid-template-columns: minmax(0, 1.3fr) minmax(220px, 1fr);
+    gap: 12px;
+  }
+}
+@media (max-width: 720px) {
+  .region-donuts {
+    grid-template-columns: 1fr;
+  }
+  .region-donuts .insight-donut {
+    grid-template-columns: minmax(100px, 0.8fr) minmax(0, 1.2fr);
+  }
+  .region-map-layout {
+    grid-template-columns: 1fr;
+  }
+  .region-map {
+    height: 390px;
+  }
+  .region-detail-bars {
+    max-height: 320px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .patient-region-explorer * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.region-donuts .insight-donut figcaption small {
+  display: block;
+}
+@media (max-width: 450px) {
+  .region-donuts .insight-donut {
+    grid-template-columns: 1fr;
+  }
+  .region-donuts .insight-donut svg {
+    max-width: 160px;
+  }
+}

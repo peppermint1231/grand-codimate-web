@@ -22,9 +22,11 @@ export function DonutChart({
   rows: allRows,
   label,
   onSelect,
+  formatLabel = (name: string) => name,
 }: {
   rows: Bucket[];
   label: string;
+  formatLabel?: (name: string) => string;
   onSelect?: (name: string) => void;
 }) {
   const { included: rows, excluded, total } = comparisonBuckets(allRows);
@@ -110,7 +112,7 @@ export function DonutChart({
             aria-pressed={focus === r.name}
           >
             <i style={{ background: colors[i % colors.length] }} />
-            <span>{r.name}</span>
+            <span title={r.name}>{formatLabel(r.name)}</span>
             <strong>{n(r.count)}</strong>
             <small>{((100 * r.count) / (total || 1)).toFixed(1)}%</small>
           </button>

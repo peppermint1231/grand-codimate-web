@@ -1,3 +1,4 @@
+import { acquisitionSourceLabel } from "../src/core/acquisitionSource";
 import {
   cohortSelectionMask,
   patientCohorts,
@@ -197,7 +198,9 @@ export class PatientMarketing {
         }
         if (!maps.has(r.dimension)) maps.set(r.dimension, new Map());
         const m = maps.get(r.dimension)!;
-        m.set(r.label, (m.get(r.label) || 0) + r.n);
+        const label =
+          r.dimension === "source" ? acquisitionSourceLabel(r.label) : r.label;
+        m.set(label, (m.get(label) || 0) + r.n);
       }
     }
     const bucket = (m: Map<string, number> | undefined) =>

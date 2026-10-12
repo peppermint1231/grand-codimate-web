@@ -1,3 +1,4 @@
+import { guideLearning } from "./guideLearning";
 import { lookupRoad } from "./addressLookup";
 import {
   patientCohorts,
@@ -1411,6 +1412,16 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true, receipt: ticket.id });
     }
     const user = await this.user(req);
+    if (path === "/api/guide-progress")
+      return json(
+        await guideLearning(req, user.id, {
+          get: <T>(key: string) => this.secret<T>(key),
+          put: (key, value) => this.setSecret(key, value),
+          remove: (key) => {
+            this.sql.exec("DELETE FROM secrets WHERE id=?", key);
+          },
+        }),
+      );
     await this.settleStorageRename();
     const admin = () =>
       ensure(isAdministrator(user), "관리자만 가능합니다", 403);

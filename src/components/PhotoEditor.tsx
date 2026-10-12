@@ -1,3 +1,4 @@
+import { trainingMode } from "../training/environment";
 import { StylusSettings, useStylusButton } from "./StylusSettings";
 import { stylusErasing } from "../core/stylus";
 import { native, NativeClinic } from "../lib/native";
@@ -576,6 +577,8 @@ export function PhotoEditor({
     setTemporaryEraser(false);
   }, [photo.id]);
   const commit = (next: Photo) => {
+    if (trainingMode && next.annotations.length > photo.annotations.length)
+      window.dispatchEvent(new CustomEvent("practice:annotation"));
     if (readonly) return;
     setUndo((x) => [...x.slice(-49), photo]);
     setRedo([]);
@@ -1803,7 +1806,11 @@ export function SignaturePad({
         }}
         onPointerUp={() => {
           down.current = false;
-          if (ink.current) onChange(ref.current!.toDataURL("image/png"));
+          if (ink.current) {
+            onChange(ref.current!.toDataURL("image/png"));
+            if (trainingMode)
+              window.dispatchEvent(new CustomEvent("practice:annotation"));
+          }
         }}
       />
       <button

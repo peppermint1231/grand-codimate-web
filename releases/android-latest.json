@@ -1,7 +1,7 @@
 {
-  "version": "0.18.19",
-  "versionCode": 89,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.19.apk",
-  "sha256": "e6f4dc0897e6f49a34183aee13473205610d9d3a6b5cb301974bd24f13363135",
-  "notes": "실무자·관리자 사용법 30개 과정, 목차·검색·학습 진도·새 안내 및 수정 표시를 추가하고 일시적인 연결 오류의 자동 재연결을 보완했습니다."
+  "version": "0.18.20",
+  "versionCode": 90,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.20.apk",
+  "sha256": "a3dd76a9bb5769dbeacfff25bc159bcc099383ebfe96c044edf06bbb89fff89b",
+  "notes": "사용법을 가상 자료로 실제 화면에서 연습하는 30개 과정으로 개편했습니다. 입력·저장 결과를 자동 확인하며 학습 진도와 신규·수정 안내 확인을 계정에 저장해 PC·태블릿에서 이어갑니다. 운영 환자·수납 자료는 변경되지 않습니다."
 }

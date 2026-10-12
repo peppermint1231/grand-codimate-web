@@ -1,7 +1,9 @@
 import { AddressRegionSettings } from "./components/AddressRegionSettings";
 import { ReadProtectionStatus } from "./components/ReadProtectionStatus";
 import { restoreConnection } from "./lib/restoreConnection";
-import { UserGuide, useGuideProgress } from "./components/UserGuide";
+import { UserGuide } from "./components/UserGuide";
+import { useGuideProgress } from "./lib/guideProgress";
+import { trainingMode, trainingRuntime } from "./training/environment";
 import { guideLessons, guideStatus } from "./core/userGuide";
 import {
   importedHistory,
@@ -319,6 +321,31 @@ export function App() {
     [modal, setModal] = useState(""),
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
+  useEffect(() => {
+    if (!trainingMode) return;
+    const move = (e: Event) => {
+      const r = (e as CustomEvent).detail;
+      setPage(r.page);
+      setPatientId(r.patientId || "");
+      setConsultId(r.consultId || "");
+      setTab(r.tab || "photo");
+      setModal("");
+    };
+    window.addEventListener("practice:route", move);
+    return () => window.removeEventListener("practice:route", move);
+  }, []);
+  useEffect(() => {
+    if (trainingMode)
+      window.dispatchEvent(
+        new CustomEvent("practice:location", {
+          detail: { page, patientId, consultId, tab },
+        }),
+      );
+  }, [page, patientId, consultId, tab]);
+  useEffect(() => {
+    if (trainingMode && user)
+      window.dispatchEvent(new CustomEvent("practice:ready"));
+  }, [user?.id]);
   const [opinionFocus, setOpinionFocus] = useState("");
   const guideLearning = useGuideProgress(user?.id || "");
   const guideUnread = guideLessons.filter(
@@ -400,6 +427,7 @@ export function App() {
   );
   useEffect(() => {
     let active = true;
+    if (trainingMode) return;
     loadGuestPhotos()
       .then((photos) => {
         if (active) setGuestPhotos(photos);
@@ -429,7 +457,7 @@ export function App() {
     ).catch(() => {});
   }, [user?.id, page, patientId, consultId]);
   useEffect(() => {
-    if (page !== "consult" || native) return;
+    if (page !== "consult" || native || trainingMode) return;
     if (!window.history.state?.codimateConsult)
       window.history.pushState({ codimateConsult: true }, "");
     const pop = () => {
@@ -617,9 +645,11 @@ export function App() {
         }
       } else await refresh(c.type.startsWith("opinion."));
       setNotice(
-        health.mode === "local-development"
-          ? "개발 서버에 저장했습니다."
-          : "OneDrive에 저장했습니다.",
+        trainingMode
+          ? "연습 자료에 반영했습니다."
+          : health.mode === "local-development"
+            ? "개발 서버에 저장했습니다."
+            : "OneDrive에 저장했습니다.",
       );
       return true;
     } catch (e: any) {
@@ -1464,11 +1494,13 @@ export function App() {
               <Cloud size={16} />
               {pending.length
                 ? `기기 저장 · ${pending.length}건 ${syncingNow ? "전송 중" : "대기"}`
-                : health.mode === "local-development"
-                  ? "개발 서버"
-                  : health.driveConnected
-                    ? "OneDrive 연결됨"
-                    : "OneDrive 연결 필요"}
+                : trainingMode
+                  ? "가상 자료 연습"
+                  : health.mode === "local-development"
+                    ? "개발 서버"
+                    : health.driveConnected
+                      ? "OneDrive 연결됨"
+                      : "OneDrive 연결 필요"}
             </span>
             {pending.length > 0 && <button onClick={sync}>재시도</button>}
             <button aria-label="의견 요청 알림" onClick={() => openOpinion()}>
@@ -3329,7 +3361,9 @@ function ConsultationView({
   );
   const quoteTheme =
     quoteTemplates.find((t) => t.id === quoteThemeId) || quoteTemplates[0];
-  const [draft, setDraft] = useState(c),
+  const [draft, setDraft] = useState(() =>
+      trainingMode ? trainingRuntime().draft?.(c.id) || c : c,
+    ),
     [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
     [productLimit, setProductLimit] = useState(70),
@@ -3342,6 +3376,12 @@ function ConsultationView({
     [consentQueue, setConsentQueue] = useState<string[]>([]),
     [checks, setChecks] = useState<string[]>([]),
     [signer, setSigner] = useState(c.patient.name);
+  useEffect(() => {
+    if (trainingMode)
+      window.dispatchEvent(
+        new CustomEvent("practice:draft", { detail: draft }),
+      );
+  }, [draft]);
   useEffect(() => {
     setDraft((d) => (d.rev === c.rev ? { ...d, updatedAt: c.updatedAt } : d));
   }, [c.updatedAt, c.rev]);

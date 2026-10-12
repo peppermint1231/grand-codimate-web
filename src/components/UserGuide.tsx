@@ -1,3 +1,6 @@
+import { GuidePractice } from "./GuidePractice";
+import type { GuideLearning } from "../lib/guideProgress";
+import { practiceRecipe } from "../core/guideTraining";
 import { useEffect, useRef, useState } from "react";
 import {
   BookOpen,
@@ -21,8 +24,6 @@ import {
   guideUpdates,
   guideStatus,
   filterGuide,
-  readGuideProgress,
-  type GuideProgress,
   type GuideLesson,
   type GuideTrack,
   type GuideTarget,
@@ -30,44 +31,6 @@ import {
 import { productTypeLabels } from "../core/productType";
 import "./UserGuide.css";
 
-export function useGuideProgress(userId: string) {
-  const key = "codimate-guide:" + userId;
-  const [progress, setProgress] = useState<GuideProgress>(() =>
-    readGuideProgress(localStorage, key),
-  );
-  const [storageError, setStorageError] = useState(false);
-  const owner = useRef(key);
-  useEffect(() => {
-    if (owner.current !== key) {
-      owner.current = key;
-      setProgress(readGuideProgress(localStorage, key));
-      setStorageError(false);
-    }
-  }, [key]);
-  const update = (next: GuideProgress) => {
-    setProgress(next);
-    try {
-      localStorage.setItem(key, JSON.stringify(next));
-      setStorageError(false);
-    } catch {
-      setStorageError(true);
-    }
-  };
-  useEffect(() => {
-    const sync = (e: StorageEvent) => {
-      if (e.key === key) setProgress(readGuideProgress(localStorage, key));
-    };
-    window.addEventListener("storage", sync);
-    return () => window.removeEventListener("storage", sync);
-  }, [key]);
-  return { progress: updateOwner(), update, storageError };
-  function updateOwner() {
-    return owner.current === key
-      ? progress
-      : readGuideProgress(localStorage, key);
-  }
-}
-export type GuideLearning = ReturnType<typeof useGuideProgress>;
 function mayOpen(lesson: GuideLesson, user: User) {
   if (lesson.requires === "admin") return isAdministrator(user);
   if (lesson.requires === "executive") return canUseExecutiveFeatures(user);
@@ -86,7 +49,8 @@ export function UserGuide({
   learning: GuideLearning;
   onOpen: (target: GuideTarget, title: string) => void;
 }) {
-  const { progress, update, storageError } = learning;
+  const { progress, loading, error } = learning;
+  const [practice, setPractice] = useState(false);
   const initial =
     guideLessons.find((l) => l.id === progress.selected) || guideLessons[0];
   const [track, setTrack] = useState<GuideTrack>(initial.track),
@@ -114,42 +78,27 @@ export function UserGuide({
     setAnswer(null);
     setQuizMessage("");
     setTocOpen(false);
-    update({ ...progress, selected: id });
+    void learning.change("select", id).catch(() => {});
     requestAnimationFrame(() => {
       heading.current?.focus();
       heading.current?.scrollIntoView({ block: "start", behavior: "auto" });
     });
   };
-  const save = (patch: Partial<GuideProgress["lessons"][string]>) =>
-    update({
-      ...progress,
-      selected: lesson.id,
-      lessons: {
-        ...progress.lessons,
-        [lesson.id]: { ...progress.lessons[lesson.id], ...patch },
-      },
-    });
-  const mark = (step: string, checked: boolean) =>
-    save({
-      revision: status.revision,
-      steps: checked
-        ? [...new Set([...status.steps, step])]
-        : status.steps.filter((id) => id !== step),
-      completed: false,
-    });
-  const finish = () => {
-    if (answer !== lesson.quiz.correct) {
-      setQuizMessage("한 번 더 생각해 보세요. " + lesson.quiz.explanation);
-      return;
+  useEffect(() => {
+    if (progress.selected && !loading) {
+      const item = guideLessons.find((l) => l.id === progress.selected);
+      if (item) {
+        setSelected(item.id);
+        setTrack(item.track);
+      }
     }
-    save({
-      revision: status.revision,
-      steps: lesson.steps.map((s) => s.id),
-      completed: true,
-      acknowledged: status.revision,
-    });
-    setQuizMessage("학습을 완료했습니다. " + lesson.quiz.explanation);
-  };
+  }, [loading]);
+  const finish = () =>
+    setQuizMessage(
+      answer === lesson.quiz.correct
+        ? "정답입니다. " + lesson.quiz.explanation
+        : "한 번 더 생각해 보세요. " + lesson.quiz.explanation,
+    );
   return (
     <section className="user-guide" aria-label="코디메이트 사용법">
       <header className="guide-hero">
@@ -169,7 +118,10 @@ export function UserGuide({
           <strong>
             {unread ? `${unread}개 안내 확인하기` : "새 안내를 모두 확인했어요"}
           </strong>
-          <small>학습 기록은 계정별로 이 기기에 저장됩니다.</small>
+          <small>
+            학습 진도와 새 안내 확인은 계정에 저장되어 다른 기기에서도
+            이어집니다.
+          </small>
         </div>
       </header>
       <div className="guide-track-tabs" role="group" aria-label="사용법 과정">
@@ -235,11 +187,15 @@ export function UserGuide({
           {count} / {all.length} 과정 완료
         </span>
       </div>
-      {storageError && (
-        <p role="status">
-          이 기기에 학습 진도를 저장하지 못했습니다. 사용법은 계속 볼 수
-          있습니다.
-        </p>
+      {error && <p role="alert">{error}</p>}
+      {loading && <p role="status">계정의 학습 진도를 불러오고 있습니다.</p>}
+      {practice && (
+        <GuidePractice
+          key={lesson.id}
+          lessonId={lesson.id}
+          learning={learning}
+          onClose={() => setPractice(false)}
+        />
       )}
       <div className="guide-layout">
         <nav
@@ -323,7 +279,11 @@ export function UserGuide({
               <p>{lesson.changeNote}</p>
             </div>
             {status.unread && (
-              <button onClick={() => save({ acknowledged: status.revision })}>
+              <button
+                onClick={() =>
+                  void learning.change("ack", lesson.id).catch(() => {})
+                }
+              >
                 이번 안내 확인
               </button>
             )}
@@ -338,7 +298,7 @@ export function UserGuide({
               onClick={() => onOpen(lesson.target, lesson.title)}
             >
               <ArrowUpRight size={17} />
-              실제 화면 열기
+              업무 화면으로 이동
             </button>
           </div>
           {!mayOpen(lesson, user) && (
@@ -347,10 +307,31 @@ export function UserGuide({
               필요합니다.
             </p>
           )}
-          <p className="guide-practice-note">
-            아래 체크와 복습 문제는 학습용입니다. 실제 환자·금액·설정을 바꾸지
-            않습니다.
-          </p>
+          <div className="guide-practice-launch">
+            <strong>실제 화면에서 가상 자료로 직접 연습해요</strong>
+            <p>
+              강조된 버튼과 입력칸을 조작하면 결과를 확인해 자동으로 진도를
+              기록합니다. 운영 환자나 금액은 바뀌지 않습니다.
+            </p>
+            <button
+              className="primary"
+              disabled={loading || !practiceRecipe(lesson.id)}
+              onClick={() => setPractice(true)}
+            >
+              {status.completed
+                ? "다시 연습하기"
+                : status.steps.length
+                  ? "연습 이어가기"
+                  : "연습 시작"}
+            </button>
+            {status.steps.length > 0 && (
+              <small>
+                {" "}
+                {status.steps.length} /{" "}
+                {practiceRecipe(lesson.id)?.steps.length} 단계 완료
+              </small>
+            )}
+          </div>
           {lesson.id === "product" && (
             <div className="guide-live-facts">
               <strong>현재 상품 타입</strong>
@@ -369,73 +350,65 @@ export function UserGuide({
               </small>
             </div>
           )}
-          <ol className="guide-steps">
-            {lesson.steps.map((step, i) => (
-              <li
-                key={step.id}
-                className={status.steps.includes(step.id) ? "checked" : ""}
-              >
-                <span className="guide-step-number">
-                  {status.steps.includes(step.id) ? <Check size={18} /> : i + 1}
-                </span>
-                <div>
-                  <h3>{step.title}</h3>
-                  <p>{step.instruction}</p>
-                  <div className="guide-expected">
-                    <strong>이렇게 되면 다음으로</strong>
-                    <span>{step.result}</span>
-                  </div>
-                  <label className="guide-step-check">
-                    <input
-                      type="checkbox"
-                      checked={status.steps.includes(step.id)}
-                      onChange={(e) => mark(step.id, e.target.checked)}
-                    />
-                    이 단계를 확인했어요
-                  </label>
-                </div>
-              </li>
-            ))}
-          </ol>
-          <section className="guide-quiz" aria-label="복습 문제">
-            <span className="guide-eyebrow">잠깐, 내 것으로 만들기</span>
-            <h3>{lesson.quiz.question}</h3>
-            <div role="group" aria-label="복습 답변">
-              {lesson.quiz.answers.map((text, i) => (
-                <button
-                  key={text}
-                  aria-pressed={answer === i}
-                  onClick={() => {
-                    setAnswer(i);
-                    setQuizMessage("");
-                  }}
+          <details className="guide-reference">
+            <summary>설명·확인 결과·복습 문제 찾아보기</summary>
+            <ol className="guide-steps">
+              {lesson.steps.map((step, i) => (
+                <li
+                  key={step.id}
+                  className={status.steps.includes(step.id) ? "checked" : ""}
                 >
-                  <span>{i + 1}</span>
-                  {text}
-                </button>
+                  <span className="guide-step-number">
+                    {status.steps.includes(step.id) ? (
+                      <Check size={18} />
+                    ) : (
+                      i + 1
+                    )}
+                  </span>
+                  <div>
+                    <h3>{step.title}</h3>
+                    <p>{step.instruction}</p>
+                    <div className="guide-expected">
+                      <strong>이렇게 되면 다음으로</strong>
+                      <span>{step.result}</span>
+                    </div>
+                  </div>
+                </li>
               ))}
-            </div>
-            <button
-              className="primary"
-              disabled={
-                answer === null || status.steps.length < lesson.steps.length
-              }
-              onClick={finish}
-            >
-              {status.completed ? "다시 확인하기" : "확인하고 학습 완료"}
-            </button>
-            {status.steps.length < lesson.steps.length && (
-              <p className="small">
-                위 단계를 모두 확인한 뒤 완료할 수 있습니다.
-              </p>
-            )}
-            {quizMessage && <p role="status">{quizMessage}</p>}
-            {status.completed && (
-              <p className="guide-completed">
-                <Check size={18} /> 이 버전의 학습을 완료했습니다.
-              </p>
-            )}
-          </section>
+            </ol>
+            <section className="guide-quiz" aria-label="복습 문제">
+              <span className="guide-eyebrow">잠깐, 내 것으로 만들기</span>
+              <h3>{lesson.quiz.question}</h3>
+              <div role="group" aria-label="복습 답변">
+                {lesson.quiz.answers.map((text, i) => (
+                  <button
+                    key={text}
+                    aria-pressed={answer === i}
+                    onClick={() => {
+                      setAnswer(i);
+                      setQuizMessage("");
+                    }}
+                  >
+                    <span>{i + 1}</span>
+                    {text}
+                  </button>
+                ))}
+              </div>
+              <button
+                className="primary"
+                disabled={answer === null}
+                onClick={finish}
+              >
+                정답 확인
+              </button>
+              {quizMessage && <p role="status">{quizMessage}</p>}
+              {status.completed && (
+                <p className="guide-completed">
+                  <Check size={18} /> 이 버전의 학습을 완료했습니다.
+                </p>
+              )}
+            </section>
+          </details>
           <footer className="guide-next">
             <button
               disabled={index <= 0}

@@ -1,3 +1,4 @@
+import { trainingMode, trainingRuntime } from "../training/environment";
 import {
   currentProgress,
   reportTransfer,
@@ -63,6 +64,7 @@ export async function api<T = any>(
     upload?: (p: TransferProgress) => void;
   } = {},
 ): Promise<T> {
+  if (trainingMode) return trainingRuntime().api(path, init);
   const operation =
     tracking.operation === undefined ? currentProgress() : tracking.operation;
   const request: RequestInit = {
@@ -361,6 +363,7 @@ function remember(id: string, blob: Blob) {
   }
 }
 export async function mediaUrl(id: string) {
+  if (trainingMode) return URL.createObjectURL(trainingRuntime().media(id));
   const local = stagedMedia.get(id)?.file || blobs.get(id);
   if (local) return URL.createObjectURL(local);
   let pending = loading.get(id);
@@ -555,6 +558,7 @@ const db = () =>
 let key: CryptoKey | undefined,
   userId = "";
 export async function unlockVault(id: string, password: string) {
+  if (trainingMode) throw Error("연습 자료는 계정 학습 진도로만 저장됩니다.");
   if (password.length < 12)
     throw new Error("기기 보관 암호는 12자 이상이어야 합니다.");
   const d = await db();

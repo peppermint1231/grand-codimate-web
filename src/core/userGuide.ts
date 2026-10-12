@@ -32,6 +32,7 @@ export type GuideEntry = {
   completed?: boolean;
 };
 export type GuideProgress = {
+  version?: number;
   lessons: Record<string, GuideEntry>;
   selected?: string;
 };

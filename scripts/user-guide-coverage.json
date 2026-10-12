@@ -4,7 +4,20 @@
       "src/components/DisplaySettings.tsx",
       "src/components/PullToRefresh.tsx",
       "src/components/UserGuide.tsx",
-      "src/App.tsx#App"
+      "src/App.tsx#App",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts",
+      "src/core/userGuide.ts",
+      "src/components/UserGuide.css",
+      "src/main.tsx"
     ],
     "commands": []
   },
@@ -13,7 +26,17 @@
       "src/App.tsx#Patients",
       "src/App.tsx#PatientDetail",
       "src/core/patientHistory.ts",
-      "src/core/patientSearch.ts"
+      "src/core/patientSearch.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "patient.import.enrich",
@@ -27,7 +50,17 @@
       "src/components/IntakePatientImport.tsx",
       "src/components/AddressSearch.tsx",
       "src/components/ReferralPicker.tsx",
-      "src/App.tsx#PatientForm"
+      "src/App.tsx#PatientForm",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "patient.create",
@@ -39,14 +72,34 @@
       "src/components/DiscoveryDesk.tsx",
       "src/components/BookingPicker.tsx",
       "src/core/appointments.ts",
-      "server/inquiries.ts"
+      "server/inquiries.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
   "consult-start": {
     "sources": [
       "src/components/ConsultationOwner.tsx",
-      "src/App.tsx#ConsultationView"
+      "src/App.tsx#ConsultationView",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "consultation.create",
@@ -56,7 +109,17 @@
   "photos": {
     "sources": [
       "src/components/PhotoBoard.tsx",
-      "src/components/PhotoOrder.tsx"
+      "src/components/PhotoOrder.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -66,7 +129,17 @@
       "src/components/StrokeWidth.tsx",
       "src/components/StylusSettings.tsx",
       "src/core/photoGeometry.ts",
-      "src/core/annotationText.ts"
+      "src/core/annotationText.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "consultation.annotate"
@@ -76,7 +149,17 @@
     "sources": [
       "src/components/ProcedureSearch.tsx",
       "src/components/PackageComposition.tsx",
-      "src/components/ProductDescription.tsx"
+      "src/components/ProductDescription.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -86,14 +169,34 @@
       "src/components/QuoteTotals.tsx",
       "src/components/QuoteReasonInput.tsx",
       "src/core/quotePrices.ts",
-      "src/core/quoteReasons.ts"
+      "src/core/quoteReasons.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
   "notes-opinions": {
     "sources": [
       "src/components/ConsultationOpinions.tsx",
-      "src/components/OpinionBody.tsx"
+      "src/components/OpinionBody.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "note.save",
@@ -103,7 +206,17 @@
   "doctor": {
     "sources": [
       "src/components/OpinionInbox.tsx",
-      "src/components/DirectOpinion.tsx"
+      "src/components/DirectOpinion.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "opinion.annotate",
@@ -119,7 +232,17 @@
       "src/components/QuoteTemplatePicker.tsx",
       "src/components/PatientQuote.tsx",
       "server/quoteShares.ts",
-      "src/core/quoteConsent.ts"
+      "src/core/quoteConsent.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "quote.consent",
@@ -129,7 +252,17 @@
   "finish": {
     "sources": [
       "src/components/ConsultationExit.tsx",
-      "src/components/PatientTimeline.tsx"
+      "src/components/PatientTimeline.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "consultation.save",
@@ -141,14 +274,35 @@
   "payments": {
     "sources": [
       "src/components/LedgerForm.tsx",
-      "src/App.tsx#ConsultationPayment"
+      "src/App.tsx#ConsultationPayment",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "ledger.create"
     ]
   },
   "followup": {
-    "sources": [],
+    "sources": [
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
+    ],
     "commands": [
       "consultation.package",
       "followup.save"
@@ -160,7 +314,17 @@
       "src/components/VipPatientQR.tsx",
       "src/core/vipPoints.ts",
       "src/core/gradeBenefits.ts",
-      "server/vipShares.ts"
+      "server/vipShares.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "vip.card",
@@ -174,7 +338,17 @@
       "src/lib/restoreConnection.ts",
       "src/lib/apiResponse.ts",
       "src/lib/catalogSaveRetry.ts",
-      "src/lib/uploadRequest.ts"
+      "src/lib/uploadRequest.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -185,7 +359,17 @@
       "src/components/CatalogEditActions.tsx",
       "src/App.tsx#CatalogView",
       "src/core/catalogApply.ts",
-      "src/core/catalogStatus.ts"
+      "src/core/catalogStatus.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "catalog.apply",
@@ -197,7 +381,17 @@
       "src/components/ProductWizard.tsx",
       "src/components/OfferingEditor.tsx",
       "src/core/productType.ts",
-      "src/core/offerings.ts"
+      "src/core/offerings.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "catalog.save"
@@ -207,7 +401,17 @@
     "sources": [
       "src/components/PackageBuilder.tsx",
       "src/core/packageBuilder.ts",
-      "src/core/packageSchedule.ts"
+      "src/core/packageSchedule.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -218,7 +422,17 @@
       "src/components/CatalogHistory.tsx",
       "src/components/CatalogOrganizer.tsx",
       "src/components/CatalogShortcutHelp.tsx",
-      "src/components/FolderWorkspace.tsx"
+      "src/components/FolderWorkspace.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "catalog.folders.commit",
@@ -229,7 +443,17 @@
     "sources": [
       "src/components/EventCatalog.tsx",
       "server/eventCatalog.ts",
-      "src/core/eventCatalog.ts"
+      "src/core/eventCatalog.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "catalog.beauty.detachWebsite",
@@ -243,7 +467,17 @@
       "src/components/Discovery.tsx",
       "src/components/DiscoverySettings.tsx",
       "src/core/discovery.ts",
-      "src/core/patientDiscovery.ts"
+      "src/core/patientDiscovery.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "discovery.settings"
@@ -251,13 +485,33 @@
   },
   "insurance-membership": {
     "sources": [
-      "src/components/InsuranceInfo.tsx"
+      "src/components/InsuranceInfo.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
   "consent-admin": {
     "sources": [
-      "src/components/TreatmentConsentManager.tsx"
+      "src/components/TreatmentConsentManager.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "consent.installDrafts",
@@ -268,7 +522,17 @@
   "grades-admin": {
     "sources": [
       "src/components/GradeSettings.tsx",
-      "src/components/VipPolicySettings.tsx"
+      "src/components/VipPolicySettings.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "vip.policy",
@@ -281,7 +545,17 @@
     "sources": [
       "src/components/AccountPermissions.tsx",
       "src/components/AdministrationReview.tsx",
-      "src/App.tsx#SettingsView"
+      "src/App.tsx#SettingsView",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -289,7 +563,17 @@
     "sources": [
       "src/components/Statistics.tsx",
       "src/components/AnalyticsCharts.tsx",
-      "src/components/ComparisonSummary.tsx"
+      "src/components/ComparisonSummary.tsx",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": [
       "audit.export"
@@ -303,7 +587,17 @@
       "src/components/IntakeStatisticsSync.tsx",
       "src/core/acquisitionSource.ts",
       "src/core/regionStatistics.ts",
-      "server/patientMarketing.ts"
+      "server/patientMarketing.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   },
@@ -316,7 +610,17 @@
       "src/components/WebUpdateNotice.tsx",
       "server/readProtection.ts",
       "server/addressLookup.ts",
-      "server/restoreJobs.ts"
+      "server/restoreJobs.ts",
+      "src/core/guideTraining.ts",
+      "src/training/environment.ts",
+      "src/training/runtime.ts",
+      "src/training/targets.ts",
+      "src/training/bootstrap.tsx",
+      "src/training/TrainingCoach.tsx",
+      "src/components/GuidePractice.tsx",
+      "src/components/GuidePractice.css",
+      "src/lib/guideProgress.ts",
+      "server/guideLearning.ts"
     ],
     "commands": []
   }

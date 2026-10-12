@@ -1,7 +1,8 @@
+import { trainingMode } from "../training/environment";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
-export const native = Capacitor.isNativePlatform();
+export const native = !trainingMode && Capacitor.isNativePlatform();
 export const NativeClinic = registerPlugin<{
   openDeviceSettings(): Promise<void>;
   appInfo(): Promise<{ version: string; versionCode: number }>;

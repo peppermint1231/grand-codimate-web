@@ -1,0 +1,130 @@
+.guide-practice-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: #f6f8f5;
+  display: flex;
+  flex-direction: column;
+}
+.guide-practice-shell > header {
+  padding: 10px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #153f38;
+  color: white;
+}
+.guide-practice-shell > header small {
+  display: block;
+  color: #d9e9e3;
+  font-size: 12px;
+  margin-top: 4px;
+}
+.guide-practice-shell > header button {
+  flex-shrink: 0;
+  background: #fff;
+  color: #153f38;
+}
+.guide-practice-shell iframe {
+  width: 100%;
+  flex: 1;
+  border: 0;
+  min-height: 0;
+}
+.guide-practice-error {
+  padding: 12px;
+  background: #fff0e6;
+  color: #832b18;
+}
+.guide-practice-error small {
+  display: block;
+}
+.training-highlight {
+  position: fixed;
+  border: 3px solid #df982b;
+  box-shadow: 0 0 0 5px #ffbf4338;
+  border-radius: 9px;
+  z-index: 99998;
+  pointer-events: none;
+  transition:
+    top 0.16s,
+    left 0.16s,
+    width 0.16s,
+    height 0.16s;
+}
+.training-coach {
+  position: fixed;
+  z-index: 99999;
+  bottom: 18px;
+  right: 18px;
+  width: min(360px, calc(100vw - 24px));
+  border: 1px solid #c5d8d0;
+  background: #fffef9;
+  box-shadow: 0 8px 36px #153f3830;
+  border-radius: 14px;
+  padding: 18px;
+  color: #183f38;
+}
+.training-coach p {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.training-coach small {
+  display: block;
+}
+.training-coach button {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.guide-practice-launch {
+  padding: 24px;
+  border-radius: 12px;
+  background: #edf6f1;
+  margin: 20px 0;
+}
+.guide-practice-launch p {
+  margin: 8px 0 16px;
+}
+.guide-reference > summary {
+  cursor: pointer;
+  padding: 16px;
+  font-weight: 700;
+}
+.guide-reference .guide-step-check {
+  display: none;
+}
+@media (max-width: 600px) {
+  .guide-practice-shell > header {
+    padding: 8px;
+  }
+  .guide-practice-shell > header strong {
+    font-size: 13px;
+  }
+  .guide-practice-shell > header small {
+    font-size: 11px;
+  }
+  .guide-practice-shell > header button {
+    padding: 8px;
+    font-size: 12px;
+  }
+  .training-coach {
+    bottom: 10px;
+    right: 12px;
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .training-highlight {
+    transition: none;
+  }
+}
+
+.training-busy-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 99997;
+  background: transparent;
+  cursor: progress;
+}

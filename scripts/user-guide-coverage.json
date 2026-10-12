@@ -17,7 +17,8 @@
       "server/guideLearning.ts",
       "src/core/userGuide.ts",
       "src/components/UserGuide.css",
-      "src/main.tsx"
+      "src/main.tsx",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -36,7 +37,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "patient.import.enrich",
@@ -60,7 +62,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "patient.create",
@@ -82,7 +85,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -99,7 +103,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "consultation.create",
@@ -119,7 +124,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -139,7 +145,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "consultation.annotate"
@@ -159,7 +166,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -179,7 +187,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -196,7 +205,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "note.save",
@@ -216,7 +226,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "opinion.annotate",
@@ -242,7 +253,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "quote.consent",
@@ -262,7 +274,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "consultation.save",
@@ -284,7 +297,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "ledger.create"
@@ -301,7 +315,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "consultation.package",
@@ -324,7 +339,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "vip.card",
@@ -348,7 +364,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -369,7 +386,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "catalog.apply",
@@ -391,7 +409,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "catalog.save"
@@ -411,7 +430,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -432,7 +452,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "catalog.folders.commit",
@@ -453,7 +474,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "catalog.beauty.detachWebsite",
@@ -477,7 +499,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "discovery.settings"
@@ -495,7 +518,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -511,7 +535,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "consent.installDrafts",
@@ -532,7 +557,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "vip.policy",
@@ -555,7 +581,10 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/components/GuideLearningAdmin.tsx",
+      "src/core/guideLearningReport.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -573,7 +602,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": [
       "audit.export"
@@ -597,7 +627,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   },
@@ -620,7 +651,8 @@
       "src/components/GuidePractice.tsx",
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
-      "server/guideLearning.ts"
+      "server/guideLearning.ts",
+      "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
   }

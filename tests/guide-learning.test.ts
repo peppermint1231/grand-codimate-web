@@ -1,3 +1,5 @@
+import scenarios from "../src/data/guidePracticeScenarios.json";
+import { guideAccountReport } from "../src/core/guideLearningReport";
 import { describe, it, expect } from "vitest";
 import { guideLearning, type GuideStorage } from "../server/guideLearning";
 import { guideLessons, guideUpdates, guideStatus } from "../src/core/userGuide";
@@ -166,4 +168,47 @@ describe("account based hands-on guide", () => {
       trainingRuntime().api("/backup", { method: "POST" }),
     ).rejects.toThrow("외부 작업");
   });
+});
+
+it("keeps every scenario aligned with actual steps and requires a reasoned decision", () => {
+  for (const r of practiceRecipes) {
+    const scenario = scenarios[r.id as keyof typeof scenarios];
+    expect(scenario.steps.length, r.id).toBe(r.steps.length);
+    expect(scenario.choices[scenario.correct]).toBeTruthy();
+    for (const step of scenario.steps) {
+      expect(step.goal.length).toBeGreaterThan(8);
+      expect(step.why.length).toBeGreaterThan(8);
+    }
+  }
+});
+it("reports current revision completion separately from acknowledgment and old completions", () => {
+  const report = guideAccountReport(practiceUser, {
+    lessons: {
+      start: {
+        revision: "old",
+        completed: true,
+        steps: ["practice-1"],
+        acknowledged: "old",
+      },
+      register: {
+        revision: guideUpdates.register.revision,
+        steps: ["practice-1"],
+        acknowledged: guideUpdates.register.revision,
+      },
+      pricing: { revision: guideUpdates.pricing.revision, completed: true },
+    },
+  });
+  expect(report.staff.completed).toBe(1);
+  expect(report.lessons.find((l) => l.id === "start")).toMatchObject({
+    completed: false,
+    revised: true,
+    steps: 0,
+    acknowledged: false,
+  });
+  expect(report.lessons.find((l) => l.id === "register")).toMatchObject({
+    completed: false,
+    steps: 1,
+    acknowledged: true,
+  });
+  expect(report).not.toHaveProperty("passwordHash");
 });

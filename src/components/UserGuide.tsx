@@ -1,3 +1,4 @@
+import { GuideLearningAdmin } from "./GuideLearningAdmin";
 import { GuidePractice } from "./GuidePractice";
 import type { GuideLearning } from "../lib/guideProgress";
 import { practiceRecipe } from "../core/guideTraining";
@@ -51,6 +52,7 @@ export function UserGuide({
 }) {
   const { progress, loading, error } = learning;
   const [practice, setPractice] = useState(false);
+  const [showAccounts, setShowAccounts] = useState(false);
   const initial =
     guideLessons.find((l) => l.id === progress.selected) || guideLessons[0];
   const [track, setTrack] = useState<GuideTrack>(initial.track),
@@ -124,6 +126,17 @@ export function UserGuide({
           </small>
         </div>
       </header>
+      {isAdministrator(user) && (
+        <div className="guide-admin-entry">
+          <button
+            aria-expanded={showAccounts}
+            onClick={() => setShowAccounts((v) => !v)}
+          >
+            직원 학습 현황 {showAccounts ? "닫기" : "열기"}
+          </button>
+          {showAccounts && <GuideLearningAdmin />}
+        </div>
+      )}
       <div className="guide-track-tabs" role="group" aria-label="사용법 과정">
         {(
           [
@@ -310,8 +323,9 @@ export function UserGuide({
           <div className="guide-practice-launch">
             <strong>실제 화면에서 가상 자료로 직접 연습해요</strong>
             <p>
-              강조된 버튼과 입력칸을 조작하면 결과를 확인해 자동으로 진도를
-              기록합니다. 운영 환자나 금액은 바뀌지 않습니다.
+              상황을 읽고 필요한 판단을 고른 뒤, 업무 목표를 직접 해결합니다.
+              막힐 때만 힌트를 열어보세요. 조작 결과로 진도를 자동 기록하며,
+              운영 환자나 금액은 바뀌지 않습니다.
             </p>
             <button
               className="primary"

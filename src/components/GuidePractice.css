@@ -128,3 +128,46 @@
   background: transparent;
   cursor: progress;
 }
+.training-coach {
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+}
+.training-decisions {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.training-decisions button {
+  text-align: left;
+  white-space: normal;
+}
+.training-decisions button[aria-pressed="true"] {
+  border-color: #195d4a;
+  background: #e8f2ec;
+}
+.training-case,
+.training-feedback {
+  margin: 10px 0;
+  font-size: 13px;
+}
+.training-case summary,
+.training-feedback summary {
+  cursor: pointer;
+  font-weight: 650;
+}
+.training-hint {
+  margin-top: 10px;
+  padding: 10px;
+  border-left: 3px solid #df982b;
+  background: #fff5e5;
+}
+.training-coach > small {
+  margin: 10px 0;
+}
+.training-coach.is-working {
+  max-height: 44dvh;
+}
+.training-collapse {
+  float: right;
+  margin: -3px 0 5px 10px;
+}

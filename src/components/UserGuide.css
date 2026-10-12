@@ -627,3 +627,125 @@
     flex: 1;
   }
 }
+/* Keep the guide icon visible on the compact sidebar, including portrait tablets. */
+.sidebar .nav-item > svg {
+  flex: 0 0 auto;
+}
+.guide-nav-badge {
+  display: inline-block;
+  white-space: nowrap;
+}
+@media (max-width: 760px), (orientation: portrait) and (max-width: 1100px) {
+  .sidebar .nav-item > .nav-text {
+    display: none;
+  }
+}
+.guide-admin-entry {
+  margin: 20px 0;
+}
+.guide-admin-report {
+  margin-top: 12px;
+  padding: 20px;
+  border: 1px solid #d8e4dc;
+  border-radius: 16px;
+  background: #f8faf7;
+}
+.guide-admin-heading,
+.guide-admin-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  justify-content: space-between;
+}
+.guide-admin-heading h2 {
+  margin: 0;
+}
+.guide-admin-heading p {
+  margin: 8px 0;
+}
+.guide-admin-tools {
+  justify-content: flex-start;
+  margin: 16px 0;
+}
+.guide-admin-tools > input {
+  max-width: 320px;
+}
+.guide-admin-tools label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guide-admin-tools input[type="checkbox"] {
+  width: auto;
+}
+.guide-admin-accounts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  gap: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+.guide-admin-accounts button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  gap: 6px;
+  padding: 14px;
+  white-space: normal;
+}
+.guide-admin-accounts button[aria-pressed="true"],
+.guide-admin-tracks button[aria-pressed="true"] {
+  border-color: #195d4a;
+  background: #e8f2ec;
+}
+.guide-admin-accounts span,
+.guide-admin-accounts small {
+  font-size: 12px;
+}
+.guide-admin-detail {
+  margin-top: 22px;
+}
+.guide-admin-tracks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-admin-detail ul {
+  list-style: none;
+  padding: 0;
+}
+.guide-admin-detail li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid #d8e4dc;
+}
+.guide-admin-detail li small {
+  display: block;
+  margin-top: 5px;
+}
+.guide-admin-detail progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 6px;
+  accent-color: #195d4a;
+}
+.guide-learning-state {
+  font-size: 12px;
+  align-self: center;
+}
+.guide-learning-state.done {
+  color: #195d4a;
+  font-weight: 700;
+}
+@media (max-width: 600px) {
+  .guide-admin-report {
+    padding: 14px;
+  }
+  .guide-admin-detail li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

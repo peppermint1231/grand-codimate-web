@@ -1,7 +1,7 @@
 {
-  "version": "0.18.20",
-  "versionCode": 90,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.20.apk",
-  "sha256": "a3dd76a9bb5769dbeacfff25bc159bcc099383ebfe96c044edf06bbb89fff89b",
-  "notes": "사용법을 가상 자료로 실제 화면에서 연습하는 30개 과정으로 개편했습니다. 입력·저장 결과를 자동 확인하며 학습 진도와 신규·수정 안내 확인을 계정에 저장해 PC·태블릿에서 이어갑니다. 운영 환자·수납 자료는 변경되지 않습니다."
+  "version": "0.18.21",
+  "versionCode": 91,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.21.apk",
+  "sha256": "a70f192c7d83e03cf53363085332e97c1fca0421d3225983a172599eee8aeab9",
+  "notes": "모바일·세로 태블릿의 사용법 아이콘을 수정했습니다. 관리자는 사용법에서 직원별 학습 현황을 조회할 수 있습니다. 30개 실습을 업무 상황·판단·직접 해결·이유 설명 흐름으로 개편하고, 조작 힌트는 필요할 때만 표시합니다."
 }

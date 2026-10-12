@@ -1,0 +1,323 @@
+{
+  "start": {
+    "sources": [
+      "src/components/DisplaySettings.tsx",
+      "src/components/PullToRefresh.tsx",
+      "src/components/UserGuide.tsx",
+      "src/App.tsx#App"
+    ],
+    "commands": []
+  },
+  "find-patient": {
+    "sources": [
+      "src/App.tsx#Patients",
+      "src/App.tsx#PatientDetail",
+      "src/core/patientHistory.ts",
+      "src/core/patientSearch.ts"
+    ],
+    "commands": [
+      "patient.import.enrich",
+      "patient.import",
+      "patient.archive",
+      "patient.merge"
+    ]
+  },
+  "register": {
+    "sources": [
+      "src/components/IntakePatientImport.tsx",
+      "src/components/AddressSearch.tsx",
+      "src/components/ReferralPicker.tsx",
+      "src/App.tsx#PatientForm"
+    ],
+    "commands": [
+      "patient.create",
+      "patient.update"
+    ]
+  },
+  "requests": {
+    "sources": [
+      "src/components/DiscoveryDesk.tsx",
+      "src/components/BookingPicker.tsx",
+      "src/core/appointments.ts",
+      "server/inquiries.ts"
+    ],
+    "commands": []
+  },
+  "consult-start": {
+    "sources": [
+      "src/components/ConsultationOwner.tsx",
+      "src/App.tsx#ConsultationView"
+    ],
+    "commands": [
+      "consultation.create",
+      "consultation.owner"
+    ]
+  },
+  "photos": {
+    "sources": [
+      "src/components/PhotoBoard.tsx",
+      "src/components/PhotoOrder.tsx"
+    ],
+    "commands": []
+  },
+  "editor": {
+    "sources": [
+      "src/components/PhotoEditor.tsx",
+      "src/components/StrokeWidth.tsx",
+      "src/components/StylusSettings.tsx",
+      "src/core/photoGeometry.ts",
+      "src/core/annotationText.ts"
+    ],
+    "commands": [
+      "consultation.annotate"
+    ]
+  },
+  "procedures": {
+    "sources": [
+      "src/components/ProcedureSearch.tsx",
+      "src/components/PackageComposition.tsx",
+      "src/components/ProductDescription.tsx"
+    ],
+    "commands": []
+  },
+  "pricing": {
+    "sources": [
+      "src/components/QuoteLinePrice.tsx",
+      "src/components/QuoteTotals.tsx",
+      "src/components/QuoteReasonInput.tsx",
+      "src/core/quotePrices.ts",
+      "src/core/quoteReasons.ts"
+    ],
+    "commands": []
+  },
+  "notes-opinions": {
+    "sources": [
+      "src/components/ConsultationOpinions.tsx",
+      "src/components/OpinionBody.tsx"
+    ],
+    "commands": [
+      "note.save",
+      "opinion.request"
+    ]
+  },
+  "doctor": {
+    "sources": [
+      "src/components/OpinionInbox.tsx",
+      "src/components/DirectOpinion.tsx"
+    ],
+    "commands": [
+      "opinion.annotate",
+      "opinion.read",
+      "opinion.direct",
+      "opinion.answer"
+    ]
+  },
+  "quote-consent": {
+    "sources": [
+      "src/components/ConsentChecks.tsx",
+      "src/components/ConsentRecommendations.tsx",
+      "src/components/QuoteTemplatePicker.tsx",
+      "src/components/PatientQuote.tsx",
+      "server/quoteShares.ts",
+      "src/core/quoteConsent.ts"
+    ],
+    "commands": [
+      "quote.consent",
+      "signature.create"
+    ]
+  },
+  "finish": {
+    "sources": [
+      "src/components/ConsultationExit.tsx",
+      "src/components/PatientTimeline.tsx"
+    ],
+    "commands": [
+      "consultation.save",
+      "consultation.finalize",
+      "consultation.cancel",
+      "consultation.rewrite"
+    ]
+  },
+  "payments": {
+    "sources": [
+      "src/components/LedgerForm.tsx",
+      "src/App.tsx#ConsultationPayment"
+    ],
+    "commands": [
+      "ledger.create"
+    ]
+  },
+  "followup": {
+    "sources": [],
+    "commands": [
+      "consultation.package",
+      "followup.save"
+    ]
+  },
+  "points": {
+    "sources": [
+      "src/components/PatientPoints.tsx",
+      "src/components/VipPatientQR.tsx",
+      "src/core/vipPoints.ts",
+      "src/core/gradeBenefits.ts",
+      "server/vipShares.ts"
+    ],
+    "commands": [
+      "vip.card",
+      "points.adjust"
+    ]
+  },
+  "recovery": {
+    "sources": [
+      "src/components/OperationProgressDialog.tsx",
+      "src/App.tsx#RecoveryView",
+      "src/lib/restoreConnection.ts",
+      "src/lib/apiResponse.ts",
+      "src/lib/catalogSaveRetry.ts",
+      "src/lib/uploadRequest.ts"
+    ],
+    "commands": []
+  },
+  "catalog-basics": {
+    "sources": [
+      "src/components/CatalogCategorySwitch.tsx",
+      "src/components/CatalogPublishReview.tsx",
+      "src/components/CatalogEditActions.tsx",
+      "src/App.tsx#CatalogView",
+      "src/core/catalogApply.ts",
+      "src/core/catalogStatus.ts"
+    ],
+    "commands": [
+      "catalog.apply",
+      "catalog.publish"
+    ]
+  },
+  "product": {
+    "sources": [
+      "src/components/ProductWizard.tsx",
+      "src/components/OfferingEditor.tsx",
+      "src/core/productType.ts",
+      "src/core/offerings.ts"
+    ],
+    "commands": [
+      "catalog.save"
+    ]
+  },
+  "packages": {
+    "sources": [
+      "src/components/PackageBuilder.tsx",
+      "src/core/packageBuilder.ts",
+      "src/core/packageSchedule.ts"
+    ],
+    "commands": []
+  },
+  "catalog-bulk": {
+    "sources": [
+      "src/components/CatalogBulkEdit.tsx",
+      "src/components/CatalogDeleteConfirm.tsx",
+      "src/components/CatalogHistory.tsx",
+      "src/components/CatalogOrganizer.tsx",
+      "src/components/CatalogShortcutHelp.tsx",
+      "src/components/FolderWorkspace.tsx"
+    ],
+    "commands": [
+      "catalog.folders.commit",
+      "catalog.restore"
+    ]
+  },
+  "homepage": {
+    "sources": [
+      "src/components/EventCatalog.tsx",
+      "server/eventCatalog.ts",
+      "src/core/eventCatalog.ts"
+    ],
+    "commands": [
+      "catalog.beauty.detachWebsite",
+      "catalog.website.import",
+      "catalog.homepage.import",
+      "catalog.events.import"
+    ]
+  },
+  "discovery-settings": {
+    "sources": [
+      "src/components/Discovery.tsx",
+      "src/components/DiscoverySettings.tsx",
+      "src/core/discovery.ts",
+      "src/core/patientDiscovery.ts"
+    ],
+    "commands": [
+      "discovery.settings"
+    ]
+  },
+  "insurance-membership": {
+    "sources": [
+      "src/components/InsuranceInfo.tsx"
+    ],
+    "commands": []
+  },
+  "consent-admin": {
+    "sources": [
+      "src/components/TreatmentConsentManager.tsx"
+    ],
+    "commands": [
+      "consent.installDrafts",
+      "consent.delete",
+      "consent.save"
+    ]
+  },
+  "grades-admin": {
+    "sources": [
+      "src/components/GradeSettings.tsx",
+      "src/components/VipPolicySettings.tsx"
+    ],
+    "commands": [
+      "vip.policy",
+      "vip.reconcile",
+      "grade.policy",
+      "grade.override"
+    ]
+  },
+  "accounts": {
+    "sources": [
+      "src/components/AccountPermissions.tsx",
+      "src/components/AdministrationReview.tsx",
+      "src/App.tsx#SettingsView"
+    ],
+    "commands": []
+  },
+  "statistics": {
+    "sources": [
+      "src/components/Statistics.tsx",
+      "src/components/AnalyticsCharts.tsx",
+      "src/components/ComparisonSummary.tsx"
+    ],
+    "commands": [
+      "audit.export"
+    ]
+  },
+  "marketing": {
+    "sources": [
+      "src/components/PatientMarketingPanel.tsx",
+      "src/components/PatientRegionExplorer.tsx",
+      "src/components/SourceComparisonSummary.tsx",
+      "src/components/IntakeStatisticsSync.tsx",
+      "src/core/acquisitionSource.ts",
+      "src/core/regionStatistics.ts",
+      "server/patientMarketing.ts"
+    ],
+    "commands": []
+  },
+  "operations": {
+    "sources": [
+      "src/components/AddressRegionSettings.tsx",
+      "src/components/ReadProtectionStatus.tsx",
+      "src/components/RestoreJobPanel.tsx",
+      "src/components/AndroidUpdateNotice.tsx",
+      "src/components/WebUpdateNotice.tsx",
+      "server/readProtection.ts",
+      "server/addressLookup.ts",
+      "server/restoreJobs.ts"
+    ],
+    "commands": []
+  }
+}

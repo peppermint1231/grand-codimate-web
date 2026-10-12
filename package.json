@@ -1,10 +1,10 @@
 {
   "name": "codimate",
-  "version": "0.18.18",
+  "version": "0.18.19",
   "private": true,
   "type": "module",
   "scripts": {
-    "prebuild": "node scripts/prepare-font.mjs",
+    "prebuild": "node scripts/prepare-font.mjs && npm run guide:check",
     "predev": "node scripts/prepare-font.mjs",
     "dev": "vite --host 0.0.0.0",
     "api": "wrangler dev --port 8787",
@@ -14,7 +14,9 @@
     "catalog:import": "tsx scripts/import-catalog.ts",
     "android:sync": "npm run build && cap sync android",
     "deploy": "npm run check && wrangler deploy",
-    "pretest": "node scripts/prepare-font.mjs"
+    "pretest": "node scripts/prepare-font.mjs && npm run guide:check",
+    "guide:check": "node scripts/sync-user-guide.mjs",
+    "guide:sync": "node scripts/sync-user-guide.mjs --write --reviewed"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

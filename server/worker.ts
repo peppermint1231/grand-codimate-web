@@ -158,9 +158,18 @@ export default {
     try {
       res = await env.CLINIC.get(env.CLINIC.idFromName("hospital")).fetch(req);
     } catch (error) {
-      const quota = storageQuotaResponse(error);
-      if (!quota) throw error;
-      res = quota;
+      // Isolate resets can bypass Clinic.fetch's catch. Keep JSON and native
+      // CORS headers even then, so a transient failure never clears a session.
+      res =
+        storageQuotaResponse(error) ||
+        json(
+          {
+            error:
+              "서버 연결이 일시적으로 중단되었습니다. 잠시 후 다시 연결해주세요.",
+            code: "SERVER_TEMPORARILY_UNAVAILABLE",
+          },
+          503,
+        );
     }
     const h = new Headers(res.headers);
     if (origin) {

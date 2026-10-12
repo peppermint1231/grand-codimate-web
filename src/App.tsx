@@ -1,5 +1,8 @@
 import { AddressRegionSettings } from "./components/AddressRegionSettings";
 import { ReadProtectionStatus } from "./components/ReadProtectionStatus";
+import { restoreConnection } from "./lib/restoreConnection";
+import { UserGuide, useGuideProgress } from "./components/UserGuide";
+import { guideLessons, guideStatus } from "./core/userGuide";
 import {
   importedHistory,
   importedRevenue,
@@ -163,6 +166,7 @@ import {
 } from "react";
 import {
   Camera,
+  BookOpen,
   Users,
   ClipboardList,
   Settings,
@@ -316,6 +320,11 @@ export function App() {
     [guest, setGuest] = useState(false),
     [guestPhotos, setGuestPhotos] = useState<GuestPhoto[]>([]);
   const [opinionFocus, setOpinionFocus] = useState("");
+  const guideLearning = useGuideProgress(user?.id || "");
+  const guideUnread = guideLessons.filter(
+    (lesson) => guideStatus(lesson, guideLearning.progress).unread,
+  ).length;
+  const [guidePractice, setGuidePractice] = useState("");
   const opinionPollGeneration = useRef(0);
   const unreadReplies = user
     ? state.opinions.filter((o) =>
@@ -329,6 +338,7 @@ export function App() {
   const [restoring, setRestoring] = useState(!needsServer);
   const [restoreError, setRestoreError] = useState("");
   const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [connectionAttempt, setConnectionAttempt] = useState(1);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(
     () => localStorage.getItem("codimate-sidebar-collapsed") === "true",
   );
@@ -925,12 +935,16 @@ export function App() {
         setRestoreError("");
       }
       controller = new AbortController();
-      const timeout = setTimeout(() => controller?.abort(), 15000);
       try {
         await restoreLogin();
-        const d = await api("/state?view=workspace", {
-          signal: controller.signal,
-        });
+        const d = await restoreConnection(
+          (signal) =>
+            api("/state?view=workspace", { signal }, { operation: null }),
+          controller.signal,
+          (attempt) => {
+            if (live) setConnectionAttempt(attempt);
+          },
+        );
         if (live) {
           restoreNeeded.current = false;
           setUser(d.user);
@@ -949,7 +963,6 @@ export function App() {
           );
         }
       } finally {
-        clearTimeout(timeout);
         checking = false;
         if (live) setRestoring(false);
       }
@@ -968,7 +981,9 @@ export function App() {
   if (restoring)
     return (
       <div className="login-page" role="status">
-        로그인을 복원하고 있습니다…
+        {connectionAttempt === 1
+          ? "로그인을 복원하고 있습니다…"
+          : `서버에 다시 연결하고 있습니다… (${connectionAttempt}/3)`}
       </div>
     );
   if (!user && restoreError && restoreNeeded.current)
@@ -1306,6 +1321,7 @@ export function App() {
           ["catalog", "단가표 관리", FileSpreadsheet],
           ["discovery", "맞춤 시술 찾기", HeartHandshake],
           ["settings", "설정", Settings],
+          ["guide", "사용법", BookOpen],
         ].map(([key, label, Icon]: any) => (
           <button
             key={key}
@@ -1321,7 +1337,18 @@ export function App() {
             }}
           >
             <Icon size={20} />
-            <span className="nav-text">{label}</span>
+            <span className="nav-text">
+              {label}
+              {key === "guide" && guideUnread > 0 && (
+                <small className="guide-nav-badge">새 안내 {guideUnread}</small>
+              )}
+            </span>
+            {key === "guide" && guideUnread > 0 && (
+              <span
+                className="guide-nav-dot"
+                aria-label={`확인할 사용법 ${guideUnread}개`}
+              />
+            )}
             <span className="mobile-nav-text">
               {
                 (
@@ -1332,6 +1359,7 @@ export function App() {
                     catalog: "단가표",
                     discovery: "시술찾기",
                     settings: "설정",
+                    guide: "사용법",
                   } as Record<string, string>
                 )[key]
               }
@@ -1473,6 +1501,34 @@ export function App() {
           </div>
         )}
         <div className="content">
+          {guidePractice && page !== "guide" && (
+            <div className="guide-return">
+              <span>사용법 따라 하기 · {guidePractice}</span>
+              <div>
+                <button
+                  onClick={() => requestNavigation(() => setPage("guide"))}
+                >
+                  사용법으로 돌아가기
+                </button>
+                <button onClick={() => setGuidePractice("")}>안내 닫기</button>
+              </div>
+            </div>
+          )}
+          {page === "guide" && (
+            <UserGuide
+              user={user}
+              state={state}
+              learning={guideLearning}
+              onOpen={(target, title) =>
+                requestNavigation(() => {
+                  setGuidePractice(title);
+                  setPage(target);
+                  setPatientId("");
+                  setConsultId("");
+                })
+              }
+            />
+          )}
           {page === "patients" && !patient && (
             <button
               className="card discovery-home-entry"
@@ -2476,9 +2532,7 @@ function PatientForm({
               {k === "address" ? (
                 <AddressSearch
                   value={data.address}
-                  onChange={(address) =>
-                    setData({ ...data, address })
-                  }
+                  onChange={(address) => setData({ ...data, address })}
                 />
               ) : (
                 <input

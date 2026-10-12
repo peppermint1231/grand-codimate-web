@@ -6,6 +6,7 @@ import {
   type TransferProgress,
 } from "./operationProgress";
 import { uploadRequest } from "./uploadRequest";
+import { apiResponse } from "./apiResponse";
 import { jpegCaptureDate } from "../core/photoDate";
 import { openDB } from "idb";
 import { native, NativeClinic } from "./native";
@@ -89,17 +90,7 @@ export async function api<T = any>(
       },
     );
   const r = await fetch(base + "/api" + path, request);
-  const d = (await r.json().catch(() => {
-    throw Object.assign(
-      new Error("서버 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."),
-      { status: r.ok ? 422 : r.status },
-    );
-  })) as any;
-  if (!r.ok)
-    throw Object.assign(new Error(d.error || "요청 실패"), {
-      status: r.status,
-    });
-  return d;
+  return apiResponse<T>(r);
 }
 export const command = async (
   c: Command,

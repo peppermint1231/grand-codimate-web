@@ -1,3 +1,4 @@
+import scenarios from "../data/guidePracticeScenarios.json";
 import { useEffect, useRef, useState } from "react";
 import { practiceRecipe } from "../core/guideTraining";
 import { findTarget, normalize, selectorFor } from "./targets";
@@ -22,6 +23,22 @@ export function TrainingCoach({
   runtime: ReturnType<typeof installPractice>;
 }) {
   const recipe = practiceRecipe(initial.lessonId)!;
+  const scenario = scenarios[initial.lessonId as keyof typeof scenarios];
+  const [briefed, setBriefed] = useState(initial.steps.length > 0),
+    [choice, setChoice] = useState<number | null>(null),
+    [hint, setHint] = useState(false),
+    [collapsed, setCollapsed] = useState(false);
+  const coach = useRef<HTMLElement>(null);
+  const [coachHeight, setCoachHeight] = useState(200);
+  useEffect(() => {
+    if (!coach.current) return;
+    const observer = new ResizeObserver(() =>
+      setCoachHeight(coach.current!.getBoundingClientRect().height),
+    );
+    observer.observe(coach.current);
+    return () => observer.disconnect();
+  }, []);
+
   const [steps, setSteps] = useState(initial.steps),
     [waiting, setWaiting] = useState(false),
     [ready, setReady] = useState(false),
@@ -96,6 +113,8 @@ export function TrainingCoach({
         e.data.type !== "practice:ack"
       )
         return;
+      setHint(false);
+      setCollapsed(false);
       setSteps(e.data.steps);
       pending.current = false;
       setWaiting(false);
@@ -104,7 +123,7 @@ export function TrainingCoach({
     return () => window.removeEventListener("message", ack);
   }, []);
   useEffect(() => {
-    if (!ready || !step) return;
+    if (!ready || !briefed || !step) return;
     let dead = false;
     const locate = () => {
       const el = findTarget(step.target);
@@ -113,14 +132,6 @@ export function TrainingCoach({
     };
     locate();
     const timer = setInterval(locate, 180);
-    const scroller = setTimeout(
-      () =>
-        findTarget(step.target)?.scrollIntoView({
-          block: "center",
-          behavior: "smooth",
-        }),
-      150,
-    );
     const finish = () => {
       if (pending.current || dead) return;
       pending.current = true;
@@ -198,28 +209,28 @@ export function TrainingCoach({
       dead = true;
       window.removeEventListener("practice:annotation", annotated);
       clearInterval(timer);
-      clearTimeout(scroller);
+
       document.removeEventListener("click", click, true);
       document.removeEventListener("input", input, true);
       document.removeEventListener("change", input, true);
       window.removeEventListener("practice:command", command);
     };
-  }, [ready, index]);
+  }, [ready, index, briefed]);
   useEffect(() => {
-    if (ready && !waiting) return;
+    if (ready && briefed && !waiting) return;
     const block = (e: KeyboardEvent) => {
       if ((e.target as Element)?.matches("input,textarea,select"))
         e.preventDefault();
     };
     document.addEventListener("keydown", block, true);
     return () => document.removeEventListener("keydown", block, true);
-  }, [ready, waiting]);
+  }, [ready, waiting, briefed]);
   return (
     <>
-      {(!ready || waiting) && (
+      {(!ready || !briefed || waiting) && (
         <div className="training-busy-shield" aria-hidden="true" />
       )}
-      {rect && (
+      {hint && rect && (
         <div
           className="training-highlight"
           style={{
@@ -231,9 +242,12 @@ export function TrainingCoach({
         />
       )}
       <aside
-        className="training-coach"
+        ref={coach}
+        className={"training-coach" + (briefed ? " is-working" : "")}
         style={
-          rect && rect.bottom > innerHeight - 200
+          rect &&
+          rect.bottom > innerHeight - coachHeight - 30 &&
+          rect.top > coachHeight + 24
             ? { top: 12, bottom: "auto" }
             : {}
         }
@@ -241,36 +255,106 @@ export function TrainingCoach({
       >
         <strong>
           {!step
-            ? "실습을 완료했습니다"
-            : `${index + 1} / ${recipe.steps.length} · 직접 해보세요`}
+            ? "상황 해결 완료"
+            : !briefed
+              ? "오늘의 업무 상황"
+              : `${index + 1} / ${recipe.steps.length} · 업무 목표`}
         </strong>
-        <p>
-          {!ready
-            ? "연습 화면을 준비하고 있습니다…"
-            : waiting
-              ? "입력 결과 확인 완료 · 진도를 저장하고 있습니다…"
-              : step?.instruction ||
-                "계정에 저장되었습니다. 위의 돌아가기 버튼으로 다음 과정을 선택하세요."}
-        </p>
-        {step && ready && !waiting && (
+        {ready && briefed && step && (
           <button
-            onClick={() =>
-              findTarget(step.target)?.scrollIntoView({
-                block: "center",
-                behavior: "smooth",
-              })
-            }
+            className="training-collapse"
+            onClick={() => setCollapsed((v) => !v)}
           >
-            해당 위치 보기
+            {collapsed ? "안내 펼치기" : "안내 접기"}
           </button>
         )}
-        {step && ready && !rect && (
-          <small>
-            안내 위치가 보이지 않으면 저장된 단계부터 다시 열 수 있습니다.{" "}
-            <button onClick={() => post({ type: "practice:reopen" })}>
-              현재 단계 다시 열기
+        {collapsed ? (
+          <p>{scenario.steps[index]?.goal}</p>
+        ) : !ready ? (
+          <p>연습 화면을 준비하고 있습니다…</p>
+        ) : !briefed ? (
+          <>
+            <p>{scenario.scene}</p>
+            <strong>{scenario.question}</strong>
+            <div className="training-decisions">
+              {scenario.choices.map((answer, i) => (
+                <button
+                  key={answer}
+                  aria-pressed={choice === i}
+                  onClick={() => setChoice(i)}
+                >
+                  {answer}
+                </button>
+              ))}
+            </div>
+            {choice !== null && (
+              <p role="status">
+                {choice === scenario.correct
+                  ? scenario.explanation
+                  : "이 선택은 기록 누락이나 오해로 이어질 수 있습니다. 상황의 목적을 다시 생각해보세요."}
+              </p>
+            )}
+            {choice === scenario.correct && (
+              <button className="primary" onClick={() => setBriefed(true)}>
+                이 판단으로 업무 시작
+              </button>
+            )}
+          </>
+        ) : waiting ? (
+          <p>조작 결과 확인 완료 · 계정에 진도를 저장하고 있습니다…</p>
+        ) : step ? (
+          <>
+            <details className="training-case">
+              <summary>상황·접수 정보 다시 보기</summary>
+              <p>{scenario.scene}</p>
+            </details>
+            {index > 0 && (
+              <div className="training-feedback">
+                <strong>방금 한 작업의 의미</strong>
+                <p>{scenario.steps[index - 1].why}</p>
+              </div>
+            )}
+            <p>{scenario.steps[index].goal}</p>
+            <small>
+              화면에서 직접 해결해보세요. 결과가 확인되면 자동으로 다음 목표로
+              넘어갑니다.
+            </small>
+            <button
+              aria-expanded={hint}
+              onClick={() => {
+                setHint((v) => !v);
+                if (!hint)
+                  findTarget(step.target)?.scrollIntoView({
+                    block: "center",
+                    behavior: "smooth",
+                  });
+              }}
+            >
+              {hint ? "힌트 숨기기" : "막혔어요 · 힌트 보기"}
             </button>
-          </small>
+            {hint && (
+              <div className="training-hint">
+                <p>{step.instruction}</p>
+                <small>{scenario.steps[index].why}</small>
+              </div>
+            )}
+            {hint && !rect && (
+              <small>
+                다른 화면으로 이동했다면 저장된 단계부터 다시 열 수 있습니다.{" "}
+                <button onClick={() => post({ type: "practice:reopen" })}>
+                  현재 단계 다시 열기
+                </button>
+              </small>
+            )}
+          </>
+        ) : (
+          <>
+            <p>{scenario.debrief}</p>
+            <small>
+              실제 업무에서는 무엇을 먼저 확인해야 할지 떠올려보세요. 학습
+              기록은 계정에 저장되었습니다.
+            </small>
+          </>
         )}
       </aside>
     </>

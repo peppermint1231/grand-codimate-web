@@ -1,3 +1,5 @@
+import { guideAccountReport } from "../src/core/guideLearningReport";
+import type { GuideProgress } from "../src/core/userGuide";
 import { guideLearning } from "./guideLearning";
 import { lookupRoad } from "./addressLookup";
 import {
@@ -1412,6 +1414,40 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true, receipt: ticket.id });
     }
     const user = await this.user(req);
+    if (path === "/api/guide-progress/accounts") {
+      ensure(
+        isAdministrator(user),
+        "관리자만 학습 현황을 열람할 수 있습니다",
+        403,
+      );
+      ensure(req.method === "GET", "지원하지 않는 요청입니다", 405);
+      const accounts = [];
+      // Only account records and small learning metadata; never patient records or practice checkpoints.
+      for (const row of this.sql
+        .exec<{ id: string }>(
+          "SELECT id FROM secrets WHERE id LIKE ?",
+          "user:%",
+        )
+        .toArray()) {
+        const account = await this.secret<Account>(row.id);
+        if (!account) continue;
+        const progress = await this.secret<GuideProgress>(
+          "guide-progress:" + account.id,
+        );
+        accounts.push(
+          guideAccountReport(
+            normalizeUser(account),
+            progress || { lessons: {} },
+          ),
+        );
+      }
+      accounts.sort(
+        (a, b) =>
+          Number(b.active) - Number(a.active) ||
+          a.name.localeCompare(b.name, "ko"),
+      );
+      return json({ accounts });
+    }
     if (path === "/api/guide-progress")
       return json(
         await guideLearning(req, user.id, {

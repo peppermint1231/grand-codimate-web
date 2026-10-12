@@ -94,6 +94,51 @@ it("authenticates guide metadata per account without loading clinic records; con
     expect(((await (await request(tokens[2])).json()) as any).lessons).toEqual(
       {},
     );
+    const reportRequest = (token: string, method = "GET") =>
+      clinic.fetch(
+        new Request("https://test.example/api/guide-progress/accounts", {
+          method,
+          headers: {
+            Authorization: "Bearer " + token,
+            Origin: "https://test.example",
+          },
+        }),
+      );
+    expect((await reportRequest(tokens[0])).status).toBe(403);
+    await db
+      .prepare("INSERT OR REPLACE INTO secrets VALUES(?,?)")
+      .run(
+        "user:alice",
+        await seal(
+          {
+            id: "alice",
+            name: "Admin",
+            username: "secret-login",
+            passwordHash: "hidden-password",
+            role: "admin",
+            permissionLevel: "admin",
+            active: true,
+            permissions: {},
+          },
+          key,
+        ),
+      );
+    expect((await reportRequest(tokens[0], "POST")).status).toBe(405);
+    queries.length = 0;
+    const response = await reportRequest(tokens[0]);
+    expect(response.status).toBe(200);
+    const report: any = await response.json();
+    expect(report.accounts).toHaveLength(2);
+    expect(
+      report.accounts.find((a: any) => a.id === "bob").staff.completed,
+    ).toBe(0);
+    expect(JSON.stringify(report)).not.toContain("hidden-password");
+    expect(JSON.stringify(report)).not.toContain("secret-login");
+    expect(
+      queries.some((q) =>
+        /guide-checkpoint|FROM\s+(records|entities)/i.test(q),
+      ),
+    ).toBe(false);
     expect(queries.some((q) => /FROM\s+records/i.test(q))).toBe(false);
   } finally {
     db.close();

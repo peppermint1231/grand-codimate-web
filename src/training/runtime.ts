@@ -1,3 +1,4 @@
+import { guideAccountReport } from "../core/guideLearningReport";
 import type { Inquiry } from "../core/discovery";
 import { consultationTimes, seoulToday } from "../core/appointments";
 import {
@@ -391,6 +392,15 @@ export function installPractice(checkpoint?: PracticeCheckpoint) {
       );
       return result;
     }
+    if (
+      p === "/guide-progress/accounts" &&
+      (!init.method || init.method === "GET")
+    )
+      return {
+        accounts: state.users.map((u) =>
+          guideAccountReport(u, { lessons: {} }),
+        ),
+      };
     if (p === "/users" && init.method === "POST") {
       const i = state.users.findIndex((x) => x.id === body.id);
       if (i < 0)

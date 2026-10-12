@@ -1,0 +1,122 @@
+{
+  "start": {
+    "revision": "6d30e2ed0a5852328b34",
+    "updatedIn": "0.18.19"
+  },
+  "find-patient": {
+    "revision": "3d9dc0e425840bcbd016",
+    "updatedIn": "0.18.19"
+  },
+  "register": {
+    "revision": "7695fc3858b05f752e94",
+    "updatedIn": "0.18.19"
+  },
+  "requests": {
+    "revision": "a3ecb1a643ccd9b3c52c",
+    "updatedIn": "0.18.19"
+  },
+  "consult-start": {
+    "revision": "103b369eb34dcb3b9e52",
+    "updatedIn": "0.18.19"
+  },
+  "photos": {
+    "revision": "7cac69958a373d186cfe",
+    "updatedIn": "0.18.19"
+  },
+  "editor": {
+    "revision": "6656ca5273150671c484",
+    "updatedIn": "0.18.19"
+  },
+  "procedures": {
+    "revision": "770996e5d4e5f57d9286",
+    "updatedIn": "0.18.19"
+  },
+  "pricing": {
+    "revision": "dc68aa0ffaa1262a05c9",
+    "updatedIn": "0.18.19"
+  },
+  "notes-opinions": {
+    "revision": "ade243722a84c71d75dc",
+    "updatedIn": "0.18.19"
+  },
+  "doctor": {
+    "revision": "6193f2cb0a3c0bb17096",
+    "updatedIn": "0.18.19"
+  },
+  "quote-consent": {
+    "revision": "866a0cde7e134c54804d",
+    "updatedIn": "0.18.19"
+  },
+  "finish": {
+    "revision": "323117591e10cccd92d3",
+    "updatedIn": "0.18.19"
+  },
+  "payments": {
+    "revision": "bd121f02ec9dfbc101e8",
+    "updatedIn": "0.18.19"
+  },
+  "followup": {
+    "revision": "b8cd719da1743e057e08",
+    "updatedIn": "0.18.19"
+  },
+  "points": {
+    "revision": "ad03fd207276ec73852f",
+    "updatedIn": "0.18.19"
+  },
+  "recovery": {
+    "revision": "0a93a678d05d74fa6529",
+    "updatedIn": "0.18.19"
+  },
+  "catalog-basics": {
+    "revision": "3a9ca22402cd4bce2581",
+    "updatedIn": "0.18.19"
+  },
+  "product": {
+    "revision": "a80a145a7a735cabf696",
+    "updatedIn": "0.18.19"
+  },
+  "packages": {
+    "revision": "5efd0ebb35849ebdadd7",
+    "updatedIn": "0.18.19"
+  },
+  "catalog-bulk": {
+    "revision": "50ec2d059255e64133d2",
+    "updatedIn": "0.18.19"
+  },
+  "homepage": {
+    "revision": "d525a6da8f8bb2fd8753",
+    "updatedIn": "0.18.19"
+  },
+  "discovery-settings": {
+    "revision": "abb68d8de7eaeb188403",
+    "updatedIn": "0.18.19"
+  },
+  "insurance-membership": {
+    "revision": "d7ec7187f775dd7fc2f4",
+    "updatedIn": "0.18.19"
+  },
+  "consent-admin": {
+    "revision": "f8b96f4627190116de93",
+    "updatedIn": "0.18.19"
+  },
+  "grades-admin": {
+    "revision": "036396a7f6fa06d34c3b",
+    "updatedIn": "0.18.19"
+  },
+  "accounts": {
+    "revision": "23038a6a10be9fca8da9",
+    "updatedIn": "0.18.19"
+  },
+  "statistics": {
+    "revision": "6993344f738670741525",
+    "updatedIn": "0.18.19"
+  },
+  "marketing": {
+    "revision": "20ab806b0b1a0adadec8",
+    "updatedIn": "0.18.19"
+  },
+  "operations": {
+    "revision": "04e1910224cc0c10e784",
+    "updatedIn": "0.18.19"
+  }
+}

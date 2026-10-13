@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import ts from "typescript";
+import vm from "node:vm";
 const root = path.resolve(import.meta.dirname, "..");
 const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 const hash = (v) =>
@@ -50,6 +51,19 @@ const extract = (ref) => {
   if (!fn) throw Error("사용법 연결 함수 없음: " + ref);
   return fn.getText(parsed);
 };
+// Stable practice IDs are the completion contract; text/source hashes only mark unread updates.
+const compiled = ts.transpileModule(read("src/core/guideTraining.ts"), {
+  compilerOptions: {
+    module: ts.ModuleKind.CommonJS,
+    target: ts.ScriptTarget.ES2022,
+  },
+}).outputText;
+const exported = {};
+vm.runInNewContext(compiled, { exports: exported });
+const learningLegacy = JSON.parse(
+  read("src/data/userGuideLearningLegacy.json"),
+);
+const recipes = exported.practiceRecipes;
 const next = {},
   updates = {},
   errors = [];
@@ -74,7 +88,33 @@ for (const lesson of lessons) {
     sourceHash,
     updatedIn: changed ? version : old[lesson.id].updatedIn,
   };
-  updates[lesson.id] = { revision, updatedIn: next[lesson.id].updatedIn };
+  const learningVersion = lesson.learningVersion || 1;
+  const recipe = recipes.find((r) => r.id === lesson.id);
+  if (
+    !recipe ||
+    new Set(recipe.steps.map((s) => s.id)).size !== recipe.steps.length
+  )
+    throw Error(
+      "실습 단계 ID는 과정 안에서 고유하고 영구적이어야 합니다: " + lesson.id,
+    );
+  const compatibleRevisions =
+    learningVersion === (old[lesson.id]?.learningVersion || 1)
+      ? [
+          ...new Set([
+            ...(learningVersion === 1 ? learningLegacy[lesson.id] || [] : []),
+            ...(old[lesson.id]?.compatibleRevisions || []),
+            ...(old[lesson.id]?.revision ? [old[lesson.id].revision] : []),
+          ]),
+        ].filter((r) => r !== revision)
+      : [];
+  Object.assign(next[lesson.id], { learningVersion, compatibleRevisions });
+  updates[lesson.id] = {
+    revision,
+    updatedIn: next[lesson.id].updatedIn,
+    learningVersion,
+    compatibleRevisions,
+    stepIds: recipe.steps.map((s) => s.id),
+  };
 }
 const missingFiles = fs
   .readdirSync(path.join(root, "src/components"))

@@ -6,7 +6,7 @@ import {
   filterGuide,
   readGuideProgress,
 } from "../src/core/userGuide";
-it("new and revised lessons stay unread until this revision is acknowledged; older completion does not count", () => {
+it("new and revised lessons stay unread until this revision is acknowledged; unknown old completion does not count", () => {
   const lesson = guideLessons[0],
     current = guideUpdates[lesson.id].revision;
   expect(guideStatus(lesson, { lessons: {} })).toMatchObject({
@@ -46,7 +46,7 @@ it("new and revised lessons stay unread until this revision is acknowledged; old
           acknowledged: current,
           revision: current,
           completed: true,
-          steps: lesson.steps.map((s) => s.id),
+          steps: guideUpdates[lesson.id].stepIds,
         },
       },
     }),

@@ -91,7 +91,7 @@ export function useGuideProgress(userId: string) {
     };
   }, [userId]);
   const change = (
-    action: "select" | "ack" | "step" | "restart",
+    action: "select" | "ack" | "step" | "skip" | "review" | "restart",
     lessonId: string,
     extra: Record<string, unknown> = {},
   ) => {

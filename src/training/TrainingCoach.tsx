@@ -13,6 +13,8 @@ import "../components/GuidePractice.css";
 export type PracticeInit = {
   lessonId: string;
   steps: string[];
+  skipped?: string[];
+  cursor?: number;
   checkpoint?: PracticeCheckpoint | null;
   revision: string;
 };
@@ -38,7 +40,11 @@ export function TrainingCoach({
   }, []);
   const recipe = practiceRecipe(initial.lessonId)!;
   const scenario = scenarios[initial.lessonId as keyof typeof scenarios];
-  const [briefed, setBriefed] = useState(initial.steps.length > 0),
+  const [briefed, setBriefed] = useState(
+      initial.steps.length > 0 ||
+        (initial.skipped?.length || 0) > 0 ||
+        (initial.cursor || 0) > 0,
+    ),
     [choice, setChoice] = useState<number | null>(null),
     [hint, setHint] = useState(
       initial.steps.length === recipe.steps.length - 1,
@@ -68,6 +74,8 @@ export function TrainingCoach({
   }, []);
 
   const [steps, setSteps] = useState(initial.steps),
+    [skipped, setSkipped] = useState(initial.skipped || []),
+    [index, setIndex] = useState(initial.cursor ?? initial.steps.length),
     [waiting, setWaiting] = useState(false),
     [ready, setReady] = useState(false),
     [rect, setRect] = useState<DOMRect | null>(null);
@@ -78,7 +86,6 @@ export function TrainingCoach({
     booted = useRef(false),
     pending = useRef(false);
   const session = new URLSearchParams(location.search).get("session"),
-    index = steps.length,
     step = recipe.steps[index],
     target = useRef<HTMLElement | undefined>(undefined);
   useEffect(() => {
@@ -96,6 +103,51 @@ export function TrainingCoach({
   }, [ready, briefed, index]);
   const post = (data: unknown) =>
     parent.postMessage({ ...(data as any), session }, location.origin);
+  const checkpoint = () => ({
+    kind: "codimate-practice-v1",
+    state: runtime.snapshot(),
+    drafts: runtime.drafts(),
+    editors: runtime.editors(),
+    inquiries: runtime.inquiries(),
+    route: route.current,
+    actions:
+      initial.lessonId === "editor"
+        ? document.querySelector(".photo-editor")
+          ? [
+              ...actions.current.slice(0, 1),
+              ...[
+                ...document.querySelectorAll(
+                  ".photo-editor details[open] > summary",
+                ),
+              ].map((el) => ({ selector: selectorFor(el) })),
+              ...(document.fullscreenElement ||
+              document.querySelector(".training-expanded-stage")
+                ? actions.current
+                    .filter((a) => {
+                      const el = document.querySelector(a.selector);
+                      return el?.textContent === "크게 보기";
+                    })
+                    .slice(-1)
+                : []),
+            ]
+          : []
+        : actions.current,
+  });
+  const skipStep = () => {
+    if (!step || pending.current || !ready || !briefed) return;
+    success.current = null;
+    pending.current = true;
+    setWaiting(true);
+    setTimeout(
+      () =>
+        post({
+          type: "practice:skip",
+          stepId: step.id,
+          checkpoint: checkpoint(),
+        }),
+      180,
+    );
+  };
   useEffect(() => {
     const start = () => {
       if (booted.current) return;
@@ -154,8 +206,16 @@ export function TrainingCoach({
         e.data.type !== "practice:ack"
       )
         return;
-      if (success.current) setFeedback(success.current);
-      setHint(e.data.steps.length === recipe.steps.length - 1);
+      if (e.data.action !== "skip" && success.current)
+        setFeedback(success.current);
+      else setFeedback(null);
+      const next =
+        e.data.steps.length === recipe.steps.length
+          ? recipe.steps.length
+          : (e.data.cursor ?? e.data.steps.length);
+      setIndex(next);
+      setSkipped(e.data.skipped || []);
+      setHint(next === recipe.steps.length - 1);
       setCollapsed(false);
       setSteps(e.data.steps);
       pending.current = false;
@@ -165,7 +225,7 @@ export function TrainingCoach({
     return () => window.removeEventListener("message", ack);
   }, []);
   useEffect(() => {
-    if (!ready || !briefed || !step) return;
+    if (!ready || !briefed || !step || feedback) return;
     target.current = undefined;
     actionRect.current = null;
     let dead = false;
@@ -197,36 +257,7 @@ export function TrainingCoach({
           post({
             type: "practice:step",
             stepId: step.id,
-            checkpoint: {
-              kind: "codimate-practice-v1",
-              state: runtime.snapshot(),
-              drafts: runtime.drafts(),
-              editors: runtime.editors(),
-              inquiries: runtime.inquiries(),
-              route: route.current,
-              actions:
-                initial.lessonId === "editor"
-                  ? document.querySelector(".photo-editor")
-                    ? [
-                        ...actions.current.slice(0, 1),
-                        ...[
-                          ...document.querySelectorAll(
-                            ".photo-editor details[open] > summary",
-                          ),
-                        ].map((el) => ({ selector: selectorFor(el) })),
-                        ...(document.fullscreenElement ||
-                        document.querySelector(".training-expanded-stage")
-                          ? actions.current
-                              .filter((a) => {
-                                const el = document.querySelector(a.selector);
-                                return el?.textContent === "크게 보기";
-                              })
-                              .slice(-1)
-                          : []),
-                      ]
-                    : []
-                  : actions.current,
-            },
+            checkpoint: checkpoint(),
           });
       }, 180);
     };
@@ -333,7 +364,52 @@ export function TrainingCoach({
       document.removeEventListener("change", input, true);
       window.removeEventListener("practice:command", command);
     };
-  }, [ready, index, briefed]);
+  }, [ready, index, briefed, feedback]);
+  const feedbackRef = useRef(feedback);
+  feedbackRef.current = feedback;
+  const consumedKey = useRef<string | null>(null);
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (consumedKey.current === e.key) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (
+        !feedbackRef.current ||
+        e.isComposing ||
+        e.repeat ||
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        !["Enter", " "].includes(e.key)
+      )
+        return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      consumedKey.current = e.key;
+      feedbackRef.current = null;
+      success.current = null;
+      setFeedback(null);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (consumedKey.current !== e.key) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      consumedKey.current = null;
+    };
+    const blur = () => {
+      consumedKey.current = null;
+    };
+    window.addEventListener("keydown", down, true);
+    window.addEventListener("keyup", up, true);
+    window.addEventListener("blur", blur);
+    return () => {
+      window.removeEventListener("keydown", down, true);
+      window.removeEventListener("keyup", up, true);
+      window.removeEventListener("blur", blur);
+    };
+  }, []);
   useEffect(() => {
     if (!feedback) return;
     const nextField = (e: KeyboardEvent) => {
@@ -411,6 +487,7 @@ export function TrainingCoach({
           >
             {step ? "다음 목표 보기" : "완료 안내 보기"}
           </button>
+          <small>Enter 또는 Space로 바로 이동</small>
         </section>
       )}
       <aside
@@ -428,7 +505,9 @@ export function TrainingCoach({
       >
         <strong>
           {!step
-            ? "상황 해결 완료"
+            ? steps.length === recipe.steps.length
+              ? "상황 해결 완료"
+              : "아직 미완료 단계가 있어요"
             : !briefed
               ? "오늘의 업무 상황"
               : `${index + 1} / ${recipe.steps.length} · 업무 목표`}
@@ -474,10 +553,21 @@ export function TrainingCoach({
             )}
           </>
         ) : waiting ? (
-          <p>조작 결과 확인 완료 · 계정에 진도를 저장하고 있습니다…</p>
+          <p>계정에 연습 위치와 진도를 저장하고 있습니다…</p>
         ) : step ? (
           <>
             <p className="training-mission">{scenario.steps[index].goal}</p>
+            {steps.includes(step.id) && (
+              <small>
+                이미 성공한 단계입니다. 다음 작업에 필요한 화면을 준비하는
+                복습이며 수료 기록은 유지됩니다.
+              </small>
+            )}
+            {skipped.length > 0 && (
+              <p className="training-pending-count">
+                넘어간 미완료 {skipped.length}개 · 성공해야 수료됩니다
+              </p>
+            )}
             {step.kind === "value" &&
               [
                 "start",
@@ -517,6 +607,17 @@ export function TrainingCoach({
             >
               {hint ? "힌트 숨기기" : "막혔어요 · 힌트 보기"}
             </button>
+            <button
+              className="training-skip"
+              disabled={waiting}
+              onClick={skipStep}
+            >
+              이 지시문 넘어가기
+            </button>
+            <small>
+              넘어가도 성공 처리되지 않습니다. 다음 작업에 필요한 화면은 직접
+              준비해야 합니다.
+            </small>
             {hint && (
               <div className="training-hint">
                 <p>{step.instruction}</p>
@@ -531,6 +632,33 @@ export function TrainingCoach({
               </small>
             )}
           </>
+        ) : steps.length < recipe.steps.length ? (
+          <div className="training-pending-review">
+            <p>
+              {recipe.steps.length - steps.length}개 단계가 미완료입니다. 모두
+              직접 성공해야 수료됩니다.
+            </p>
+            <ol>
+              {recipe.steps.map(
+                (s, i) =>
+                  !steps.includes(s.id) && (
+                    <li key={s.id} value={i + 1}>
+                      {scenario.steps[i].goal}
+                    </li>
+                  ),
+              )}
+            </ol>
+            <button
+              className="primary"
+              onClick={() => post({ type: "practice:review" })}
+            >
+              미완료 단계 다시 연습
+            </button>
+            <small>
+              처음 넘어간 화면부터 이어서 연습합니다. 필요한 앞뒤 조작을 다시
+              해도 기존 성공 기록은 유지됩니다.
+            </small>
+          </div>
         ) : (
           <>
             <p>{scenario.debrief}</p>

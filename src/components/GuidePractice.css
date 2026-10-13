@@ -357,3 +357,9 @@
   z-index: 99990;
   background: #edf2ee;
 }
+
+.training-skip { margin-left: 8px; }
+.training-pending-count, .guide-skipped-note { color: #9b4514; font-weight: 700; }
+.training-pending-review ol { max-height: 180px; overflow-y: auto; padding-left: 18px; }
+.training-pending-review li { margin: 8px 0; }
+.training-success small { grid-column: 1 / -1; color: #335b50; }

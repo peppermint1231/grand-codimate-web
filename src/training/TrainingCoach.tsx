@@ -263,8 +263,18 @@ export function TrainingCoach({
         step.kind === "value" &&
         match(e) &&
         normalize(el.value) === normalize(step.value || "")
-      )
-        finish();
+      ) {
+        // This listener runs in capture phase, before React commits the input.
+        // Updating the coach synchronously can restore the previous controlled
+        // value and swallow the last digit. Check the committed value next tick.
+        setTimeout(() => {
+          if (
+            el.isConnected &&
+            normalize(el.value) === normalize(step.value || "")
+          )
+            finish();
+        }, 0);
+      }
     };
     const command = (e: Event) => {
       const c = (e as CustomEvent).detail;
@@ -292,8 +302,18 @@ export function TrainingCoach({
         step.kind === "value" &&
         el instanceof HTMLSelectElement &&
         normalize(el.value) === normalize(step.value || "")
-      )
-        finish();
+      ) {
+        // This listener runs in capture phase, before React commits the input.
+        // Updating the coach synchronously can restore the previous controlled
+        // value and swallow the last digit. Check the committed value next tick.
+        setTimeout(() => {
+          if (
+            el.isConnected &&
+            normalize(el.value) === normalize(step.value || "")
+          )
+            finish();
+        }, 0);
+      }
     };
     window.addEventListener("practice:confirm-default", confirmDefault);
     window.addEventListener("practice:annotation", annotated);

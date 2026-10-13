@@ -1,18 +1,18 @@
 {
   "start": {
-    "revision": "634591dc01da1c80b5da",
-    "sourceHash": "d7d3aaf4192c44caf693",
-    "updatedIn": "0.18.26"
+    "revision": "7f23a4846ecdf3829b91",
+    "sourceHash": "567b32f1565d3015513f",
+    "updatedIn": "0.18.27"
   },
   "find-patient": {
-    "revision": "4ee2e2ff9edcfc78544c",
-    "sourceHash": "04e98fc3c871a8b144c9",
-    "updatedIn": "0.18.26"
+    "revision": "f8e6b1f8fe22733b32c8",
+    "sourceHash": "88175e75ecc4ffae11ba",
+    "updatedIn": "0.18.27"
   },
   "register": {
-    "revision": "85308d5832d2171737dd",
-    "sourceHash": "2de878268ad0f983a471",
-    "updatedIn": "0.18.26"
+    "revision": "b574016124b6a813b33c",
+    "sourceHash": "d06b1fff3fa4d932f095",
+    "updatedIn": "0.18.27"
   },
   "quick-consult": {
     "revision": "fc5fc30da1eeeb6ab524",
@@ -20,138 +20,138 @@
     "updatedIn": "0.18.26"
   },
   "requests": {
-    "revision": "1cd7779ad3cec8f3d49c",
-    "sourceHash": "a3eddc91d7ebaf7303d1",
-    "updatedIn": "0.18.26"
+    "revision": "c276c9f40d689adb3981",
+    "sourceHash": "c2af65c9aa145b013e6e",
+    "updatedIn": "0.18.27"
   },
   "consult-start": {
-    "revision": "c7a350f68291693e39b4",
-    "sourceHash": "0985fa35ba5054f2a90a",
-    "updatedIn": "0.18.26"
+    "revision": "2dab05f8ef3185c2feba",
+    "sourceHash": "3acbe86fd2057a9d6278",
+    "updatedIn": "0.18.27"
   },
   "photos": {
-    "revision": "37b70afac9f34e15d873",
-    "sourceHash": "2143e8a882f7689d6c10",
-    "updatedIn": "0.18.26"
+    "revision": "5909436dbbcc924354bf",
+    "sourceHash": "46f26273f864201c4283",
+    "updatedIn": "0.18.27"
   },
   "editor": {
-    "revision": "9a2435eec9d8a123ddaf",
-    "sourceHash": "690431bf05b94afb716c",
-    "updatedIn": "0.18.26"
+    "revision": "d9b544991b2ac87b8843",
+    "sourceHash": "a2485d529b3cabc8ca52",
+    "updatedIn": "0.18.27"
   },
   "procedures": {
-    "revision": "48a9b5797a32ac02c116",
-    "sourceHash": "7b9bb1aa2019a83233b7",
-    "updatedIn": "0.18.26"
+    "revision": "74341a877e00045a9ed5",
+    "sourceHash": "7b7f69fc85462432ae1b",
+    "updatedIn": "0.18.27"
   },
   "pricing": {
-    "revision": "258ceef4e3e1833097bb",
-    "sourceHash": "f8095ed09c7ce60643cb",
-    "updatedIn": "0.18.26"
+    "revision": "bd366115bc96e71fb99c",
+    "sourceHash": "0fbb63d9c0b32e27c6bf",
+    "updatedIn": "0.18.27"
   },
   "notes-opinions": {
-    "revision": "690a645e19408b364572",
-    "sourceHash": "7f145ca2e8978100817e",
-    "updatedIn": "0.18.26"
+    "revision": "433cdcc00c8b333e4f83",
+    "sourceHash": "9f900f2c68fe6d2f2ef4",
+    "updatedIn": "0.18.27"
   },
   "doctor": {
-    "revision": "b068c4cdc6213d5caea1",
-    "sourceHash": "69b1bf065f4cd7509e5d",
-    "updatedIn": "0.18.26"
+    "revision": "68fe82c7ccfc1f988a03",
+    "sourceHash": "c2bdcc982c26258277b5",
+    "updatedIn": "0.18.27"
   },
   "quote-consent": {
-    "revision": "4a53842957f6235ec0ab",
-    "sourceHash": "43a22edea17d2c12af04",
-    "updatedIn": "0.18.26"
+    "revision": "530794b31253257f815f",
+    "sourceHash": "cb1ac05414e019b66d46",
+    "updatedIn": "0.18.27"
   },
   "finish": {
-    "revision": "28d72f92f26e19a1195e",
-    "sourceHash": "18c7e0ea27512962f9d0",
-    "updatedIn": "0.18.26"
+    "revision": "7469baef5e5cf3b5ae20",
+    "sourceHash": "55dfc788bfb2ede208d7",
+    "updatedIn": "0.18.27"
   },
   "payments": {
-    "revision": "0d120942d8a739101b7a",
-    "sourceHash": "da8b5c11d4084e40c612",
-    "updatedIn": "0.18.26"
+    "revision": "51468c570646cc520dbc",
+    "sourceHash": "fab41c2c033293edded5",
+    "updatedIn": "0.18.27"
   },
   "followup": {
-    "revision": "1541d6247b0ea8025698",
-    "sourceHash": "a0f66f997f529ad551c8",
-    "updatedIn": "0.18.26"
+    "revision": "517fad1cc8851a2e8c8e",
+    "sourceHash": "650d268276c9c1826071",
+    "updatedIn": "0.18.27"
   },
   "points": {
-    "revision": "989d6bb1c4c972a066e2",
-    "sourceHash": "4b94ea9ffeb2a8198aa3",
-    "updatedIn": "0.18.26"
+    "revision": "3614189697f325973830",
+    "sourceHash": "9a871cb38a51e0f825c2",
+    "updatedIn": "0.18.27"
   },
   "recovery": {
-    "revision": "699fa811936857a407ba",
-    "sourceHash": "b721c88f167ab2f19889",
-    "updatedIn": "0.18.26"
+    "revision": "89d6413bdd099591e77a",
+    "sourceHash": "478983fb4fd8b46bdfa4",
+    "updatedIn": "0.18.27"
   },
   "catalog-basics": {
-    "revision": "f4f5affb4ba932f6393a",
-    "sourceHash": "88c5d395ca0bc2a6e022",
-    "updatedIn": "0.18.26"
+    "revision": "0faa50dbb3fdae2eee40",
+    "sourceHash": "c773326cf6bd6c2cc3ba",
+    "updatedIn": "0.18.27"
   },
   "product": {
-    "revision": "2fb7c9e769089f1e7c33",
-    "sourceHash": "13acabf2602d3baabd57",
-    "updatedIn": "0.18.26"
+    "revision": "467b69e974ae662562da",
+    "sourceHash": "98deaaf3269714cd9161",
+    "updatedIn": "0.18.27"
   },
   "packages": {
-    "revision": "812963df6749201a325b",
-    "sourceHash": "8b943cae47e427e3a87b",
-    "updatedIn": "0.18.26"
+    "revision": "b8253af57bf2df35c495",
+    "sourceHash": "febdf974c5a37886dd76",
+    "updatedIn": "0.18.27"
   },
   "catalog-bulk": {
-    "revision": "3574cbf7e8f901847a1d",
-    "sourceHash": "b65b8f5028e72c1cc7d6",
-    "updatedIn": "0.18.26"
+    "revision": "4d9367969ad987fe180c",
+    "sourceHash": "8ecd6b05219ffeb02ac6",
+    "updatedIn": "0.18.27"
   },
   "homepage": {
-    "revision": "c55267f284b161a4c078",
-    "sourceHash": "d20cef5d72ef6065130e",
-    "updatedIn": "0.18.26"
+    "revision": "c59456b289bd6c6591c0",
+    "sourceHash": "523cf38a7cba7ab76ff7",
+    "updatedIn": "0.18.27"
   },
   "discovery-settings": {
-    "revision": "d7c2e8f0303ec334d4a5",
-    "sourceHash": "e1e6076f18f682fcf631",
-    "updatedIn": "0.18.26"
+    "revision": "0ca0e1cf9c81eb92e733",
+    "sourceHash": "c5be608d8c38a9bcd430",
+    "updatedIn": "0.18.27"
   },
   "insurance-membership": {
-    "revision": "7767d4f88e2925b42e54",
-    "sourceHash": "b533a35b1e52f215f9c9",
-    "updatedIn": "0.18.26"
+    "revision": "0dac9002e2cfcc1e80fb",
+    "sourceHash": "6a74b49094de668cf946",
+    "updatedIn": "0.18.27"
   },
   "consent-admin": {
-    "revision": "7d76428998f526399aee",
-    "sourceHash": "9aaf02f33da4ac481004",
-    "updatedIn": "0.18.26"
+    "revision": "2f65ba395b4073ee768a",
+    "sourceHash": "2ed7536e6e117c9e7466",
+    "updatedIn": "0.18.27"
   },
   "grades-admin": {
-    "revision": "0d116b0e4aec1e0bfcb1",
-    "sourceHash": "bc2159ce76f024b25c38",
-    "updatedIn": "0.18.26"
+    "revision": "359d689a3543402c11ce",
+    "sourceHash": "df9260f34233cc1c45f1",
+    "updatedIn": "0.18.27"
   },
   "accounts": {
-    "revision": "8e03706f46a6ae6f6844",
-    "sourceHash": "3b833be5f86e2c5de843",
-    "updatedIn": "0.18.26"
+    "revision": "478f022bb431ec3d5e24",
+    "sourceHash": "a8695d84f46b9721fc70",
+    "updatedIn": "0.18.27"
   },
   "statistics": {
-    "revision": "c2bb21c82a53b93520ea",
-    "sourceHash": "b9173f900a8b021088f1",
-    "updatedIn": "0.18.26"
+    "revision": "f85e7165b990b8b0365f",
+    "sourceHash": "9a459be72f784ee3e208",
+    "updatedIn": "0.18.27"
   },
   "marketing": {
-    "revision": "c2ef49ed7c8655d4e059",
-    "sourceHash": "69e67d1ede801b22bff3",
-    "updatedIn": "0.18.26"
+    "revision": "fb6f096f6ec248fa7ad6",
+    "sourceHash": "1a366db266ab893c6761",
+    "updatedIn": "0.18.27"
   },
   "operations": {
-    "revision": "3e006b2ea63c59aa6a90",
-    "sourceHash": "ddfc9ec42777e41bb9da",
-    "updatedIn": "0.18.26"
+    "revision": "61ea6b21b65c0186ab58",
+    "sourceHash": "da54c91076447bae9c46",
+    "updatedIn": "0.18.27"
   }
 }

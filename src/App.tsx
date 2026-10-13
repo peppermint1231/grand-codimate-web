@@ -1,3 +1,4 @@
+import { CatalogExchange } from "./components/CatalogExchange";
 import { NumberInput } from "./components/NumberInput";
 import { HomeDashboard, type HistoryFilter } from "./components/HomeDashboard";
 import { QuickPatientLink } from "./components/QuickPatientLink";
@@ -245,13 +246,7 @@ import {
   stagePhoto,
   type CachedSession,
 } from "./lib/api";
-import {
-  catalogWorkbook,
-  catalogCSV,
-  statisticsWorkbook,
-  downloadWorkbook,
-  download,
-} from "./core/excel";
+import { statisticsWorkbook, downloadWorkbook, download } from "./core/excel";
 import { consultationPDF, quoteJPG, documentName } from "./lib/documents";
 import {
   PhotoEditor,
@@ -364,6 +359,7 @@ export function App() {
     (lesson) => guideStatus(lesson, guideLearning.progress).unread,
   ).length;
   const [guidePractice, setGuidePractice] = useState("");
+  const [catalogImport, setCatalogImport] = useState<Catalog>();
   const opinionPollGeneration = useRef(0);
   const unreadReplies = user
     ? state.opinions.filter((o) =>
@@ -1805,19 +1801,6 @@ export function App() {
               }
             />
           )}
-          {page === "patients" && !patient && (
-            <button
-              className="card discovery-home-entry"
-              onClick={() => setPage("discovery")}
-            >
-              <HeartHandshake size={24} />
-              <span>
-                <b>맞춤 시술 찾기</b>
-                <small>환자용 웹 화면 열기 · 새 상담 요청 확인</small>
-              </span>
-              <ChevronRight size={20} />
-            </button>
-          )}
           {page === "patients" &&
             (patient ? (
               <PatientDetail
@@ -1994,7 +1977,14 @@ export function App() {
             />
           )}
           {page === "catalog" && (
-            <CatalogView state={state} user={user} send={send} work={work} />
+            <CatalogView
+              state={state}
+              user={user}
+              send={send}
+              work={work}
+              initialCatalog={catalogImport}
+              onImportConsumed={() => setCatalogImport(undefined)}
+            />
           )}
           {page === "stats" &&
             (allowed(user, "stats.read") ? (
@@ -2003,44 +1993,48 @@ export function App() {
               <Empty>통계 열람 권한이 필요합니다.</Empty>
             ))}
           {page === "settings" && (
-            <>
-              <div className="card">
-                <h3>이 기기의 오프라인 보관</h3>
-                <p>
-                  {vaultEnabled()
-                    ? "암호화 기기 보관이 활성화되어 있습니다."
-                    : "로그인 유지와 별도로, 기기 보관 암호로 초안·미전송 자료를 열 수 있습니다."}
-                </p>
-                {!vaultEnabled() && (
-                  <button
-                    onClick={() =>
-                      work(async () => {
-                        const pass =
-                          window.prompt("기기 보관 암호 (12자 이상)");
-                        if (!pass) return;
-                        await unlockVault(user.id, pass);
-                        setPending(
-                          (await vaultRead<Command[]>("pending")) || [],
-                        );
-                        setNotice(
-                          "기기 보관을 열었습니다. 미전송 자료가 있으면 재시도하세요.",
-                        );
-                      })
-                    }
-                  >
-                    기기 보관 잠금 해제·설정
-                  </button>
-                )}
-              </div>
-              <SettingsView
-                state={state}
-                user={user}
-                send={send}
-                work={work}
-                refresh={refresh}
-                health={health}
-              />
-            </>
+            <SettingsView
+              state={state}
+              user={user}
+              send={send}
+              work={work}
+              refresh={refresh}
+              health={health}
+              onCatalogImport={(catalog) => {
+                setCatalogImport(catalog);
+                setPage("catalog");
+              }}
+              deviceStorage={
+                <div className="card">
+                  <h3>이 기기의 오프라인 보관</h3>
+                  <p>
+                    {vaultEnabled()
+                      ? "암호화 기기 보관이 활성화되어 있습니다."
+                      : "로그인 유지와 별도로, 기기 보관 암호로 초안·미전송 자료를 열 수 있습니다."}
+                  </p>
+                  {!vaultEnabled() && (
+                    <button
+                      onClick={() =>
+                        work(async () => {
+                          const pass =
+                            window.prompt("기기 보관 암호 (12자 이상)");
+                          if (!pass) return;
+                          await unlockVault(user.id, pass);
+                          setPending(
+                            (await vaultRead<Command[]>("pending")) || [],
+                          );
+                          setNotice(
+                            "기기 보관을 열었습니다. 미전송 자료가 있으면 재시도하세요.",
+                          );
+                        })
+                      }
+                    >
+                      기기 보관 잠금 해제·설정
+                    </button>
+                  )}
+                </div>
+              }
+            />
           )}
         </div>
       </main>
@@ -5768,7 +5762,11 @@ function CatalogView({
   user,
   send,
   work,
+  initialCatalog,
+  onImportConsumed,
 }: {
+  initialCatalog?: Catalog;
+  onImportConsumed?: () => void;
   state: State;
   user: User;
   send: (...args: any[]) => Promise<any>;
@@ -5786,7 +5784,14 @@ function CatalogView({
   };
   const can = allowed(user, "catalog.edit");
   const productBases = useRef<Partial<Record<CatalogBook, CatalogApplyGuard>>>(
-    {},
+    initialCatalog
+      ? {
+          [catalogBook(initialCatalog)]: catalogApplyGuard(
+            state,
+            catalogBook(initialCatalog),
+          ),
+        }
+      : {},
   );
   const [folderDraft, putFolderDraft] = useState<Catalog>();
   const [editPaused, setEditPaused] = useState(false);
@@ -5807,12 +5812,17 @@ function CatalogView({
     localStorage.setItem("codimate-folder-width", String(next));
   };
 
-  const [book, setBook] = useState<CatalogBook>("이벤트");
+  const [book, setBook] = useState<CatalogBook>(
+    initialCatalog ? catalogBook(initialCatalog) : "이벤트",
+  );
   const [categoryMode, setCategoryMode] =
     useState<CatalogCategoryMode>("concern");
   const [drafts, setDrafts] = useState<Partial<Record<CatalogBook, Catalog>>>(
-    {},
+    initialCatalog ? { [catalogBook(initialCatalog)]: initialCatalog } : {},
   );
+  useEffect(() => {
+    if (initialCatalog) onImportConsumed?.();
+  }, []);
   const unsaved =
     !!folderDraft ||
     Object.values(drafts).some(
@@ -5867,7 +5877,6 @@ function CatalogView({
   const [search, setSearch] = useState(""),
     [category, setCategory] = useState(""),
     [selected, setSelected] = useState(""),
-    [includeInactive, setIncludeInactive] = useState(false),
     [reviewFilter, setReviewFilter] = useState<CatalogProductFilter>("all");
   const [bulkIds, setBulkIds] = useState<string[]>([]),
     [paste, setPaste] = useState("");
@@ -6139,94 +6148,6 @@ function CatalogView({
       <Title
         title="단가표 관리"
         description="메뉴 판매 활성·비활성을 관리합니다. 저장하면 상담에 바로 적용되며 이전 내용은 수정이력에서 복원할 수 있습니다."
-        action={
-          <div className="button-row">
-            {can && !folderDraft && (
-              <label className="button">
-                <Plus size={18} />
-                JSON 가져와 수정
-                <input
-                  type="file"
-                  hidden
-                  accept="application/json"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file)
-                      work(async () => {
-                        const c = JSON.parse(await file.text()) as Catalog;
-                        if (c.schemaVersion !== 1 || !Array.isArray(c.products))
-                          throw new Error("변환된 단가표 JSON을 선택하세요.");
-                        setDraft({
-                          ...c,
-                          book,
-                          id: crypto.randomUUID(),
-                          rev: 0,
-                          status: "draft",
-                        });
-                        setSelected("");
-                      });
-                  }}
-                />
-              </label>
-            )}
-            <button
-              disabled={
-                current?.status !== "published" ||
-                !allowed(user, "export") ||
-                !allowed(user, "catalog.edit")
-              }
-              onClick={() =>
-                work(async () => {
-                  if (!(await send("audit.export", { format: "catalog-csv" })))
-                    return;
-                  download(
-                    catalogCSV(current!),
-                    `코디메이트_${catalogBookLabel(book)}_단가표.csv`,
-                  );
-                })
-              }
-            >
-              CSV 자료 교환
-            </button>
-            <button
-              disabled={
-                current?.status !== "published" ||
-                !allowed(user, "export") ||
-                !allowed(user, "catalog.edit")
-              }
-              onClick={() =>
-                work(async () => {
-                  if (!current || current.status !== "published")
-                    throw new Error("게시된 버전을 선택하세요.");
-                  if (!(await send("audit.export", { format: "catalog-xlsx" })))
-                    return;
-                  await downloadWorkbook(
-                    await catalogWorkbook(
-                      {
-                        ...current,
-                        products: current.products.filter(
-                          (p) =>
-                            !category ||
-                            inFolder(
-                              categoryCatalog!,
-                              categoryProducts.get(p.id) || p,
-                              category,
-                            ),
-                        ),
-                      },
-                      undefined,
-                      includeInactive,
-                    ),
-                    `코디메이트_${catalogBookLabel(book)}_단가표_${date()}.xlsx`,
-                  );
-                })
-              }
-            >
-              <FileSpreadsheet size={18} />
-              Excel 다운로드
-            </button>
-          </div>
-        }
       />
       <div className="tabs" aria-label="단가표 구분">
         {catalogBookDisplayOrder.map((kind) => (
@@ -6312,14 +6233,6 @@ function CatalogView({
                 <option value={draft.id}>저장 전 편집 내용</option>
               )}
             </select>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-              />
-              비활성 포함 내보내기
-            </label>
             {can && !folderDraft && (
               <button
                 onClick={() => {
@@ -6518,6 +6431,14 @@ function CatalogView({
                     onClick={cancelProductEdit}
                   >
                     편집 취소
+                  </button>
+                  <button
+                    type="button"
+                    {...catalogCommand("productNew")}
+                    disabled={!catalogNodes(current).length}
+                    onClick={() => setCreatingProduct(true)}
+                  >
+                    상품 추가
                   </button>
                   <button
                     type="button"
@@ -6811,9 +6732,8 @@ function CatalogView({
           )}
           {!current ? (
             <Empty>
-              전체 XLSX에서 변환한 JSON 초안을 가져오세요.
-              <br />
-              실제 단가표는 소스코드에 포함하지 않습니다.
+              ‘추가 관리’에서 새 메뉴를 구성하거나, 설정 → 단가표 자료 교환에서
+              JSON을 가져오세요.
             </Empty>
           ) : (
             <CatalogProductRows
@@ -6852,7 +6772,6 @@ function CatalogView({
           {current && editable && (
             <div className="button-row">
               <button
-                {...catalogCommand("productNew")}
                 disabled={!catalogNodes(current).length}
                 onClick={() => setCreatingProduct(true)}
               >
@@ -7602,7 +7521,11 @@ function SettingsView({
   work,
   refresh,
   health,
+  deviceStorage,
+  onCatalogImport,
 }: {
+  deviceStorage: React.ReactNode;
+  onCatalogImport: (catalog: Catalog) => void;
   state: State;
   user: User;
   send: (...args: any[]) => Promise<any>;
@@ -7610,48 +7533,66 @@ function SettingsView({
   refresh: () => Promise<any>;
   health: any;
 }) {
-  const [tab, setTab] = useState(isAdministrator(user) ? "grade" : "consent"),
+  const [tab, setTab] = useState(
+      isAdministrator(user)
+        ? "grade"
+        : canUseExecutiveFeatures(user)
+          ? "consent"
+          : allowed(user, "catalog.edit")
+            ? "exchange"
+            : "device",
+    ),
     [account, setAccount] = useState<User | undefined>(),
     [storageRoot, setStorageRoot] = useState(health.storageRoot || "상담"),
     [storageNotice, setStorageNotice] = useState("");
   useEffect(() => {
     setStorageRoot(health.storageRoot || "상담");
   }, [health.storageRoot]);
-  if (!canUseExecutiveFeatures(user))
-    return <Empty>설정은 관리자·임원 권한등급에서 사용할 수 있습니다.</Empty>;
-  const activeTab =
-    !isAdministrator(user) && !["consent", "connection"].includes(tab)
-      ? "consent"
-      : tab;
+  const tabs = [
+    ["grade", "환자 등급", isAdministrator(user)],
+    ["users", "직원·권한", isAdministrator(user)],
+    ["consent", "동의서 양식", canUseExecutiveFeatures(user)],
+    ["exchange", "단가표 자료 교환", allowed(user, "catalog.edit")],
+    [
+      "connection",
+      isAdministrator(user) ? "연결·복구" : "백업·복구",
+      canUseExecutiveFeatures(user),
+    ],
+    ["device", "기기 보관", true],
+    ["updates", "앱 업데이트", isAdministrator(user)],
+    ["audit", "조회 기록·관리자 인계", isAdministrator(user)],
+  ] as const;
+  const visibleTabs = tabs.filter(([, , visible]) => visible);
+  const activeTab = visibleTabs.some(([key]) => key === tab)
+    ? tab
+    : visibleTabs[0][0];
   return (
     <>
       <Title
         title="운영 설정"
         description="병원 운영 기준과 직원별 권한을 관리합니다."
       />
-      <div className="tabs">
-        {[
-          ["grade", "환자 등급"],
-          ["users", "직원·권한"],
-          ["consent", "동의서 양식"],
-          ["connection", isAdministrator(user) ? "연결·복구" : "백업·복구"],
-          ["updates", "앱 업데이트"],
-          ["audit", "조회 기록·관리자 인계"],
-        ]
-          .filter(
-            ([k]) =>
-              isAdministrator(user) || ["consent", "connection"].includes(k),
-          )
-          .map(([k, l]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              className={activeTab === k ? "active" : ""}
-            >
-              {l}
-            </button>
-          ))}
+      <div className="tabs settings-tabs" aria-label="운영 설정 메뉴">
+        {visibleTabs.map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={activeTab === key ? "active" : ""}
+            aria-pressed={activeTab === key}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+      {activeTab === "device" && deviceStorage}
+      {activeTab === "exchange" && allowed(user, "catalog.edit") && (
+        <CatalogExchange
+          state={s}
+          user={user}
+          send={send}
+          onImport={onCatalogImport}
+        />
+      )}
       {activeTab === "audit" && isAdministrator(user) && (
         <AdministrationReview
           state={s}

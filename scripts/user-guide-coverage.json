@@ -398,7 +398,8 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/style.css"
     ],
     "commands": []
   },
@@ -422,7 +423,8 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
       "src/components/NumberInput.tsx",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/style.css"
     ],
     "commands": [
       "catalog.apply",
@@ -447,7 +449,8 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
       "src/components/NumberInput.tsx",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/style.css"
     ],
     "commands": [
       "catalog.save"
@@ -494,7 +497,8 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
       "src/components/NumberInput.tsx",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/style.css"
     ],
     "commands": [
       "catalog.folders.commit",
@@ -517,7 +521,8 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/style.css"
     ],
     "commands": [
       "catalog.beauty.detachWebsite",
@@ -704,7 +709,9 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/components/CatalogExchange.tsx",
+      "src/style.css"
     ],
     "commands": []
   },

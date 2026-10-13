@@ -993,7 +993,7 @@ add("catalog-basics", catalog, [
 add("product", catalog, [
   step(
     "practice-2",
-    click("상품 추가를 눌러 마법사를 여세요.", text("상품 추가")),
+    click("목록 위의 상품 추가를 눌러 마법사를 여세요.", text("상품 추가")),
   ),
   step(
     "practice-3",

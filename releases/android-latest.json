@@ -1,7 +1,7 @@
 {
-  "version": "0.18.28",
-  "versionCode": 98,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.28.apk",
-  "sha256": "01f78205ee2dd2e30a7bb47bfb33acd33c7d33d1cda9314eaaf3c3e0ab1f793e",
-  "notes": "작은 사용법 수정은 기존 수료와 진도를 유지하고 새 안내 확인만 표시합니다. 성공창에서 Enter·Space로 다음 목표를 볼 수 있습니다. 지시문을 넘어가도 미완료로 남으며, 모두 성공해야 수료됩니다."
+  "version": "0.18.29",
+  "versionCode": 99,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.29.apk",
+  "sha256": "263a1dfebcb6eeef8859abd532dba7b85bb39d180448bd78a20e8d236bfc0cc2",
+  "notes": "환자목록 바로가기를 정리하고 단가표 파일 가져오기·내보내기를 설정으로 옮겼습니다. 홈페이지 갱신 도움말을 접고 목록 위에 상품·폴더 추가와 저장 버튼을 배치했습니다. 기기 보관은 운영 설정 탭에서 관리합니다."
 }

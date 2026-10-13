@@ -118,6 +118,7 @@ export function directoryRegions(
     address: string;
     addressRegion?: AddressRegion;
     archived?: boolean;
+    registrationPending?: boolean;
     mergedInto?: string;
     external?: unknown;
     id?: string;
@@ -127,7 +128,7 @@ export function directoryRegions(
   let total = 0,
     imported = 0;
   for (const p of patients) {
-    if (p.archived || p.mergedInto) continue;
+    if (p.registrationPending || p.archived || p.mergedInto) continue;
     total++;
     if (p.external || p.id?.startsWith("vegas-")) imported++;
     const name = regionLabel(p);

@@ -470,6 +470,7 @@ export function buildAnalytics(
       s.patients
         .filter(
           (p) =>
+            !p.registrationPending &&
             !p.mergedInto &&
             !p.archived &&
             beforeEnd(koreanDay(patientRegisteredAt(p))) &&
@@ -483,7 +484,9 @@ export function buildAnalytics(
   ];
   const lifetimeByPerson = new Map<string, number>(),
     openingByPerson = new Map<string, number>();
-  for (const p of s.patients.filter((p) => !p.archived && !p.mergedInto)) {
+  for (const p of s.patients.filter(
+    (p) => !p.registrationPending && !p.archived && !p.mergedInto,
+  )) {
     const key = personKey(p.id),
       opening = importedRevenue(p);
     openingByPerson.set(key, Math.max(openingByPerson.get(key) || 0, opening));

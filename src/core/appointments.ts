@@ -62,7 +62,7 @@ export function patientCandidates(
   const name = person.name.replace(/\s/g, ""),
     phone = person.phone.replace(/\D/g, "");
   return patients
-    .filter((p) => !p.archived && !p.mergedInto)
+    .filter((p) => !p.registrationPending && !p.archived && !p.mergedInto)
     .map((p) => ({
       patient: p,
       score:

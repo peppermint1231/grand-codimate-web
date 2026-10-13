@@ -59,7 +59,7 @@ export function buildMarketing(
     byPatient.get(c.patientId)!.push(c);
   }
   for (const p of s.patients) {
-    if (p.archived || p.mergedInto) continue;
+    if (p.registrationPending || p.archived || p.mergedInto) continue;
     const key = identities.get(p.id)!;
     const existing = people.get(key);
     people.set(key, {

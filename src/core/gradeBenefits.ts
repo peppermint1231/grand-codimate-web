@@ -56,7 +56,7 @@ export function benefitSettings(s: State, g: Grade): GradeBenefits {
 }
 export function currentBenefitGrade(s: State, patientId: string, now: string) {
   const p = s.patients.find((p) => p.id === patientId);
-  if (!p || p.archived || p.mergedInto) return;
+  if (!p || p.registrationPending || p.archived || p.mergedInto) return;
   const grades = s.policies[0]?.grades || [],
     r = cashRevenue(s, patientId, now),
     vip =
@@ -81,7 +81,9 @@ export function reconcileGradeBenefits(
       (l) => l.tender !== "points" && l.date <= today,
     );
   let index = 0;
-  for (const p of s.patients.filter((p) => !p.archived && !p.mergedInto)) {
+  for (const p of s.patients.filter(
+    (p) => !p.registrationPending && !p.archived && !p.mergedInto,
+  )) {
     const grade = currentBenefitGrade(s, p.id, now);
     for (const old of s.benefitAccounts.filter(
       (a) =>

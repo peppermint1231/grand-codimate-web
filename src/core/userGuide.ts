@@ -2,7 +2,13 @@ import content from "../data/userGuideLessons.json";
 import releases from "../data/userGuideUpdates.json";
 export type GuideTrack = "staff" | "admin";
 export type GuideTarget =
-  "patients" | "discovery" | "catalog" | "stats" | "settings";
+  | "home"
+  | "quick"
+  | "patients"
+  | "discovery"
+  | "catalog"
+  | "stats"
+  | "settings";
 export type GuideLesson = {
   id: string;
   track: GuideTrack;

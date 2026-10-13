@@ -325,7 +325,11 @@ export function UserGuide({
             <p>
               상황을 읽고 필요한 판단을 고른 뒤, 업무 목표를 직접 해결합니다.
               막힐 때만 힌트를 열어보세요. 조작 결과로 진도를 자동 기록하며,
-              운영 환자나 금액은 바뀌지 않습니다.
+              운영 환자나 금액은 바뀌지 않습니다. 작은 안내 수정은 기존
+              수료·진도를 유지합니다. 새 필수 단계나 큰 개편만 추가 학습이
+              필요하며, 새 안내 확인은 수료와 별도로 표시합니다. 성공창에서
+              Enter·Space로 다음 목표로 이동하고, 넘어간 지시문은 미완료로
+              남습니다.
             </p>
             <button
               className="primary"
@@ -334,7 +338,7 @@ export function UserGuide({
             >
               {status.completed
                 ? "다시 연습하기"
-                : status.steps.length
+                : status.steps.length || status.skipped.length
                   ? "연습 이어가기"
                   : "연습 시작"}
             </button>
@@ -346,6 +350,12 @@ export function UserGuide({
               </small>
             )}
           </div>
+          {status.skipped.length > 0 && (
+            <p className="guide-skipped-note">
+              넘어간 미완료 {status.skipped.length}개 · 모두 성공해야
+              수료됩니다.
+            </p>
+          )}
           {lesson.id === "product" && (
             <div className="guide-live-facts">
               <strong>현재 상품 타입</strong>

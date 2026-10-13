@@ -1,126 +1,658 @@
 {
   "start": {
-    "revision": "7f23a4846ecdf3829b91",
-    "updatedIn": "0.18.27"
+    "revision": "7ae1e38451f5608ba723",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "0614d1348ddb103a64bb",
+      "634591dc01da1c80b5da",
+      "7f23a4846ecdf3829b91",
+      "d9adaa08d5e2581d4827",
+      "33cef8b319c6138639ff"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6"
+    ]
   },
   "find-patient": {
-    "revision": "f8e6b1f8fe22733b32c8",
-    "updatedIn": "0.18.27"
+    "revision": "4c5e2ec79fff433e3bad",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "d370886f99592569009d",
+      "4ee2e2ff9edcfc78544c",
+      "f8e6b1f8fe22733b32c8",
+      "ccf938f84bc6914332d3",
+      "f6560225eb5841e7c5e4"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5"
+    ]
   },
   "register": {
-    "revision": "b574016124b6a813b33c",
-    "updatedIn": "0.18.27"
+    "revision": "433dc330078848e1762c",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "876841a2fdd67ac4ce9a",
+      "85308d5832d2171737dd",
+      "b574016124b6a813b33c",
+      "245ffa167df8ca929e55",
+      "e396746facf5cd3fe038"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7"
+    ]
   },
   "quick-consult": {
-    "revision": "fc5fc30da1eeeb6ab524",
-    "updatedIn": "0.18.26"
+    "revision": "b1dc5dc10de222ab5431",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "28161c62c4cc6a2957f3",
+      "fc5fc30da1eeeb6ab524"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8",
+      "practice-9"
+    ]
   },
   "requests": {
-    "revision": "c276c9f40d689adb3981",
-    "updatedIn": "0.18.27"
+    "revision": "e970bbc906369984206c",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "af48f72428c921285b8c",
+      "1cd7779ad3cec8f3d49c",
+      "c276c9f40d689adb3981",
+      "0c295d80601aa93b7a62",
+      "540892092843149e7f63"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8",
+      "practice-9"
+    ]
   },
   "consult-start": {
-    "revision": "2dab05f8ef3185c2feba",
-    "updatedIn": "0.18.27"
+    "revision": "6924aa0f3dbb64dd3f17",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "626da7a74542f54e89b7",
+      "c7a350f68291693e39b4",
+      "2dab05f8ef3185c2feba",
+      "6d509a1068f226db69a9",
+      "c6bd0377fb72b7129936"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5"
+    ]
   },
   "photos": {
-    "revision": "5909436dbbcc924354bf",
-    "updatedIn": "0.18.27"
+    "revision": "e599dc96a60f863586f8",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "5f891ab582db300e0e40",
+      "37b70afac9f34e15d873",
+      "5909436dbbcc924354bf",
+      "a08269d518befff9d45f",
+      "e36c825ff988f6475c22"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4"
+    ]
   },
   "editor": {
-    "revision": "d9b544991b2ac87b8843",
-    "updatedIn": "0.18.27"
+    "revision": "dc59cb4c136715675cff",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "0168d3f1e6abb5e0b80d",
+      "9a2435eec9d8a123ddaf",
+      "d9b544991b2ac87b8843",
+      "4f733f979e2bb52ff9fa",
+      "3f6d11876f0707647376"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8",
+      "practice-9",
+      "practice-10",
+      "practice-11",
+      "practice-12",
+      "practice-13",
+      "practice-14",
+      "practice-15",
+      "practice-16",
+      "practice-17",
+      "practice-18",
+      "practice-19",
+      "practice-20",
+      "practice-21",
+      "practice-22",
+      "practice-23",
+      "practice-24",
+      "practice-25",
+      "practice-26",
+      "practice-27",
+      "practice-28",
+      "practice-29",
+      "practice-30",
+      "practice-31",
+      "practice-32",
+      "practice-33",
+      "practice-34",
+      "practice-35",
+      "practice-36",
+      "practice-37",
+      "practice-38",
+      "practice-39",
+      "practice-40",
+      "practice-41",
+      "practice-42",
+      "practice-43",
+      "practice-44",
+      "practice-45",
+      "practice-46",
+      "practice-47",
+      "practice-48",
+      "practice-49",
+      "practice-50",
+      "practice-51",
+      "practice-52",
+      "practice-53",
+      "practice-54",
+      "practice-55",
+      "practice-56",
+      "practice-57",
+      "practice-58",
+      "practice-59",
+      "practice-60",
+      "practice-61",
+      "practice-62",
+      "practice-63",
+      "practice-64",
+      "practice-65",
+      "practice-66",
+      "practice-67",
+      "practice-68",
+      "practice-69",
+      "practice-70",
+      "practice-71"
+    ]
   },
   "procedures": {
-    "revision": "74341a877e00045a9ed5",
-    "updatedIn": "0.18.27"
+    "revision": "f1551d8a103ee769fa2c",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "2ee55f100cc083d83ec5",
+      "48a9b5797a32ac02c116",
+      "74341a877e00045a9ed5",
+      "6ca79730a29cd5b50bcd",
+      "b3d15dc339751ab0f502"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "pricing": {
-    "revision": "bd366115bc96e71fb99c",
-    "updatedIn": "0.18.27"
+    "revision": "eeb9e965f979dd101037",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "ba9a26c1fbf2144aed8c",
+      "258ceef4e3e1833097bb",
+      "bd366115bc96e71fb99c",
+      "f5c78146e6abe4c3324d",
+      "c4b5d7a2f609c764a600"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5"
+    ]
   },
   "notes-opinions": {
-    "revision": "433cdcc00c8b333e4f83",
-    "updatedIn": "0.18.27"
+    "revision": "33a9378c7783b0d1386f",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "e7a46660b12efaa5af46",
+      "690a645e19408b364572",
+      "433cdcc00c8b333e4f83",
+      "9ec36e82b5b67fa282b8",
+      "2b07130a9614560fcf76"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7"
+    ]
   },
   "doctor": {
-    "revision": "68fe82c7ccfc1f988a03",
-    "updatedIn": "0.18.27"
+    "revision": "de84b27744ebee2e3637",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "a0a89372c6dd46a1ec8d",
+      "b068c4cdc6213d5caea1",
+      "68fe82c7ccfc1f988a03",
+      "32c9632163dd7d829b8d",
+      "74147a9129cc34121ee4"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "quote-consent": {
-    "revision": "530794b31253257f815f",
-    "updatedIn": "0.18.27"
+    "revision": "0f324ffea3f7136c9001",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "323b530818a0eaa99291",
+      "4a53842957f6235ec0ab",
+      "530794b31253257f815f",
+      "5b3f7c21263831fb3c38",
+      "acb8510977cd9021e550"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5"
+    ]
   },
   "finish": {
-    "revision": "7469baef5e5cf3b5ae20",
-    "updatedIn": "0.18.27"
+    "revision": "5f1a732d23740fb5a134",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "9f68f2ba7984f7881373",
+      "28d72f92f26e19a1195e",
+      "7469baef5e5cf3b5ae20",
+      "62754676b5b91c518c17",
+      "1d65d6a782b668ec8555"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "payments": {
-    "revision": "51468c570646cc520dbc",
-    "updatedIn": "0.18.27"
+    "revision": "5974196f2babea8d3758",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "399731726e735d035e6b",
+      "0d120942d8a739101b7a",
+      "51468c570646cc520dbc",
+      "9fd3f7d2bad6ecdeaa0a",
+      "f7f6391ff3f278947c81"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4"
+    ]
   },
   "followup": {
-    "revision": "517fad1cc8851a2e8c8e",
-    "updatedIn": "0.18.27"
+    "revision": "e0cc86a79c3e914eb631",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "6d3c615a1654a20aeccb",
+      "1541d6247b0ea8025698",
+      "517fad1cc8851a2e8c8e",
+      "22dc3c554a5b4e7e04b4",
+      "cd5ede982ccae274d599"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "points": {
-    "revision": "3614189697f325973830",
-    "updatedIn": "0.18.27"
+    "revision": "f1a1df2e1162308c86ef",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "73e5b26c8f805f4538ac",
+      "989d6bb1c4c972a066e2",
+      "3614189697f325973830",
+      "64cc56c2aedca22d375f",
+      "37e78452c0cb9ee7b433"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7"
+    ]
   },
   "recovery": {
-    "revision": "89d6413bdd099591e77a",
-    "updatedIn": "0.18.27"
+    "revision": "a78cf21e9a2d8701a744",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "0cb1ed500f9abf18e516",
+      "699fa811936857a407ba",
+      "89d6413bdd099591e77a",
+      "fcfd29a47f9ec3f827ef",
+      "8cbbd1b7f7afee49535e"
+    ],
+    "stepIds": [
+      "practice-1"
+    ]
   },
   "catalog-basics": {
-    "revision": "0faa50dbb3fdae2eee40",
-    "updatedIn": "0.18.27"
+    "revision": "d2507bbecd273449e3f6",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "0d1797d9ae2c118913e5",
+      "f4f5affb4ba932f6393a",
+      "0faa50dbb3fdae2eee40",
+      "da09e17a23bf2d84c83d",
+      "8d3c488477823c666b41"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4"
+    ]
   },
   "product": {
-    "revision": "467b69e974ae662562da",
-    "updatedIn": "0.18.27"
+    "revision": "0e01968edda1238a2381",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "ba508439b9963cec54dc",
+      "2fb7c9e769089f1e7c33",
+      "467b69e974ae662562da",
+      "c988c77999491bf6863d",
+      "fa5453c0a8feff3efe0a"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8",
+      "practice-9"
+    ]
   },
   "packages": {
-    "revision": "b8253af57bf2df35c495",
-    "updatedIn": "0.18.27"
+    "revision": "e2f4800b9ff8c5f9527b",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "fce85bf1566357d6b639",
+      "812963df6749201a325b",
+      "b8253af57bf2df35c495",
+      "6fcbc9813a69821d3225",
+      "a082691b481645305905"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8",
+      "practice-9",
+      "practice-10",
+      "practice-11",
+      "practice-12",
+      "practice-13",
+      "practice-14"
+    ]
   },
   "catalog-bulk": {
-    "revision": "4d9367969ad987fe180c",
-    "updatedIn": "0.18.27"
+    "revision": "1e3295f677107971bb30",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "5a6f7f9677bf1dabb9b9",
+      "3574cbf7e8f901847a1d",
+      "4d9367969ad987fe180c",
+      "5e1ac16240bd0632dc6f",
+      "1d1677822769bc04a42b"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6",
+      "practice-7",
+      "practice-8"
+    ]
   },
   "homepage": {
-    "revision": "c59456b289bd6c6591c0",
-    "updatedIn": "0.18.27"
+    "revision": "e118af1c9af09bed4342",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "ef0a7f7ff024a270f266",
+      "c55267f284b161a4c078",
+      "c59456b289bd6c6591c0",
+      "385689845b32c3e9c919",
+      "f1ccb3446f3a08cc152c"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "discovery-settings": {
-    "revision": "0ca0e1cf9c81eb92e733",
-    "updatedIn": "0.18.27"
+    "revision": "8e5c8c5d437789778ea9",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "a042ff6f6c4699addd46",
+      "d7c2e8f0303ec334d4a5",
+      "0ca0e1cf9c81eb92e733",
+      "2a29600180d057e0bcfe",
+      "d26aa60c0b8bab86cb21"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "insurance-membership": {
-    "revision": "0dac9002e2cfcc1e80fb",
-    "updatedIn": "0.18.27"
+    "revision": "1f9591ca718ad75a2b96",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "023f7f9827784dcb74f6",
+      "7767d4f88e2925b42e54",
+      "0dac9002e2cfcc1e80fb",
+      "373e67cd7017ef9f6d51",
+      "a3fb90c213b23431ac75"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5",
+      "practice-6"
+    ]
   },
   "consent-admin": {
-    "revision": "2f65ba395b4073ee768a",
-    "updatedIn": "0.18.27"
+    "revision": "1b0377b02c07a3860da5",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "df661d7aeaeb985c4b10",
+      "7d76428998f526399aee",
+      "2f65ba395b4073ee768a",
+      "2c342c8e8dfac04d5e03",
+      "b0bda9856cbb70cac383"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4",
+      "practice-5"
+    ]
   },
   "grades-admin": {
-    "revision": "359d689a3543402c11ce",
-    "updatedIn": "0.18.27"
+    "revision": "b38e77164f1cb076e738",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "b67daaf67c0cc0ec03f4",
+      "0d116b0e4aec1e0bfcb1",
+      "359d689a3543402c11ce",
+      "12196cff78380d30d6d7",
+      "0834fb6d6b69f5187b45"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4"
+    ]
   },
   "accounts": {
-    "revision": "478f022bb431ec3d5e24",
-    "updatedIn": "0.18.27"
+    "revision": "3464df42d7f43b8b6eb1",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "80d1725f03c41bf52d50",
+      "8e03706f46a6ae6f6844",
+      "478f022bb431ec3d5e24",
+      "d5f594a97ddf336a36bb",
+      "84d5d17005a7373117f3",
+      "7e97efd6fe276f3c21ad"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3",
+      "practice-4"
+    ]
   },
   "statistics": {
-    "revision": "f85e7165b990b8b0365f",
-    "updatedIn": "0.18.27"
+    "revision": "9990246762fb2de98a26",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "121ac8894aed7c63ab83",
+      "c2bb21c82a53b93520ea",
+      "f85e7165b990b8b0365f",
+      "8a4843d3426d501ae83e",
+      "396fd8cdf71b4718e4dd"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2"
+    ]
   },
   "marketing": {
-    "revision": "fb6f096f6ec248fa7ad6",
-    "updatedIn": "0.18.27"
+    "revision": "c83bf7565578fcb82121",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "eef1c7fd7edd03b5e670",
+      "c2ef49ed7c8655d4e059",
+      "fb6f096f6ec248fa7ad6",
+      "a0a1dd0cbaf0a22dafa8",
+      "cf24b14f30ff205f418c"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2",
+      "practice-3"
+    ]
   },
   "operations": {
-    "revision": "61ea6b21b65c0186ab58",
-    "updatedIn": "0.18.27"
+    "revision": "c41c1c83d9f1210918a5",
+    "updatedIn": "0.18.28",
+    "learningVersion": 1,
+    "compatibleRevisions": [
+      "7596900bd2c252d35b1e",
+      "3e006b2ea63c59aa6a90",
+      "61ea6b21b65c0186ab58",
+      "d85d32316a9e3929fc71",
+      "732c9945b8a8c7cfb19d"
+    ],
+    "stepIds": [
+      "practice-1",
+      "practice-2"
+    ]
   }
 }

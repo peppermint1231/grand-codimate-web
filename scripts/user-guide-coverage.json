@@ -24,7 +24,8 @@
       "index.html",
       "src/components/HomeDashboard.tsx",
       "src/components/HomeDashboard.css",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -47,7 +48,8 @@
       "src/data/guidePracticeScenarios.json",
       "src/components/BirthDateInput.tsx",
       "src/components/BirthDateInput.css",
-      "src/core/phone.ts"
+      "src/core/phone.ts",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": [
       "patient.import.enrich",
@@ -75,9 +77,13 @@
       "src/data/guidePracticeScenarios.json",
       "src/components/BirthDateInput.tsx",
       "src/components/BirthDateInput.css",
-      "src/core/phone.ts"
+      "src/core/phone.ts",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["patient.create", "patient.update"]
+    "commands": [
+      "patient.create",
+      "patient.update"
+    ]
   },
   "requests": {
     "sources": [
@@ -95,7 +101,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -114,9 +121,13 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["consultation.create", "consultation.owner"]
+    "commands": [
+      "consultation.create",
+      "consultation.owner"
+    ]
   },
   "photos": {
     "sources": [
@@ -132,7 +143,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -154,9 +166,12 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["consultation.annotate"]
+    "commands": [
+      "consultation.annotate"
+    ]
   },
   "procedures": {
     "sources": [
@@ -173,7 +188,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -194,7 +210,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -212,9 +229,13 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["note.save", "opinion.request"]
+    "commands": [
+      "note.save",
+      "opinion.request"
+    ]
   },
   "doctor": {
     "sources": [
@@ -230,7 +251,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": [
       "opinion.annotate",
@@ -257,9 +279,13 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["quote.consent", "signature.create"]
+    "commands": [
+      "quote.consent",
+      "signature.create"
+    ]
   },
   "finish": {
     "sources": [
@@ -275,7 +301,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": [
       "consultation.save",
@@ -299,9 +326,12 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["ledger.create"]
+    "commands": [
+      "ledger.create"
+    ]
   },
   "followup": {
     "sources": [
@@ -315,9 +345,13 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["consultation.package", "followup.save"]
+    "commands": [
+      "consultation.package",
+      "followup.save"
+    ]
   },
   "points": {
     "sources": [
@@ -337,9 +371,13 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["vip.card", "points.adjust"]
+    "commands": [
+      "vip.card",
+      "points.adjust"
+    ]
   },
   "recovery": {
     "sources": [
@@ -359,7 +397,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -382,9 +421,13 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["catalog.apply", "catalog.publish"]
+    "commands": [
+      "catalog.apply",
+      "catalog.publish"
+    ]
   },
   "product": {
     "sources": [
@@ -403,9 +446,12 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["catalog.save"]
+    "commands": [
+      "catalog.save"
+    ]
   },
   "packages": {
     "sources": [
@@ -423,7 +469,8 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -446,9 +493,13 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["catalog.folders.commit", "catalog.restore"]
+    "commands": [
+      "catalog.folders.commit",
+      "catalog.restore"
+    ]
   },
   "homepage": {
     "sources": [
@@ -465,7 +516,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": [
       "catalog.beauty.detachWebsite",
@@ -490,9 +542,12 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["discovery.settings"]
+    "commands": [
+      "discovery.settings"
+    ]
   },
   "insurance-membership": {
     "sources": [
@@ -507,7 +562,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -524,9 +580,14 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["consent.installDrafts", "consent.delete", "consent.save"]
+    "commands": [
+      "consent.installDrafts",
+      "consent.delete",
+      "consent.save"
+    ]
   },
   "grades-admin": {
     "sources": [
@@ -543,7 +604,8 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": [
       "vip.policy",
@@ -569,7 +631,8 @@
       "server/guideLearning.ts",
       "src/components/GuideLearningAdmin.tsx",
       "src/core/guideLearningReport.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -589,9 +652,12 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/components/NumberInput.tsx"
+      "src/components/NumberInput.tsx",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["audit.export"]
+    "commands": [
+      "audit.export"
+    ]
   },
   "marketing": {
     "sources": [
@@ -612,7 +678,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -636,7 +703,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/data/userGuideLearningLegacy.json"
     ],
     "commands": []
   },
@@ -655,8 +723,12 @@
       "src/core/vipPoints.ts",
       "src/core/gradeBenefits.ts",
       "src/core/analytics.ts",
-      "src/core/addressRegion.ts"
+      "src/core/addressRegion.ts",
+      "src/data/userGuideLearningLegacy.json"
     ],
-    "commands": ["consultation.quickCreate", "patient.quickRegister"]
+    "commands": [
+      "consultation.quickCreate",
+      "patient.quickRegister"
+    ]
   }
 }

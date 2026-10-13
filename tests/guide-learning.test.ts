@@ -261,7 +261,11 @@ it("reports current revision completion separately from acknowledgment and old c
         steps: ["practice-1"],
         acknowledged: guideUpdates.register.revision,
       },
-      pricing: { revision: guideUpdates.pricing.revision, completed: true },
+      pricing: {
+        revision: guideUpdates.pricing.revision,
+        completed: true,
+        steps: guideUpdates.pricing.stepIds,
+      },
     },
   });
   expect(report.staff.completed).toBe(1);
@@ -277,4 +281,156 @@ it("reports current revision completion separately from acknowledgment and old c
     acknowledged: true,
   });
   expect(report).not.toHaveProperty("passwordHash");
+});
+
+it("keeps known minor-version completion and partial work separately from unread updates", async () => {
+  const f = fixture(),
+    id = "pricing",
+    old = guideUpdates[id].compatibleRevisions[0];
+  f.rows.set("guide-progress:a", {
+    lessons: {
+      [id]: {
+        revision: old,
+        acknowledged: old,
+        completed: true,
+        steps: [...guideUpdates[id].stepIds],
+      },
+    },
+  });
+  const before = await f.call("a");
+  expect(
+    guideStatus(
+      guideLessons.find((l) => l.id === id)!,
+      before,
+    ),
+  ).toMatchObject({ completed: true, unread: true });
+  await f.call("a", command(id, "ack"));
+  expect((await f.call("a")).lessons[id]).toMatchObject({
+    completed: true,
+    acknowledged: guideUpdates[id].revision,
+  });
+  f.rows.set("guide-progress:b", {
+    lessons: { [id]: { revision: old, steps: ["practice-1"] } },
+  });
+  expect((await f.call("b")).lessons[id].steps).toEqual(["practice-1"]);
+});
+it("only resets for a major learning version; a new stable step preserves earned steps", async () => {
+  const f = fixture(),
+    id = "pricing",
+    original = structuredClone(guideUpdates[id]);
+  f.rows.set("guide-progress:a", {
+    lessons: {
+      [id]: {
+        revision: original.revision,
+        learningVersion: original.learningVersion,
+        completed: true,
+        steps: [...original.stepIds],
+      },
+    },
+  });
+  try {
+    guideUpdates[id].stepIds = ["new-required", ...original.stepIds];
+    const added = (await f.call("a")).lessons[id];
+    expect(added.completed).toBe(false);
+    expect(added.steps).toEqual(original.stepIds);
+    guideUpdates[id].learningVersion++;
+    const major = (await f.call("a")).lessons[id];
+    expect(major.completed).toBe(false);
+    expect(major.steps).toEqual([]);
+  } finally {
+    Object.assign(guideUpdates[id], original);
+  }
+});
+it("skipping persists an incomplete step across devices and never completes a course", async () => {
+  const f = fixture(),
+    id = "pricing",
+    ids = guideUpdates[id].stepIds;
+  const cp = {
+    kind: "codimate-practice-v1",
+    state: practiceState(),
+    route: { page: "consult" },
+    actions: [],
+    marker: "first-skipped",
+  };
+  for (const stepId of ids)
+    await f.call("a", command(id, "skip", { stepId, checkpoint: cp }));
+  const otherDevice = await f.call("a", undefined, "?checkpoint=" + id);
+  expect(otherDevice.progress.lessons[id]).toMatchObject({
+    completed: false,
+    steps: [],
+    skipped: ids,
+    cursor: ids.length,
+  });
+  expect((await f.call("b")).lessons).toEqual({});
+  await f.call("a", command(id, "review"));
+  const review = await f.call("a", undefined, "?checkpoint=" + id);
+  expect(review.progress.lessons[id].cursor).toBe(0);
+  expect(review.checkpoint.marker).toBe("first-skipped");
+  for (const stepId of ids)
+    await f.call("a", command(id, "step", { stepId, checkpoint: cp }));
+  const done = (await f.call("a")).lessons[id];
+  expect(done.completed).toBe(true);
+  expect(done.skipped).toEqual([]);
+  expect(done.steps).toEqual(ids);
+});
+it("finishes only after the missing action succeeds, without losing later successes", async () => {
+  const f = fixture(),
+    id = "pricing",
+    ids = guideUpdates[id].stepIds;
+  const cp = {
+    kind: "codimate-practice-v1",
+    state: practiceState(),
+    route: { page: "consult" },
+    actions: [],
+  };
+  await f.call("a", command(id, "step", { stepId: ids[0], checkpoint: cp }));
+  await f.call("a", command(id, "skip", { stepId: ids[1], checkpoint: cp }));
+  for (const stepId of ids.slice(2))
+    await f.call("a", command(id, "step", { stepId, checkpoint: cp }));
+  expect((await f.call("a")).lessons[id].completed).toBe(false);
+  await f.call("a", command(id, "review"));
+  const done = await f.call(
+    "a",
+    command(id, "step", { stepId: ids[1], checkpoint: cp }),
+  );
+  expect(done.lessons[id].completed).toBe(true);
+  expect(done.lessons[id].steps).toHaveLength(ids.length);
+  // A delayed skip from another device cannot revoke success.
+  await f.call("a", command(id, "skip", { stepId: ids[1], checkpoint: cp }));
+  expect((await f.call("a")).lessons[id].completed).toBe(true);
+});
+it("skipping in a replay does not revoke an earned completion", async () => {
+  const f = fixture(),
+    id = "pricing",
+    ids = guideUpdates[id].stepIds;
+  for (const stepId of ids) await f.call("a", command(id, "step", { stepId }));
+  await f.call("a", command(id, "restart"));
+  await f.call("a", command(id, "skip", { stepId: ids[0] }));
+  const p = await f.call("a");
+  expect(p.lessons[id]).toMatchObject({
+    completed: true,
+    steps: ids,
+    replaySteps: [],
+    replaySkipped: [ids[0]],
+  });
+});
+
+it("rebuilds a missing scene without skipping preparation or losing credited steps", async () => {
+  const f = fixture(),
+    id = "pricing",
+    ids = guideUpdates[id].stepIds;
+  for (const stepId of ids.slice(0, 3))
+    await f.call("a", command(id, "step", { stepId }));
+  const reset = await f.call("a", command(id, "restart"));
+  expect(reset.lessons[id]).toMatchObject({
+    cursor: 0,
+    steps: ids.slice(0, 3),
+    completed: false,
+  });
+  const prepared = await f.call("a", command(id, "step", { stepId: ids[0] }));
+  expect(prepared.lessons[id]).toMatchObject({
+    cursor: 1,
+    steps: ids.slice(0, 3),
+    completed: false,
+  });
 });

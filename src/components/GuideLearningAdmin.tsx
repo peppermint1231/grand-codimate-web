@@ -48,8 +48,7 @@ export function GuideLearningAdmin() {
         <div>
           <h2>계정별 사용법 학습 진도</h2>
           <p>
-            현재 안내 버전 기준입니다. 학습 완료와 새 안내 확인은 별도로
-            표시합니다.
+            현재 학습 기준입니다. 학습 완료와 새 안내 확인은 별도로 표시합니다.
           </p>
         </div>
         <button disabled={loading} onClick={() => setReload((v) => v + 1)}>
@@ -123,8 +122,9 @@ export function GuideLearningAdmin() {
                 </button>
               </div>
               <p className="small">
-                관리자 과정은 담당 업무에 따라 학습합니다. 이전 버전의 완료는
-                현재 버전의 완료로 계산하지 않습니다.
+                관리자 과정은 담당 업무에 따라 학습합니다. 작은 안내 수정은 기존
+                수료를 유지하며, 새 필수 단계와 큰 개편만 추가 학습이
+                필요합니다.
               </p>
               <ul>
                 {current.lessons

@@ -2,6 +2,7 @@ import type { User } from "./model";
 import {
   guideLessons,
   guideStatus,
+  guideUpdates,
   type GuideProgress,
   type GuideTrack,
 } from "./userGuide";
@@ -23,7 +24,14 @@ export function guideAccountReport(
       acknowledged: !status.unread,
       steps: Math.min(status.steps.length, total),
       total,
-      revised: !!entry?.revision && entry.revision !== status.revision,
+      revised:
+        !!entry?.revision &&
+        (entry.learningVersion !== undefined
+          ? entry.learningVersion !== guideUpdates[lesson.id].learningVersion
+          : entry.revision !== status.revision &&
+            !guideUpdates[lesson.id].compatibleRevisions.includes(
+              entry.revision,
+            )),
     };
   });
   const summary = (track: GuideTrack) => {

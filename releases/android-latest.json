@@ -1,7 +1,7 @@
 {
-  "version": "0.18.27",
-  "versionCode": 97,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.27.apk",
-  "sha256": "4c13163a7c585b454f639edc15fdf9d62bb38ac86b4ced56172e9b5fbf8fee49",
-  "notes": "사진 편집에 색상 프리셋 10개를 추가하고 실습 안내를 개선했습니다. 가격·할인·수량·포인트 등 숫자 입력칸에서 기본값을 바로 덮어쓰고, 입력 중 빈칸을 유지할 수 있습니다. 패키지 수량·회차 편집 중 기존 배치를 보존합니다."
+  "version": "0.18.28",
+  "versionCode": 98,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.28.apk",
+  "sha256": "1120510f8e5d5981a3cc97fbfff956476d7f0a9b9d66ade2e8d04e6259b7b0ac",
+  "notes": "작은 사용법 수정은 기존 수료와 진도를 유지하고 새 안내 확인만 표시합니다. 성공창에서 Enter·Space로 다음 목표를 볼 수 있습니다. 지시문을 넘어가도 미완료로 남으며, 모두 성공해야 수료됩니다."
 }

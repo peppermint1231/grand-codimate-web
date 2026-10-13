@@ -25,11 +25,18 @@ export type GuideLesson = {
     explanation: string;
   };
   changeNote: string;
+  learningVersion?: number;
 };
 export const guideLessons = content as GuideLesson[];
 export const guideUpdates = releases as Record<
   string,
-  { revision: string; updatedIn: string }
+  {
+    revision: string;
+    updatedIn: string;
+    learningVersion: number;
+    compatibleRevisions: string[];
+    stepIds: string[];
+  }
 >;
 export type GuideEntry = {
   acknowledged?: string;
@@ -37,24 +44,73 @@ export type GuideEntry = {
   steps?: string[];
   completed?: boolean;
   replaySteps?: string[];
+  learningVersion?: number;
+  skipped?: string[];
+  cursor?: number;
+  replaySkipped?: string[];
+  replayCursor?: number;
 };
 export type GuideProgress = {
   version?: number;
   lessons: Record<string, GuideEntry>;
   selected?: string;
 };
+export function compatibleGuideEntry(
+  id: string,
+  prior: GuideEntry = {},
+): GuideEntry {
+  const update = guideUpdates[id];
+  if (!update) return prior;
+  const compatible =
+    prior.learningVersion !== undefined
+      ? prior.learningVersion === update.learningVersion
+      : !!prior.revision &&
+        (prior.revision === update.revision ||
+          update.compatibleRevisions.includes(prior.revision));
+  if (!compatible)
+    return {
+      acknowledged: prior.acknowledged,
+      revision: update.revision,
+      learningVersion: update.learningVersion,
+      steps: [],
+      completed: false,
+    };
+  const valid = (values?: string[]) =>
+    update.stepIds.filter((id) => values?.includes(id));
+  const steps = valid(prior.steps);
+  const completed = steps.length === update.stepIds.length;
+  const skipped = valid(prior.skipped).filter((id) => !steps.includes(id));
+  const unseen = update.stepIds.findIndex(
+    (id) => !steps.includes(id) && !skipped.includes(id),
+  );
+  const cursor = Math.min(
+    prior.cursor ?? (unseen < 0 ? update.stepIds.length : unseen),
+    unseen < 0 ? update.stepIds.length : unseen,
+  );
+  return {
+    ...prior,
+    revision: update.revision,
+    learningVersion: update.learningVersion,
+    steps,
+    skipped,
+    cursor,
+    completed,
+    replaySteps:
+      completed && prior.replaySteps ? valid(prior.replaySteps) : undefined,
+    replaySkipped:
+      completed && prior.replaySkipped ? valid(prior.replaySkipped) : undefined,
+  };
+}
 export function guideStatus(lesson: GuideLesson, progress: GuideProgress) {
-  const entry = progress.lessons[lesson.id];
+  const entry = compatibleGuideEntry(lesson.id, progress.lessons[lesson.id]);
   const revision = guideUpdates[lesson.id]?.revision || "";
   return {
     revision,
-    unread: entry?.acknowledged !== revision,
-    change: entry?.acknowledged ? "수정됨" : "신규",
-    completed: entry?.revision === revision && entry?.completed === true,
-    steps:
-      entry?.revision === revision && Array.isArray(entry.steps)
-        ? entry.steps
-        : [],
+    unread: entry.acknowledged !== revision,
+    change: entry.acknowledged ? "수정됨" : "신규",
+    completed: entry.completed === true,
+    steps: entry.steps || [],
+    skipped: entry.skipped || [],
   };
 }
 export function filterGuide(

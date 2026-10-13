@@ -38,16 +38,29 @@ export function GuidePractice({
     setError("");
     try {
       const item = pending.current;
-      const p = await learningRef.current.change("step", lessonId, {
-        stepId: item.stepId,
-        checkpoint: item.checkpoint,
-      });
+      const p = await learningRef.current.change(
+        item.type === "practice:skip" ? "skip" : "step",
+        lessonId,
+        {
+          stepId: item.stepId,
+          checkpoint: item.checkpoint,
+        },
+      );
       if (!active.current) return;
       pending.current = null;
       const status = guideStatus(lesson, p);
       const practiceSteps = p.lessons[lessonId]?.replaySteps ?? status.steps;
       setComplete(practiceSteps.length === recipe.steps.length);
-      post({ type: "practice:ack", steps: practiceSteps });
+      const entry = p.lessons[lessonId];
+      post({
+        type: "practice:ack",
+        steps: practiceSteps,
+        skipped: entry?.replaySteps
+          ? entry.replaySkipped || []
+          : entry?.skipped || [],
+        cursor: entry?.replaySteps ? entry.replayCursor : entry?.cursor,
+        action: item.type === "practice:skip" ? "skip" : "step",
+      });
     } catch (e) {
       if (active.current) setError((e as Error).message);
     } finally {
@@ -65,11 +78,21 @@ export function GuidePractice({
       .then(async (r) => {
         if (!active.current || epoch !== loadEpoch.current) return;
         let status = guideStatus(lesson, r.progress);
+        let entry = r.progress.lessons[lessonId];
         if (status.completed) {
           const p = await learning.change("restart", lessonId);
           const replaySteps = p.lessons[lessonId]?.replaySteps || [];
           if (!replaySteps.length) r.checkpoint = null;
+          entry = p.lessons[lessonId];
           status = { ...status, steps: replaySteps };
+        } else if (
+          !r.checkpoint &&
+          (status.steps.length || status.skipped.length)
+        ) {
+          // Rebuild the scene from its beginning without discarding earned steps.
+          // Keep the server cursor aligned so preparatory actions can be replayed.
+          const p = await learning.change("restart", lessonId);
+          entry = p.lessons[lessonId];
         }
         if (active.current && epoch === loadEpoch.current)
           setInit({
@@ -77,6 +100,14 @@ export function GuidePractice({
             lessonId,
             checkpoint: r.checkpoint,
             steps: status.steps,
+            skipped: entry?.replaySteps
+              ? entry.replaySkipped || []
+              : entry?.skipped || [],
+            cursor: r.checkpoint
+              ? entry?.replaySteps
+                ? entry.replayCursor
+                : entry?.cursor
+              : 0,
             revision: guideUpdates[lessonId].revision,
           });
       })
@@ -99,15 +130,25 @@ export function GuidePractice({
       )
         return;
       if (e.data.type === "practice:ready" && init) post(init);
-      if (e.data.type === "practice:step" && !pending.current) {
+      if (
+        ["practice:step", "practice:skip"].includes(e.data.type) &&
+        !pending.current
+      ) {
         if (!recipe.steps.some((s) => s.id === e.data.stepId)) return;
         pending.current = e.data;
         void save();
       }
-      if (e.data.type === "practice:reopen" && !pending.current) {
+      if (
+        ["practice:reopen", "practice:review"].includes(e.data.type) &&
+        !pending.current
+      ) {
         setInit(undefined);
-        void learningRef.current
-          .checkpoint(lessonId)
+        void (
+          e.data.type === "practice:review"
+            ? learningRef.current.change("review", lessonId)
+            : Promise.resolve()
+        )
+          .then(() => learningRef.current.checkpoint(lessonId))
           .then((r) => {
             if (active.current)
               setInit({
@@ -117,6 +158,14 @@ export function GuidePractice({
                 steps:
                   r.progress.lessons[lessonId]?.replaySteps ??
                   guideStatus(lesson, r.progress).steps,
+                skipped: r.progress.lessons[lessonId]?.replaySteps
+                  ? r.progress.lessons[lessonId]?.replaySkipped || []
+                  : r.progress.lessons[lessonId]?.skipped || [],
+                cursor: r.checkpoint
+                  ? r.progress.lessons[lessonId]?.replaySteps
+                    ? r.progress.lessons[lessonId]?.replayCursor
+                    : r.progress.lessons[lessonId]?.cursor
+                  : 0,
                 revision: guideUpdates[lessonId].revision,
               });
           })

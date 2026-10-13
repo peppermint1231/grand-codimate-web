@@ -3,6 +3,7 @@ import {
   guideLessons,
   guideUpdates,
   type GuideProgress,
+  type GuideEntry,
 } from "../src/core/userGuide";
 import { practiceRecipe } from "../src/core/guideTraining";
 import { ensure } from "../src/core/domain";
@@ -79,7 +80,7 @@ export async function guideLearning(
   );
   current.selected = lesson.id;
   const prior = current.lessons[lesson.id] || {},
-    entry =
+    entry: GuideEntry & { steps: string[] } =
       prior.revision === revision
         ? { ...prior, steps: [...(prior.steps || [])] }
         : {
@@ -90,24 +91,40 @@ export async function guideLearning(
           };
   if (b.action === "ack") entry.acknowledged = revision;
   if (b.action === "restart") {
-    entry.steps = [];
-    entry.completed = false;
-    store.remove("guide-checkpoint:" + userId + ":" + lesson.id);
+    if (entry.completed) {
+      // Reopening a completed lesson must never revoke earned completion.
+      const total = practiceRecipe(lesson.id)!.steps.length;
+      if (!entry.replaySteps || entry.replaySteps.length === total) {
+        entry.replaySteps = [];
+        store.remove("guide-checkpoint:" + userId + ":" + lesson.id);
+      }
+    } else {
+      entry.steps = [];
+      store.remove("guide-checkpoint:" + userId + ":" + lesson.id);
+    }
   }
   if (b.action === "step") {
     const recipe = practiceRecipe(lesson.id);
     ensure(recipe, "연습 과정을 찾을 수 없습니다", 404);
+    const progressSteps =
+      entry.completed && entry.replaySteps
+        ? [...entry.replaySteps]
+        : entry.steps;
     const step = recipe.steps.findIndex((s) => s.id === b.stepId);
     ensure(step >= 0, "잘못된 학습 단계입니다");
     ensure(
-      recipe.steps.slice(0, step).every((s) => entry.steps.includes(s.id)),
+      recipe.steps.slice(0, step).every((s) => progressSteps.includes(s.id)),
       "앞 단계를 먼저 완료해주세요.",
       409,
     );
-    if (!entry.steps.includes(b.stepId!)) {
-      entry.steps.push(b.stepId!);
-      entry.completed = recipe.steps.every((s) => entry.steps.includes(s.id));
-      if (entry.completed) {
+    if (!progressSteps.includes(b.stepId!)) {
+      progressSteps.push(b.stepId!);
+      if (entry.completed && entry.replaySteps)
+        entry.replaySteps = progressSteps;
+      else entry.steps = progressSteps;
+      const finished = recipe.steps.every((s) => progressSteps.includes(s.id));
+      entry.completed = entry.completed || finished;
+      if (finished) {
         entry.acknowledged = revision;
         store.remove("guide-checkpoint:" + userId + ":" + lesson.id);
       } else if (b.checkpoint) {

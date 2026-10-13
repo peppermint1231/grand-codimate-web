@@ -21,6 +21,7 @@ export type PracticeCheckpoint = {
   actions: ReplayAction[];
   drafts?: State["consultations"];
   inquiries?: Inquiry[];
+  editors?: Record<string, any>;
 };
 export type ReplayAction = {
   selector: string;
@@ -29,7 +30,7 @@ export type ReplayAction = {
 };
 export const practiceUser: User = {
   id: "practice-admin",
-  name: "연습관리자",
+  name: "박지훈",
   username: "practice",
   role: "doctor",
   permissionLevel: "admin",
@@ -45,14 +46,14 @@ export function practiceState(): State {
     {
       ...practiceUser,
       id: "practice-staff",
-      name: "연습직원",
+      name: "최수진",
       role: "coordinator",
       permissionLevel: "standard",
     },
     {
       ...practiceUser,
       id: "practice-doctor",
-      name: "연습의사",
+      name: "정민호",
       permissionLevel: "standard",
     },
   ];
@@ -61,7 +62,7 @@ export function practiceState(): State {
       ...base,
       id: "practice-patient",
       number: "연습001",
-      name: "연습환자",
+      name: "이서연",
       sex: "F",
       dob: "1990-01-01",
       phone: "01000000001",
@@ -226,7 +227,7 @@ export function installPractice(checkpoint?: PracticeCheckpoint) {
       requestedTime: "10:00",
       digest: "practice",
       person: {
-        name: "연습환자",
+        name: "이서연",
         phone: "01000000001",
         sex: "F",
         dob: "1990-01-01",
@@ -253,6 +254,14 @@ export function installPractice(checkpoint?: PracticeCheckpoint) {
         80,
       );
   };
+  const initialEditors = new Map(Object.entries(checkpoint?.editors || {}));
+  const editors = new Map(initialEditors);
+  if (typeof window !== "undefined")
+    window.addEventListener("practice:editor", (e) => {
+      const { id, state } = (e as CustomEvent).detail;
+      if (state) editors.set(id, state);
+      else editors.delete(id);
+    });
   const initialDrafts = new Map(
     (checkpoint?.drafts || []).map((c) => [c.id, c]),
   );
@@ -431,6 +440,11 @@ export function installPractice(checkpoint?: PracticeCheckpoint) {
   setTrainingRuntime({
     api,
     media: () => media,
+    editor: (id) => {
+      const value = initialEditors.get(id);
+      initialEditors.delete(id);
+      return value;
+    },
     draft: (id) => {
       const c = initialDrafts.get(id);
       initialDrafts.delete(id);
@@ -440,6 +454,7 @@ export function installPractice(checkpoint?: PracticeCheckpoint) {
   return {
     snapshot: () => structuredClone(state),
     drafts: () => structuredClone([...drafts.values()]),
+    editors: () => structuredClone(Object.fromEntries(editors)),
     inquiries: () => structuredClone(inquiries),
     replace: (s: State) => {
       state = structuredClone(s);

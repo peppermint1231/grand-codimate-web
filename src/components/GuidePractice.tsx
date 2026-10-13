@@ -4,6 +4,7 @@ import type { GuideLearning } from "../lib/guideProgress";
 import { guideLessons, guideStatus, guideUpdates } from "../core/userGuide";
 import { practiceRecipe } from "../core/guideTraining";
 import "./GuidePractice.css";
+import scenarios from "../data/guidePracticeScenarios.json";
 export function GuidePractice({
   lessonId,
   learning,
@@ -44,8 +45,9 @@ export function GuidePractice({
       if (!active.current) return;
       pending.current = null;
       const status = guideStatus(lesson, p);
-      setComplete(status.completed);
-      post({ type: "practice:ack", steps: status.steps });
+      const practiceSteps = p.lessons[lessonId]?.replaySteps ?? status.steps;
+      setComplete(practiceSteps.length === recipe.steps.length);
+      post({ type: "practice:ack", steps: practiceSteps });
     } catch (e) {
       if (active.current) setError((e as Error).message);
     } finally {
@@ -64,9 +66,10 @@ export function GuidePractice({
         if (!active.current || epoch !== loadEpoch.current) return;
         let status = guideStatus(lesson, r.progress);
         if (status.completed) {
-          await learning.change("restart", lessonId);
-          r.checkpoint = null;
-          status = { ...status, steps: [] };
+          const p = await learning.change("restart", lessonId);
+          const replaySteps = p.lessons[lessonId]?.replaySteps || [];
+          if (!replaySteps.length) r.checkpoint = null;
+          status = { ...status, steps: replaySteps };
         }
         if (active.current && epoch === loadEpoch.current)
           setInit({
@@ -111,7 +114,9 @@ export function GuidePractice({
                 type: "practice:init",
                 lessonId,
                 checkpoint: r.checkpoint,
-                steps: guideStatus(lesson, r.progress).steps,
+                steps:
+                  r.progress.lessons[lessonId]?.replaySteps ??
+                  guideStatus(lesson, r.progress).steps,
                 revision: guideUpdates[lessonId].revision,
               });
           })
@@ -130,10 +135,11 @@ export function GuidePractice({
       aria-label={lesson.title + " 연습"}
     >
       <header>
-        <div>
-          <strong>
-            가상 자료 연습 · {lesson.title.replace(/^\d+\. /, "")}
-          </strong>
+        <div className="guide-practice-heading">
+          <span className="guide-practice-eyebrow">
+            CODIMATE · 가상 자료 실습
+          </span>
+          <h1>{lesson.title.replace(/^\d+\. /, "")}</h1>
           <small>
             {saving
               ? "계정에 진도 저장 중…"
@@ -152,6 +158,12 @@ export function GuidePractice({
           {complete ? "학습 완료 · 돌아가기" : "일시정지 · 나가기"}
         </button>
       </header>
+      <details className="guide-case-card" open>
+        <summary>
+          상황·접수 정보 <span>가상의 인물과 자료입니다</span>
+        </summary>
+        <p>{scenarios[lessonId as keyof typeof scenarios].scene}</p>
+      </details>
       {complete && (
         <div
           id="guide-complete-hint"
@@ -176,6 +188,7 @@ export function GuidePractice({
       {init ? (
         <iframe
           ref={frame}
+          allowFullScreen
           title="코디메이트 가상 자료 실습"
           sandbox="allow-scripts allow-same-origin allow-modals allow-downloads allow-forms"
           src={location.pathname + "?training=1&session=" + session.current}

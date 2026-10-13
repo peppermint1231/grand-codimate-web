@@ -11,6 +11,7 @@ export type TrainingRoute = {
 export interface TrainingRuntime {
   api(path: string, init?: RequestInit): Promise<any>;
   media(id: string): Blob;
+  editor?(id: string): any;
   draft?(id: string): import("../core/model").Consultation | undefined;
 }
 let runtime: TrainingRuntime | undefined;

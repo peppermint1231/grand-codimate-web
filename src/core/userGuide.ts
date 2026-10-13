@@ -30,6 +30,7 @@ export type GuideEntry = {
   revision?: string;
   steps?: string[];
   completed?: boolean;
+  replaySteps?: string[];
 };
 export type GuideProgress = {
   version?: number;

@@ -10,6 +10,7 @@ export type PracticeStep = {
   target: GuideTargetSpec;
   kind: "click" | "value" | "command" | "draw";
   value?: string;
+  evidence?: string;
   command?: string;
   check?: Record<string, unknown>;
   result?: GuideTargetSpec;
@@ -83,20 +84,16 @@ add("start", { page: "patients" }, [
     text: "닫기",
     scope: ".display-settings-overlay",
   }),
-  value(
-    "환자 검색에 「연습환자」를 입력하세요.",
-    label("환자 검색"),
-    "연습환자",
-  ),
+  value("환자 검색에 「이서연」를 입력하세요.", label("환자 검색"), "이서연"),
   click(
-    "검색된 연습환자 이름을 눌러 상세 화면을 여세요.",
-    text("연습환자"),
+    "검색된 이서연 이름을 눌러 상세 화면을 여세요.",
+    text("이서연"),
     text("정보 수정"),
   ),
 ]);
 add("find-patient", { page: "patients" }, [
-  value("이름 검색으로 연습환자를 찾아보세요.", label("환자 검색"), "연습환자"),
-  click("연습환자 상세를 여세요.", text("연습환자"), text("정보 수정")),
+  value("이름 검색으로 이서연를 찾아보세요.", label("환자 검색"), "이서연"),
+  click("이서연 상세를 여세요.", text("이서연"), text("정보 수정")),
   click(
     "정보 수정을 눌러 연락처·생년월일 확인 위치를 익히세요.",
     text("정보 수정"),
@@ -116,7 +113,7 @@ add("find-patient", { page: "patients" }, [
 ]);
 add("register", { page: "patients" }, [
   click("새 환자 등록을 누르세요.", text("새 환자 등록"), label("이름")),
-  value("이름에 「신규연습」을 입력하세요.", label("이름"), "신규연습"),
+  value("이름에 「김철수」을 입력하세요.", label("이름"), "김철수"),
   value("생년월일을 1990-01-01로 입력하세요.", label("생년월일"), "1990-01-01"),
   value(
     "전화번호를 01000000002로 입력하세요.",
@@ -133,7 +130,7 @@ add("register", { page: "patients" }, [
     "저장 버튼으로 가상 환자를 등록하세요.",
     { text: "저장", scope: ".modal" },
     "patient.create",
-    { name: "신규연습", dob: "1990-01-01", phone: "01000000002", sex: "M" },
+    { name: "김철수", dob: "1990-01-01", phone: "01000000002", sex: "M" },
   ),
 ]);
 add("consult-start", patient, [
@@ -164,23 +161,534 @@ add("photos", consult, [
   click("비교 크게 보기를 눌러보세요.", label("비교 크게 보기")),
 ]);
 add("editor", { ...consult, tab: "photo" }, [
-  click("연습사진 1의 편집 버튼을 누르세요.", label("연습사진1.jpg 편집")),
   {
-    instruction:
-      "강조된 사진 위에 선을 그려보세요. 실제 주석이 생기면 다음으로 넘어갑니다.",
-    target: label("사진 편집 캔버스"),
-    kind: "draw",
+    kind: "click",
+    target: {
+      label: "연습사진1.jpg 편집",
+    },
+    instruction: "1번 사진의 편집기를 여세요.",
   },
-  click(
-    "사진 편집 저장을 눌러 작업 내용을 반영하세요.",
-    text("사진 편집 저장"),
-  ),
-  click("편집기 닫기를 누르세요.", text("편집기 닫기")),
-  command(
-    "보류·변경 저장으로 가상 상담에 주석을 저장하세요.",
-    text("보류·변경 저장"),
-    "consultation.save",
-  ),
+  {
+    kind: "value",
+    target: {
+      label: "주석 굵기",
+    },
+    instruction: "펜 굵기를 8로 바꿔 미리보기 선을 확인하세요.",
+    value: "8",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "주석 색상",
+    },
+    instruction: "주석 색상을 파란색 #2457c5로 바꾸세요.",
+    value: "#2457c5",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "선 종류",
+    },
+    instruction: "선 종류를 점선으로 바꾸세요.",
+    value: "dashed",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "주석 투명도",
+    },
+    instruction: "투명도를 20%로 바꾸세요.",
+    value: "20",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진 위에 펜으로 선을 그리세요.",
+    evidence: "pen",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "선 종류",
+    },
+    instruction: "선 종류를 실선으로 되돌리세요.",
+    value: "solid",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "화살표",
+    },
+    instruction: "화살표 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진 위를 끌어 화살표를 만드세요.",
+    evidence: "arrow",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "사각형",
+    },
+    instruction: "사각형 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진 위를 끌어 사각형을 만드세요.",
+    evidence: "rect",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "원",
+    },
+    instruction: "원 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진 위를 끌어 원을 만드세요.",
+    evidence: "ellipse",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "모자이크",
+    },
+    instruction: "모자이크 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진 위를 끌어 모자이크를 만드세요.",
+    evidence: "mosaic",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "지우개",
+    },
+    instruction: "지우개 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "방금 만든 모자이크 위를 문질러 지우세요.",
+    evidence: "erase",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "실행취소",
+    },
+    instruction: "실행취소로 지운 주석을 복구하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "다시실행",
+    },
+    instruction: "다시실행으로 지우기를 다시 적용하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "글자",
+    },
+    instruction: "글자 도구를 선택하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진의 빈 곳을 눌러 글자 입력창을 여세요.",
+    result: {
+      label: "텍스트 내용",
+    },
+  },
+  {
+    kind: "value",
+    target: {
+      label: "텍스트 내용",
+    },
+    instruction: "텍스트에 「경과 비교 부위」를 입력하세요.",
+    value: "경과 비교 부위",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "주석 폰트",
+    },
+    instruction: "폰트를 명조체로 바꿔 미리보기를 확인하세요.",
+    value: "serif",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "글자 크기",
+    },
+    instruction: "글자 크기를 36으로 조절하세요.",
+    value: "36",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "글자 적용",
+    },
+    instruction: "글자 적용으로 사진에 넣으세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "선택",
+    },
+    instruction: "선택 도구를 누르세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "방금 넣은 글자의 가운데를 잡고 다른 위치로 옮기세요.",
+    evidence: "move",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "선택한 글자의 오른쪽 아래 모서리를 끌어 크기를 조절하세요.",
+    evidence: "resize",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "선택 주석 수정",
+    },
+    instruction: "선택 주석 수정을 눌러 글자를 다시 편집하세요.",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "텍스트 내용",
+    },
+    instruction: "텍스트를 「다음 방문 시 경과 비교」로 수정하세요.",
+    value: "다음 방문 시 경과 비교",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "글자 적용",
+    },
+    instruction: "글자 적용으로 수정을 반영하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "선택 주석 삭제",
+    },
+    instruction: "선택 주석 삭제로 글자를 지우세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "실행취소",
+    },
+    instruction: "실행취소로 글자를 복구하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "스탬프",
+    },
+    instruction: "스탬프 도구를 선택하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "스탬프 📍",
+    },
+    instruction: "핀 스탬프를 고르세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진의 빈 곳을 눌러 스탬프를 넣으세요.",
+    evidence: "stamp",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "선택 주석 수정",
+    },
+    instruction: "선택 주석 수정을 눌러 스탬프 설정을 여세요.",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "설정 투명도",
+    },
+    instruction: "설정 투명도를 30%로 조절하세요.",
+    value: "30",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "주석 적용",
+    },
+    instruction: "주석 적용을 누르세요.",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "확대 축소",
+    },
+    instruction: "확대·축소를 45로 올리세요.",
+    value: "45",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "이동",
+    },
+    instruction: "이동 도구를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진을 끌어 보이는 위치를 옮기세요.",
+    evidence: "pan",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "화면 맞춤",
+    },
+    instruction: "화면 맞춤으로 전체 사진을 보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "원본 보기",
+    },
+    instruction: "원본 보기로 주석 없는 사진을 확인하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "주석 표시",
+    },
+    instruction: "주석 표시로 설명을 다시 보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "내 주석만",
+    },
+    instruction: "내 주석만을 눌러 작성자별 표시를 확인하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "전체 주석",
+    },
+    instruction: "전체 주석으로 모든 설명을 다시 보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "↷ 우 90°",
+    },
+    instruction: "우 90°로 사진을 회전하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "↶ 좌 90°",
+    },
+    instruction: "좌 90°로 되돌리세요.",
+  },
+  {
+    kind: "value",
+    target: {
+      label: "자유회전",
+    },
+    instruction: "자유회전을 10°로 조절하세요.",
+    value: "10",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "0° 원래 회전",
+    },
+    instruction: "0° 원래 회전을 누르세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "영역 자르기",
+    },
+    instruction: "영역 자르기를 선택하세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "사진 편집 캔버스",
+    },
+    instruction: "사진에 남길 영역을 대각선으로 끌어 자르세요.",
+    evidence: "crop",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "자르기 해제",
+    },
+    instruction: "자르기 해제로 원래 영역을 복원하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "영역 자르기 (포트레이트)",
+    },
+    instruction: "포트레이트 자르기를 열어 프레임을 확인하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "자르기 취소",
+    },
+    instruction: "자르기 취소를 눌러 변경 없이 닫으세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "영역 자르기 (포트레이트)",
+    },
+    instruction: "포트레이트 자르기를 다시 여세요.",
+  },
+  {
+    kind: "draw",
+    target: {
+      label: "포트레이트 자르기 프레임",
+    },
+    evidence: "frame",
+    instruction: "프레임의 변이나 안쪽을 끌어 영역을 조절하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "자르기 적용",
+    },
+    instruction: "자르기 적용을 누르세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "자르기 해제",
+    },
+    instruction: "자르기 해제로 전체 사진을 보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "S펜 설정",
+    },
+    instruction: "S펜 설정을 펼치세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "편집기에서 S펜 버튼을 누르는 동안 지우개 사용",
+    },
+    instruction: "S펜 버튼 지우개 설정을 꺼보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "편집기에서 S펜 버튼을 누르는 동안 지우개 사용",
+    },
+    instruction: "S펜 버튼 지우개 설정을 다시 켜세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "S펜 설정",
+    },
+    instruction: "S펜 설정을 접으세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "PC 단축키·마우스 사용법",
+    },
+    instruction: "PC 단축키·마우스 사용법을 펼쳐보세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "PC 단축키·마우스 사용법",
+    },
+    instruction: "단축키 안내를 접으세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "크게 보기",
+    },
+    result: {
+      label: "연습 크게 보기 닫기",
+    },
+    instruction: "크게 보기를 눌러 사진을 전체 화면으로 확인하세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      label: "연습 크게 보기 닫기",
+    },
+    instruction: "크게 보기 닫기를 눌러 편집 화면으로 돌아오세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "사진 편집 저장",
+    },
+    instruction: "사진 편집 저장을 누르세요.",
+  },
+  {
+    kind: "click",
+    target: {
+      text: "편집기 닫기",
+    },
+    instruction: "편집기 닫기를 누르세요.",
+  },
+  {
+    kind: "command",
+    target: {
+      text: "보류·변경 저장",
+    },
+    instruction: "보류·변경 저장으로 상담까지 저장하세요.",
+    command: "consultation.save",
+  },
 ]);
 add("procedures", consult, [
   value(
@@ -223,7 +731,7 @@ add("notes-opinions", consult, [
     memo: "교육용 상담메모",
   }),
   click("의사 의견 요청 버튼을 누르세요.", label("의사 의견 요청 열기")),
-  click("연습의사를 수신자로 선택하세요.", {
+  click("정민호를 수신자로 선택하세요.", {
     selector: ".opinion-recipient-list label:last-child input",
   }),
   value(
@@ -346,13 +854,13 @@ add("catalog-bulk", catalog, [
 ]);
 add("accounts", settings, [
   click("직원·권한 탭을 누르세요.", text("직원·권한")),
-  click("연습직원 계정을 선택하세요.", text("연습직원")),
-  value("이름을 「연습담당자」로 바꿔보세요.", label("이름"), "연습담당자"),
+  click("최수진 계정을 선택하세요.", text("최수진")),
+  value("이름을 「최수빈」로 바꿔보세요.", label("이름"), "최수빈"),
   command(
     "계정 저장을 누르세요. 연습 직원에게만 반영됩니다.",
     text("계정 저장"),
     "practice.users",
-    { name: "연습담당자" },
+    { name: "최수빈" },
   ),
 ]);
 add("grades-admin", settings, [
@@ -401,9 +909,9 @@ add("requests", { page: "discovery" }, [
     "목록 필터에서 미배정을 눌러보세요.",
     css(".inquiry-filters button:nth-child(3)"),
   ),
-  click("목록의 연습환자 상담 요청을 여세요.", css(".inquiry-request-open")),
+  click("목록의 이서연 상담 요청을 여세요.", css(".inquiry-request-open")),
   value(
-    "담당 상담자로 연습직원을 선택하세요.",
+    "담당 상담자로 최수진을 선택하세요.",
     label("상담자"),
     "practice-staff",
   ),
@@ -447,7 +955,7 @@ add("quote-consent", { ...consult, tab: "quote" }, [
     "모두 동의를 체크해 확인 항목을 연습하세요.",
     css(".treatment-consent-signing .consent-checks-all input"),
   ),
-  value("서명자에 「연습환자」를 입력하세요.", label("서명자"), "연습환자"),
+  value("서명자에 「이서연」를 입력하세요.", label("서명자"), "이서연"),
   {
     instruction: "아래 서명칸에 연습용 선을 그려주세요.",
     target: css(".treatment-consent-signing canvas.signature"),

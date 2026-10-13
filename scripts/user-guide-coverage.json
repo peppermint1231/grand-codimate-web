@@ -18,7 +18,10 @@
       "src/core/userGuide.ts",
       "src/components/UserGuide.css",
       "src/main.tsx",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/StartupLoading.tsx",
+      "src/components/StartupLoading.css",
+      "index.html"
     ],
     "commands": []
   },
@@ -38,7 +41,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/BirthDateInput.tsx",
+      "src/components/BirthDateInput.css",
+      "src/core/phone.ts"
     ],
     "commands": [
       "patient.import.enrich",
@@ -63,7 +69,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/BirthDateInput.tsx",
+      "src/components/BirthDateInput.css",
+      "src/core/phone.ts"
     ],
     "commands": [
       "patient.create",

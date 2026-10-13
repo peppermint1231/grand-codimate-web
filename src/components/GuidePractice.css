@@ -171,3 +171,25 @@
   float: right;
   margin: -3px 0 5px 10px;
 }
+.guide-complete-return {
+  outline: 3px solid #e6b24e;
+  outline-offset: 3px;
+  animation: guide-return-pulse 1.8s ease-in-out infinite;
+}
+.guide-complete-hint {
+  padding: 10px 18px;
+  background: #fff3d9;
+  color: #634813;
+  font-size: 13px;
+  text-align: right;
+}
+@keyframes guide-return-pulse {
+  50% {
+    box-shadow: 0 0 0 7px #e6b24e30;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-complete-return {
+    animation: none;
+  }
+}

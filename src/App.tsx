@@ -1,3 +1,6 @@
+import { StartupLoading } from "./components/StartupLoading";
+import { BirthDateInput } from "./components/BirthDateInput";
+import { formatMobilePhone, formatBirthDate } from "./core/phone";
 import { AddressRegionSettings } from "./components/AddressRegionSettings";
 import { ReadProtectionStatus } from "./components/ReadProtectionStatus";
 import { restoreConnection } from "./lib/restoreConnection";
@@ -1008,14 +1011,7 @@ export function App() {
       window.removeEventListener("online", online);
     };
   }, [restoreAttempt]);
-  if (restoring)
-    return (
-      <div className="login-page" role="status">
-        {connectionAttempt === 1
-          ? "로그인을 복원하고 있습니다…"
-          : `서버에 다시 연결하고 있습니다… (${connectionAttempt}/3)`}
-      </div>
-    );
+  if (restoring) return <StartupLoading reconnecting={connectionAttempt > 1} />;
   if (!user && restoreError && restoreNeeded.current)
     return (
       <div className="login-page">
@@ -2495,8 +2491,8 @@ function PatientForm({
   const [data, setData] = useState({
     name: patient?.name || "",
     sex: patient?.sex || "F",
-    dob: patient?.dob || "",
-    phone: patient?.phone || "",
+    dob: formatBirthDate(patient?.dob || ""),
+    phone: formatMobilePhone(patient?.phone || ""),
     address: patient?.address || "",
     acquisitionSource: patient?.acquisitionSource || "",
   });
@@ -2520,6 +2516,8 @@ function PatientForm({
           onSelect={(selection) => {
             setData({
               ...selection.fields,
+              dob: formatBirthDate(selection.fields.dob || ""),
+              phone: formatMobilePhone(selection.fields.phone || ""),
               acquisitionSource: selection.fields.acquisitionSource || "",
             });
             setIntakeId(selection.patientId);
@@ -2559,23 +2557,42 @@ function PatientForm({
             ["dob", "생년월일"],
             ["phone", "전화번호"],
             ["address", "주소 (동까지)"],
-          ].map(([k, label]) => (
-            <Field key={k} label={label}>
-              {k === "address" ? (
-                <AddressSearch
-                  value={data.address}
-                  onChange={(address) => setData({ ...data, address })}
-                />
-              ) : (
-                <input
-                  type={k === "dob" ? "date" : "text"}
-                  value={data[k as keyof typeof data]}
-                  required
-                  onChange={(e) => setData({ ...data, [k]: e.target.value })}
-                />
-              )}
-            </Field>
-          ))}
+          ].map(([k, label]) =>
+            k === "dob" ? (
+              <BirthDateInput
+                key={k}
+                value={data.dob}
+                onChange={(dob) => setData({ ...data, dob })}
+              />
+            ) : (
+              <Field key={k} label={label}>
+                {k === "address" ? (
+                  <AddressSearch
+                    value={data.address}
+                    onChange={(address) => setData({ ...data, address })}
+                  />
+                ) : (
+                  <input
+                    type={k === "phone" ? "tel" : "text"}
+                    inputMode={k === "phone" ? "numeric" : undefined}
+                    autoComplete={k === "phone" ? "tel" : undefined}
+                    maxLength={k === "phone" ? 13 : undefined}
+                    value={data[k as keyof typeof data]}
+                    required
+                    onChange={(e) =>
+                      setData({
+                        ...data,
+                        [k]:
+                          k === "phone"
+                            ? formatMobilePhone(e.target.value)
+                            : e.target.value,
+                      })
+                    }
+                  />
+                )}
+              </Field>
+            ),
+          )}
           <Field label="유입경로 (선택)">
             <select
               value={data.acquisitionSource}

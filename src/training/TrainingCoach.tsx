@@ -26,7 +26,9 @@ export function TrainingCoach({
   const scenario = scenarios[initial.lessonId as keyof typeof scenarios];
   const [briefed, setBriefed] = useState(initial.steps.length > 0),
     [choice, setChoice] = useState<number | null>(null),
-    [hint, setHint] = useState(false),
+    [hint, setHint] = useState(
+      initial.steps.length === recipe.steps.length - 1,
+    ),
     [collapsed, setCollapsed] = useState(false);
   const coach = useRef<HTMLElement>(null);
   const [coachHeight, setCoachHeight] = useState(200);
@@ -53,6 +55,19 @@ export function TrainingCoach({
     index = steps.length,
     step = recipe.steps[index],
     target = useRef<HTMLElement | undefined>(undefined);
+  useEffect(() => {
+    if (!ready || !briefed || index !== recipe.steps.length - 1 || !step)
+      return;
+    const timer = setTimeout(
+      () =>
+        findTarget(step.target)?.scrollIntoView({
+          block: "center",
+          behavior: "smooth",
+        }),
+      200,
+    );
+    return () => clearTimeout(timer);
+  }, [ready, briefed, index]);
   const post = (data: unknown) =>
     parent.postMessage({ ...(data as any), session }, location.origin);
   useEffect(() => {
@@ -113,7 +128,7 @@ export function TrainingCoach({
         e.data.type !== "practice:ack"
       )
         return;
-      setHint(false);
+      setHint(e.data.steps.length === recipe.steps.length - 1);
       setCollapsed(false);
       setSteps(e.data.steps);
       pending.current = false;
@@ -304,7 +319,7 @@ export function TrainingCoach({
           <p>조작 결과 확인 완료 · 계정에 진도를 저장하고 있습니다…</p>
         ) : step ? (
           <>
-            <details className="training-case">
+            <details className="training-case" open>
               <summary>상황·접수 정보 다시 보기</summary>
               <p>{scenario.scene}</p>
             </details>
@@ -352,7 +367,8 @@ export function TrainingCoach({
             <p>{scenario.debrief}</p>
             <small>
               실제 업무에서는 무엇을 먼저 확인해야 할지 떠올려보세요. 학습
-              기록은 계정에 저장되었습니다.
+              기록은 계정에 저장되었습니다. 화면 위쪽의 「학습 완료 · 돌아가기」
+              버튼을 눌러 사용법으로 돌아가세요.
             </small>
           </>
         )}

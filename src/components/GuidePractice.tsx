@@ -142,10 +142,26 @@ export function GuidePractice({
                 : "실제 업무 자료는 바뀌지 않습니다 · 완료 단계는 계정에 저장됩니다"}
           </small>
         </div>
-        <button autoFocus disabled={saving} onClick={onClose}>
+        <button
+          className={complete ? "guide-complete-return" : undefined}
+          aria-describedby={complete ? "guide-complete-hint" : undefined}
+          autoFocus
+          disabled={saving}
+          onClick={onClose}
+        >
           {complete ? "학습 완료 · 돌아가기" : "일시정지 · 나가기"}
         </button>
       </header>
+      {complete && (
+        <div
+          id="guide-complete-hint"
+          className="guide-complete-hint"
+          role="status"
+        >
+          학습을 마쳤습니다. 위의 「학습 완료 · 돌아가기」 버튼을 눌러 다음
+          과정을 선택하세요. ↑
+        </div>
+      )}
       {error && (
         <div role="alert" className="guide-practice-error">
           {error}{" "}

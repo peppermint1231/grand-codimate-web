@@ -82,8 +82,9 @@ export function GuidePractice({
         if (status.completed) {
           const p = await learning.change("restart", lessonId);
           const replaySteps = p.lessons[lessonId]?.replaySteps || [];
-          if (!replaySteps.length) r.checkpoint = null;
           entry = p.lessons[lessonId];
+          if (!replaySteps.length && !entry?.replaySkipped?.length)
+            r.checkpoint = null;
           status = { ...status, steps: replaySteps };
         } else if (
           !r.checkpoint &&

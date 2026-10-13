@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import type { Offering } from "../core/offerings";
 import { offeringSummary, offeringErrors } from "../core/offerings";
 export function OfferingEditor({
@@ -60,7 +61,7 @@ export function OfferingEditor({
                   })
                 }
               />
-              <input
+              <NumberInput
                 aria-label={`구성 ${i + 1} 수량`}
                 disabled={disabled}
                 type="number"
@@ -111,7 +112,7 @@ export function OfferingEditor({
           <div className="form-grid">
             <label className="field">
               이용기간 (일 · 선택)
-              <input
+              <NumberInput
                 type="number"
                 disabled={disabled}
                 min={1}
@@ -130,7 +131,7 @@ export function OfferingEditor({
               (["creditAmount", "bonusAmount"] as const).map((k, i) => (
                 <label className="field" key={k}>
                   {i === 0 ? "기본 이용금액" : "추가 혜택 금액"}
-                  <input
+                  <NumberInput
                     disabled={disabled}
                     type="number"
                     min={0}

@@ -1,3 +1,4 @@
+import { NumberInput } from "./components/NumberInput";
 import { HomeDashboard, type HistoryFilter } from "./components/HomeDashboard";
 import { QuickPatientLink } from "./components/QuickPatientLink";
 import { StartupLoading } from "./components/StartupLoading";
@@ -5172,7 +5173,7 @@ function ConsultationView({
                       </label>
                       <label>
                         단가 (원 / {l.unit || "개"})
-                        <input
+                        <NumberInput
                           type="number"
                           aria-label={`${l.name} ${l.label} 임의 단가`}
                           min={0}
@@ -5210,7 +5211,7 @@ function ConsultationView({
                     </div>
                     <div className="inline-fields">
                       <Field label="수량">
-                        <input
+                        <NumberInput
                           type="number"
                           aria-label={`${l.name} ${l.label} 수량`}
                           min={0.1}
@@ -5229,7 +5230,7 @@ function ConsultationView({
                         />
                       </Field>
                       <Field label="추가 할인">
-                        <input
+                        <NumberInput
                           type="number"
                           min={0}
                           max={
@@ -5289,7 +5290,7 @@ function ConsultationView({
                 ))}
                 <div className="inline-fields">
                   <Field label="전체 할인">
-                    <input
+                    <NumberInput
                       type="number"
                       min={0}
                       max={
@@ -6692,7 +6693,7 @@ function CatalogView({
                         </td>
                         <td>{p.name}</td>
                         <td>
-                          <input
+                          <NumberInput
                             aria-label={p.name + " 가격"}
                             type="number"
                             min={0}
@@ -7198,7 +7199,7 @@ function CatalogView({
                     o.priceKind === "event" ||
                     o.regularPrice !== undefined) && (
                     <Field label="정가 (원)">
-                      <input
+                      <NumberInput
                         type="number"
                         min={0}
                         step={1}
@@ -7236,7 +7237,7 @@ function CatalogView({
                         : "가격 (원)"
                   }
                 >
-                  <input
+                  <NumberInput
                     disabled={!editable || o.priceKind === "quote"}
                     placeholder={
                       o.priceKind === "quote"
@@ -7277,7 +7278,7 @@ function CatalogView({
                 {(product.insurance?.coverage === "covered" ||
                   o.healthInsuranceAmount !== undefined) && (
                   <Field label="공단 청구액 (원, 참고)">
-                    <input
+                    <NumberInput
                       aria-label={`${o.label} 공단 청구액`}
                       type="number"
                       min={0}
@@ -7377,7 +7378,7 @@ function CatalogView({
                 {(product.packageBySession || o.packageComposition) && (
                   <>
                     <Field label="패키지 방문 횟수">
-                      <input
+                      <NumberInput
                         type="number"
                         min="1"
                         max="1000"

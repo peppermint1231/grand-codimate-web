@@ -23,7 +23,8 @@
       "src/components/StartupLoading.css",
       "index.html",
       "src/components/HomeDashboard.tsx",
-      "src/components/HomeDashboard.css"
+      "src/components/HomeDashboard.css",
+      "src/components/NumberInput.tsx"
     ],
     "commands": []
   },
@@ -76,10 +77,7 @@
       "src/components/BirthDateInput.css",
       "src/core/phone.ts"
     ],
-    "commands": [
-      "patient.create",
-      "patient.update"
-    ]
+    "commands": ["patient.create", "patient.update"]
   },
   "requests": {
     "sources": [
@@ -115,12 +113,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "consultation.create",
-      "consultation.owner"
-    ]
+    "commands": ["consultation.create", "consultation.owner"]
   },
   "photos": {
     "sources": [
@@ -157,11 +153,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "consultation.annotate"
-    ]
+    "commands": ["consultation.annotate"]
   },
   "procedures": {
     "sources": [
@@ -219,10 +214,7 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json"
     ],
-    "commands": [
-      "note.save",
-      "opinion.request"
-    ]
+    "commands": ["note.save", "opinion.request"]
   },
   "doctor": {
     "sources": [
@@ -267,10 +259,7 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json"
     ],
-    "commands": [
-      "quote.consent",
-      "signature.create"
-    ]
+    "commands": ["quote.consent", "signature.create"]
   },
   "finish": {
     "sources": [
@@ -309,11 +298,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "ledger.create"
-    ]
+    "commands": ["ledger.create"]
   },
   "followup": {
     "sources": [
@@ -329,10 +317,7 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json"
     ],
-    "commands": [
-      "consultation.package",
-      "followup.save"
-    ]
+    "commands": ["consultation.package", "followup.save"]
   },
   "points": {
     "sources": [
@@ -351,12 +336,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "vip.card",
-      "points.adjust"
-    ]
+    "commands": ["vip.card", "points.adjust"]
   },
   "recovery": {
     "sources": [
@@ -398,12 +381,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "catalog.apply",
-      "catalog.publish"
-    ]
+    "commands": ["catalog.apply", "catalog.publish"]
   },
   "product": {
     "sources": [
@@ -421,11 +402,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "catalog.save"
-    ]
+    "commands": ["catalog.save"]
   },
   "packages": {
     "sources": [
@@ -442,7 +422,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
     "commands": []
   },
@@ -464,12 +445,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "catalog.folders.commit",
-      "catalog.restore"
-    ]
+    "commands": ["catalog.folders.commit", "catalog.restore"]
   },
   "homepage": {
     "sources": [
@@ -513,9 +492,7 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json"
     ],
-    "commands": [
-      "discovery.settings"
-    ]
+    "commands": ["discovery.settings"]
   },
   "insurance-membership": {
     "sources": [
@@ -549,11 +526,7 @@
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json"
     ],
-    "commands": [
-      "consent.installDrafts",
-      "consent.delete",
-      "consent.save"
-    ]
+    "commands": ["consent.installDrafts", "consent.delete", "consent.save"]
   },
   "grades-admin": {
     "sources": [
@@ -569,7 +542,8 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
     "commands": [
       "vip.policy",
@@ -614,11 +588,10 @@
       "src/components/GuidePractice.css",
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
-      "src/data/guidePracticeScenarios.json"
+      "src/data/guidePracticeScenarios.json",
+      "src/components/NumberInput.tsx"
     ],
-    "commands": [
-      "audit.export"
-    ]
+    "commands": ["audit.export"]
   },
   "marketing": {
     "sources": [
@@ -684,9 +657,6 @@
       "src/core/analytics.ts",
       "src/core/addressRegion.ts"
     ],
-    "commands": [
-      "consultation.quickCreate",
-      "patient.quickRegister"
-    ]
+    "commands": ["consultation.quickCreate", "patient.quickRegister"]
   }
 }

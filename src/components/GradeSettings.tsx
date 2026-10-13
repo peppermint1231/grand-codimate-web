@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { useEffect, useState } from "react";
 import type { Grade, State } from "../core/model";
 import { benefitSettings, type GradeBenefits } from "../core/gradeBenefits";
@@ -56,7 +57,7 @@ export function GradeSettings({
               </label>
               <label className="field">
                 하한액 (원)
-                <input
+                <NumberInput
                   type="number"
                   min={0}
                   value={g.minimum}
@@ -93,7 +94,7 @@ export function GradeSettings({
                 {fields.map(([key, label]) => (
                   <label className="field" key={key}>
                     {label}
-                    <input
+                    <NumberInput
                       type="number"
                       min={
                         key === "annualMonths" || key === "annualThreshold"

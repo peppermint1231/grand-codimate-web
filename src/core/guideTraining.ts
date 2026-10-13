@@ -84,7 +84,11 @@ add("start", { page: "home" }, [
     text: "닫기",
     scope: ".display-settings-overlay",
   }),
-  click("홈의 환자목록으로 이동하세요.", css(".home-primary button.patients"), label("환자 검색")),
+  click(
+    "홈의 환자목록으로 이동하세요.",
+    css(".home-primary button.patients"),
+    label("환자 검색"),
+  ),
   value("환자 검색에 「이서연」를 입력하세요.", label("환자 검색"), "이서연"),
   click(
     "검색된 이서연 이름을 눌러 상세 화면을 여세요.",
@@ -178,12 +182,11 @@ add("editor", { ...consult, tab: "photo" }, [
     value: "8",
   },
   {
-    kind: "value",
+    kind: "click",
     target: {
-      label: "주석 색상",
+      label: "주석 파란색 프리셋",
     },
-    instruction: "주석 색상을 파란색 #2457c5로 바꾸세요.",
-    value: "#2457c5",
+    instruction: "색상 프리셋에서 파란색을 누르세요.",
   },
   {
     kind: "value",

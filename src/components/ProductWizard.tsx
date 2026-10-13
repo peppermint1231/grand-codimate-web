@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { useState } from "react";
 import type { Catalog, Product, Option } from "../core/model";
 import {
@@ -215,7 +216,7 @@ export function ProductWizard({
                   <div className="form-grid">
                     <label className="field">
                       판매 가격 (원)
-                      <input
+                      <NumberInput
                         type="number"
                         min="0"
                         value={o.price ?? ""}

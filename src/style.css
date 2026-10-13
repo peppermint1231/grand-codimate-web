@@ -5402,3 +5402,62 @@ html.custom-pull-refresh {
 .product-type-badge.type-block { background:#e4eee4; color:#285b3a; }
 .quick-block { border:1px solid #c8dbcf; padding:14px; border-radius:10px; margin:12px 0; }
 .quick-block summary { font-weight:700; cursor:pointer; }
+
+/* Named, keyboard-accessible presets also serve the guided photo practice. */
+.annotation-colors {
+  display: grid;
+  gap: 3px;
+  max-width: 100%;
+}
+.annotation-color-caption {
+  font-size: 12px;
+  color: #35594f;
+}
+.annotation-color-options {
+  display: grid;
+  grid-template-columns: repeat(5, 36px) 42px;
+  gap: 2px;
+}
+.photo-editor .annotation-color-preset {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+}
+.annotation-color-preset span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  border: 1px solid #0003;
+  font-size: 18px;
+  font-weight: 700;
+}
+.photo-editor .annotation-color-preset[aria-pressed="true"] {
+  border-color: #145f55;
+  box-shadow: 0 0 0 1px #145f55;
+}
+.annotation-color-preset:focus-visible {
+  outline: 3px solid #2457c5;
+  outline-offset: 2px;
+}
+.annotation-color-options .annotation-color-custom {
+  grid-column: 6;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  font-size: 11px;
+}
+.annotation-color-custom input[type="color"] {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 2px;
+  cursor: pointer;
+}

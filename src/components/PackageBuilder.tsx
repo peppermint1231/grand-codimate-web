@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { productType } from "../core/productType";
 import { catalogNodes, folderPath } from "../core/catalogFolders";
 import { useRef, useState } from "react";
@@ -133,7 +134,7 @@ export function PackageBuilder({
       <div className="form-grid">
         <label className="field">
           이용기간 (일)
-          <input
+          <NumberInput
             type="number"
             min="1"
             max="3650"
@@ -143,16 +144,13 @@ export function PackageBuilder({
         </label>
         <label className="field">
           총 방문 회차
-          <input
+          <NumberInput
             type="number"
             min="1"
             max="100"
             value={value.sessions}
-            onChange={(e) => {
-              const sessions = Math.max(
-                1,
-                Math.min(100, Number(e.target.value) || 1),
-              );
+            onValueCommit={(raw) => {
+              const sessions = Math.max(1, Math.min(100, Number(raw) || 1));
               update({
                 sessions,
                 placements: value.placements.map((x) => ({
@@ -268,7 +266,7 @@ export function PackageBuilder({
             </label>
             <label className="field">
               블록 가격 (부가세 별도)
-              <input
+              <NumberInput
                 type="number"
                 min="0"
                 value={newBlock.price}
@@ -447,13 +445,13 @@ export function PackageBuilder({
           </span>
           <label>
             수량
-            <input
+            <NumberInput
               aria-label={b.name + " 총 수량"}
               type="number"
               min="1"
               max="100"
               value={b.quantity}
-              onChange={(e) => quantity(b.id, Number(e.target.value))}
+              onValueCommit={(raw) => quantity(b.id, Number(raw))}
             />
           </label>
           <button
@@ -633,7 +631,7 @@ export function PackageBuilder({
         </label>
         <label className="field">
           {value.discountType === "percent" ? "할인율 (%)" : "할인액 (원)"}
-          <input
+          <NumberInput
             type="number"
             min="0"
             max={

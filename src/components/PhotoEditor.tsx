@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { trainingMode, trainingRuntime } from "../training/environment";
 import { StylusSettings, useStylusButton } from "./StylusSettings";
 import { stylusErasing } from "../core/stylus";
@@ -39,6 +40,79 @@ import {
   stampImage,
   stampUrl,
 } from "../core/annotationText";
+const annotationColorPresets = [
+  ["빨간색", "#e76555"],
+  ["주황색", "#ef8c22"],
+  ["노란색", "#f6ce32"],
+  ["초록색", "#2f8b57"],
+  ["청록색", "#168c99"],
+  ["파란색", "#2457c5"],
+  ["보라색", "#8753b5"],
+  ["분홍색", "#d84e92"],
+  ["검은색", "#222222"],
+  ["흰색", "#ffffff"],
+] as const;
+
+function AnnotationColors({
+  value,
+  onChange,
+  context,
+  disabled,
+}: {
+  value: string;
+  onChange: (color: string) => void;
+  context: "주석" | "설정";
+  disabled?: boolean;
+}) {
+  const selected = annotationColorPresets.find(
+    ([, hex]) => hex === value.toLowerCase(),
+  );
+  return (
+    <div
+      className="annotation-colors"
+      role="group"
+      aria-label={`${context} 색상 프리셋`}
+    >
+      <span className="annotation-color-caption">
+        색상 · {selected?.[0] || "사용자 지정"}
+      </span>
+      <div className="annotation-color-options">
+        {annotationColorPresets.map(([name, hex]) => (
+          <button
+            key={hex}
+            type="button"
+            className="annotation-color-preset"
+            aria-label={`${context} ${name} 프리셋`}
+            aria-pressed={value.toLowerCase() === hex}
+            title={`${name} 프리셋`}
+            disabled={disabled}
+            onClick={() => onChange(hex)}
+          >
+            <span
+              style={{
+                backgroundColor: hex,
+                color: ["노란색", "흰색"].includes(name) ? "#222" : "#fff",
+              }}
+            >
+              {value.toLowerCase() === hex ? "✓" : ""}
+            </span>
+          </button>
+        ))}
+        <label className="annotation-color-custom" title="다른 색상 직접 선택">
+          직접
+          <input
+            aria-label={`${context} 색상`}
+            type="color"
+            value={value}
+            disabled={disabled}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 export function paintPhoto(
   ctx: CanvasRenderingContext2D,
   img: HTMLImageElement,
@@ -1395,11 +1469,11 @@ export function PhotoEditor({
             </button>
           );
         })}
-        <input
-          aria-label="주석 색상"
-          type="color"
+        <AnnotationColors
           value={color}
-          onChange={(e) => setColor(e.target.value)}
+          onChange={setColor}
+          context="주석"
+          disabled={readonly}
         />
         <label>
           선
@@ -1519,7 +1593,7 @@ export function PhotoEditor({
 
                   <label>
                     글자 크기
-                    <input
+                    <NumberInput
                       aria-label="글자 크기"
                       type="number"
                       min={6}
@@ -1558,15 +1632,12 @@ export function PhotoEditor({
                   ))}
                 </div>
               )}
-              <label>
-                색상
-                <input
-                  aria-label="설정 색상"
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                />
-              </label>
+              <AnnotationColors
+                value={color}
+                onChange={setColor}
+                context="설정"
+                disabled={readonly}
+              />
               <label>
                 투명도 {Math.round(100 - opacity)}%
                 <input

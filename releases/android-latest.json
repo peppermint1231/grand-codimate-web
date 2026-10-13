@@ -1,7 +1,7 @@
 {
-  "version": "0.18.25",
-  "versionCode": 95,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.25.apk",
-  "sha256": "3acde2d7797ae21aca582f5dcdea18ce037e279d396af95c37b55a2e87b20307",
-  "notes": "로그인 홈과 업무 대시보드, 바로상담을 추가했습니다. 환자정보 없이 상담을 시작하고 이후 신규 등록 또는 기존 환자에 연결할 수 있습니다. 등록 대기 관리와 관련 사용법 실습을 제공합니다."
+  "version": "0.18.26",
+  "versionCode": 96,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.26.apk",
+  "sha256": "6dfbc666c60cd65fcfe7dbafd283576158430fe165d30078307eff39220a6687",
+  "notes": "사진 편집에 색상 프리셋 10개를 추가하고 실습 안내를 개선했습니다. 가격·할인·수량·포인트 등 숫자 입력칸에서 기본값을 바로 덮어쓰고, 입력 중 빈칸을 유지할 수 있습니다. 패키지 수량·회차 편집 중 기존 배치를 보존합니다."
 }

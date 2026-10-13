@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { pointBalance } from "../core/vipPoints";
 import { useEffect, useRef, useState } from "react";
 import { activeLedger, ledgerAvailable } from "../core/domain";
@@ -199,7 +200,7 @@ export function LedgerForm({
       <div className="form-grid">
         <label className="field">
           금액
-          <input
+          <NumberInput
             name="amount"
             type="number"
             min={1}

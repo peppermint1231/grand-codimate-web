@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { benefitSettings, currentBenefitGrade } from "../core/gradeBenefits";
 import { VipPatientQR } from "./VipPatientQR";
 import { useEffect, useState } from "react";
@@ -319,7 +320,7 @@ export function PatientPoints({
             <div className="form-grid">
               <label className="field">
                 조정 포인트 (+ 지급 / − 차감)
-                <input
+                <NumberInput
                   type="number"
                   required
                   value={amount}

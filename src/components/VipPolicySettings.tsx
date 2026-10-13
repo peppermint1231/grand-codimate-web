@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { useState } from "react";
 import type { State } from "../core/model";
 import { defaultVipPolicy, vipPolicy } from "../core/vipPoints";
@@ -58,7 +59,7 @@ export function VipPolicySettings({
         {fields.map(([key, label]) => (
           <label className="field" key={key}>
             {label}
-            <input
+            <NumberInput
               type="number"
               min={
                 key === "minimumRevenue" || key === "annualThreshold" ? 1 : 0

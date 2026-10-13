@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { SourceComparisonSummary } from "./SourceComparisonSummary";
 import { PatientRegionExplorer } from "./PatientRegionExplorer";
 import { comparisonBuckets } from "../core/analyticsComparison";
@@ -528,7 +529,7 @@ export function Statistics({
                     </label>
                     <label>
                       기본 지급률 (%)
-                      <input
+                      <NumberInput
                         type="number"
                         min="0"
                         max="100"
@@ -582,7 +583,7 @@ export function Statistics({
                             </th>
                             <td>{money(r.basis)}</td>
                             <td>
-                              <input
+                              <NumberInput
                                 aria-label={r.employee + " 지급률"}
                                 type="number"
                                 min="0"

@@ -1,3 +1,4 @@
+import { NumberInput } from "./NumberInput";
 import { productType, productTypeLabels } from "../core/productType";
 import { offeringSummary } from "../core/offerings";
 import { CatalogBulkEdit } from "./CatalogBulkEdit";
@@ -478,7 +479,7 @@ export function CatalogProductRows({
                               o.regularPrice !== undefined) && (
                               <label className="event-regular-input">
                                 정가 (원)
-                                <input
+                                <NumberInput
                                   type="number"
                                   min={0}
                                   step={1}
@@ -515,7 +516,7 @@ export function CatalogProductRows({
                                   o.regularPrice !== undefined
                                 ? "판매가 (원)"
                                 : "가격 (원)"}
-                            <input
+                            <NumberInput
                               type="number"
                               min={0}
                               aria-label={`${p.name} ${o.label} 가격`}

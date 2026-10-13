@@ -371,3 +371,32 @@ it("normalizes historical region facets on read without rebuilding or reading pa
   );
   f.db.close();
 });
+it("keeps quick patients out of directory and marketing until identity registration", async () => {
+  const f = fixture();
+  const pending = {
+    ...patient("quick"),
+    registrationPending: true,
+    name: "바로상담",
+    dob: "",
+    phone: "",
+    address: "",
+  };
+  await f.save("patients", pending);
+  const d = f.dir();
+  while (!d.status().ready) await d.step(10);
+  expect((await d.search(filter)).total).toBe(0);
+  const registered = {
+    ...pending,
+    ...patient("quick", "김철수"),
+    registrationPending: false,
+    rev: 2,
+  };
+  await f.save("patients", registered);
+  d.track([{ section: "patients", id: registered.id, value: registered }]);
+  await d.step(10);
+  expect((await d.search(filter)).total).toBe(1);
+  expect((await d.search({ ...filter, search: "김철수" })).rows[0].p.id).toBe(
+    "quick",
+  );
+  f.db.close();
+});

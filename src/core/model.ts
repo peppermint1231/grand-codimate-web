@@ -56,6 +56,7 @@ export interface Base {
   updatedAt: string;
 }
 export interface Patient extends Base {
+  registrationPending?: boolean;
   /** Derived only for analytics; never accepted in patient commands. */
   analyticsCohorts?: number;
   intakeKind?: "beauty" | "medical";
@@ -269,6 +270,7 @@ export interface Photo {
   annotations: Annotation[];
 }
 export interface Consultation extends Base {
+  quickStarted?: boolean;
   priceReasonHistory?: string[];
   intakeSource?: {
     receiptId: string;

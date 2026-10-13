@@ -73,17 +73,18 @@ function add(
     steps: steps.map((s, i) => ({ ...s, id: "practice-" + (i + 1) })),
   });
 }
-add("start", { page: "patients" }, [
+add("start", { page: "home" }, [
   click(
     "상단의 글자 크기 설정을 눌러보세요.",
     label("UI 글자 크기 설정"),
     label("UI 글자 크기"),
   ),
   value("글자 크기를 110%로 조절해보세요.", label("UI 글자 크기"), "110"),
-  click("닫기를 눌러 환자목록으로 돌아오세요.", {
+  click("닫기를 눌러 홈으로 돌아오세요.", {
     text: "닫기",
     scope: ".display-settings-overlay",
   }),
+  click("홈의 환자목록으로 이동하세요.", text("환자목록"), label("환자 검색")),
   value("환자 검색에 「이서연」를 입력하세요.", label("환자 검색"), "이서연"),
   click(
     "검색된 이서연 이름을 눌러 상세 화면을 여세요.",
@@ -1087,6 +1088,40 @@ add("consent-admin", settings, [
     "초안 저장을 누르세요. 연습 자료에만 보관됩니다.",
     text("초안 저장"),
     "consent.save",
+  ),
+]);
+
+add("quick-consult", { page: "home" }, [
+  click(
+    "접수 전 상담이 필요합니다. 홈에서 바로상담을 여세요.",
+    text("바로상담"),
+    text("미용 상담 시작"),
+  ),
+  command(
+    "미용 상담을 먼저 시작하세요.",
+    text("미용 상담 시작"),
+    "consultation.quickCreate",
+    { category: "미용" },
+  ),
+  click(
+    "이제 접수 정보를 받았습니다. 환자정보 등록을 여세요.",
+    text("환자정보 등록"),
+    label("이름"),
+  ),
+  value("상황·접수 정보를 보고 이름을 입력하세요.", label("이름"), "김철수"),
+  value("생년월일을 입력하세요.", label("생년월일"), "1990-01-01"),
+  value("연락처를 입력하세요.", label("전화번호"), "01000000002"),
+  value("성별을 선택하세요.", label("성별"), "M"),
+  value(
+    "주소를 입력하세요.",
+    label("주소 (동까지)"),
+    "강원특별자치도 춘천시 후평동",
+  ),
+  command(
+    "저장해 방금 시작한 상담에 환자정보를 연결하세요.",
+    { text: "저장", scope: ".modal" },
+    "patient.quickRegister",
+    { name: "김철수", dob: "1990-01-01", phone: "01000000002" },
   ),
 ]);
 

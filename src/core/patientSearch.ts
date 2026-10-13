@@ -51,7 +51,7 @@ export function patientIndex(s: State): PatientSearchRow[] {
   }
   const duplicateCounts = patientDuplicateCounts(s.patients);
   return s.patients
-    .filter((p) => !p.mergedInto)
+    .filter((p) => !p.mergedInto && !p.registrationPending)
     .map((p) => {
       const cs = (consultations.get(p.id) || [])
           .slice()

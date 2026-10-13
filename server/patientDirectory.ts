@@ -201,7 +201,7 @@ export class PatientDirectory {
     const original =
       source ||
       (saved ? await open<Patient>(saved.value, this.key) : undefined);
-    if (!original) {
+    if (!original || original.registrationPending) {
       this.addresses.detach(id);
       return;
     }

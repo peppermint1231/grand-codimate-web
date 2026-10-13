@@ -21,7 +21,9 @@
       "src/data/guidePracticeScenarios.json",
       "src/components/StartupLoading.tsx",
       "src/components/StartupLoading.css",
-      "index.html"
+      "index.html",
+      "src/components/HomeDashboard.tsx",
+      "src/components/HomeDashboard.css"
     ],
     "commands": []
   },
@@ -664,5 +666,27 @@
       "src/data/guidePracticeScenarios.json"
     ],
     "commands": []
+  },
+  "quick-consult": {
+    "sources": [
+      "src/App.tsx#App",
+      "src/App.tsx#PatientForm",
+      "src/components/QuickPatientLink.tsx",
+      "src/components/HomeDashboard.tsx",
+      "src/components/HomeDashboard.css",
+      "src/core/patientSearch.ts",
+      "server/patientDirectory.ts",
+      "src/core/model.ts",
+      "src/core/guideTraining.ts",
+      "src/data/guidePracticeScenarios.json",
+      "src/core/vipPoints.ts",
+      "src/core/gradeBenefits.ts",
+      "src/core/analytics.ts",
+      "src/core/addressRegion.ts"
+    ],
+    "commands": [
+      "consultation.quickCreate",
+      "patient.quickRegister"
+    ]
   }
 }

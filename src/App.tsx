@@ -1,3 +1,5 @@
+import { HomeDashboard, type HistoryFilter } from "./components/HomeDashboard";
+import { QuickPatientLink } from "./components/QuickPatientLink";
 import { StartupLoading } from "./components/StartupLoading";
 import { BirthDateInput } from "./components/BirthDateInput";
 import { formatMobilePhone, formatBirthDate } from "./core/phone";
@@ -312,7 +314,7 @@ function Modal({
 export function App() {
   const [state, setState] = useState<State>(emptyState()),
     [user, setUser] = useState<User | null>(null),
-    [page, setPage] = useState("patients"),
+    [page, setPage] = useState("home"),
     [patientId, setPatientId] = useState(""),
     [consultId, setConsultId] = useState(""),
     [tab, setTab] = useState("photo"),
@@ -349,6 +351,12 @@ export function App() {
     if (trainingMode && user)
       window.dispatchEvent(new CustomEvent("practice:ready"));
   }, [user?.id]);
+  const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  const [quickPatientId, setQuickPatientId] = useState("");
+  const [quickRegistrationMode, setQuickRegistrationMode] = useState<
+    "new" | "existing"
+  >("new");
+  const [quickQueuePage, setQuickQueuePage] = useState(1);
   const [opinionFocus, setOpinionFocus] = useState("");
   const guideLearning = useGuideProgress(user?.id || "");
   const guideUnread = guideLessons.filter(
@@ -884,6 +892,96 @@ export function App() {
     });
   const patient = state.patients.find((p) => p.id === patientId),
     consult = state.consultations.find((c) => c.id === consultId);
+  const navigateWorkspace = (key: string) =>
+    requestNavigation(() => {
+      setPage(key);
+      setPatientId("");
+      setConsultId("");
+      setHistoryFilter("all");
+    });
+  const openQuickRegistration = (id: string) => {
+    const open = () => {
+      setError("");
+      setQuickPatientId(id);
+      setQuickRegistrationMode("new");
+      setModal("quick-register");
+    };
+    if (
+      page === "consult" &&
+      !window.dispatchEvent(
+        new CustomEvent("codimate:before-patient-registration", {
+          cancelable: true,
+          detail: open,
+        }),
+      )
+    )
+      return;
+    open();
+  };
+  const quickPatient = state.patients.find(
+    (p) => p.id === quickPatientId && p.registrationPending && !p.mergedInto,
+  );
+  const pendingPatientIds = new Set(
+    state.patients
+      .filter((p) => p.registrationPending && !p.mergedInto)
+      .map((p) => p.id),
+  );
+  const quickQueue = state.consultations
+    .filter((c) => pendingPatientIds.has(c.patientId))
+    .slice()
+    .reverse();
+  const historyConsultations = state.consultations
+    .filter(
+      (c) =>
+        historyFilter === "all" ||
+        (historyFilter === "pending"
+          ? pendingPatientIds.has(c.patientId)
+          : !c.cancelled &&
+            (historyFilter === "held"
+              ? c.status === "H"
+              : historyFilter === "today"
+                ? c.appointment?.slice(0, 10) ===
+                  new Intl.DateTimeFormat("sv-SE", {
+                    timeZone: "Asia/Seoul",
+                  }).format(new Date())
+                : c.status === "P" &&
+                  ledgerAvailable(state, c.id, "receipt") > 0)),
+    )
+    .slice()
+    .reverse();
+  const openConsultation = (c: Consultation) =>
+    requestNavigation(() => {
+      setConsultId(c.id);
+      setPatientId(c.patientId);
+      setPage("consult");
+      setTab("consult");
+    });
+  const quickStart = (category: "미용" | "보험") =>
+    work(async () => {
+      const id = crypto.randomUUID();
+      await send("consultation.quickCreate", { category }, id);
+      setPage("consult");
+      setPatientId(`quick-${id}`);
+      setConsultId(id);
+      setTab("consult");
+      setNotice(
+        "바로상담을 시작했습니다. 환자정보는 상담 후 등록할 수 있습니다.",
+      );
+    });
+  const registerQuick = (data: Record<string, unknown>) =>
+    work(async () => {
+      if (!quickPatient) return;
+      await send(
+        "patient.quickRegister",
+        data,
+        quickPatient.id,
+        quickPatient.rev,
+      );
+      if (data.targetId && patientId === quickPatient.id)
+        setPatientId(String(data.targetId));
+      setModal("");
+      setNotice("환자정보를 등록했습니다. 상담 기록은 그대로 연결됩니다.");
+    });
   const newConsult = (
     p: Patient,
     kind: Consultation["kind"] = "initial",
@@ -935,7 +1033,7 @@ export function App() {
     setPending([]);
     setConsultId("");
     setPatientId("");
-    setPage("patients");
+    setPage("home");
     setTab("photo");
   };
   const openOffline = () => {
@@ -1320,7 +1418,11 @@ export function App() {
     );
   return (
     <div
-      className={"app-shell" + (sidebarCollapsed ? " sidebar-collapsed" : "")}
+      className={
+        "app-shell" +
+        (sidebarCollapsed ? " sidebar-collapsed" : "") +
+        (page === "home" ? " home-shell" : "")
+      }
     >
       <PullToRefresh
         disabled={busy || pending.length > 0}
@@ -1333,7 +1435,19 @@ export function App() {
         }
       />
       <aside className="sidebar" id="main-navigation">
-        <div className="logo">
+        <div
+          className="logo"
+          role="button"
+          tabIndex={0}
+          aria-label="코디메이트 홈"
+          onClick={() => navigateWorkspace("home")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              navigateWorkspace("home");
+            }
+          }}
+        >
           <HeartHandshake />
           <div>
             코디메이트<small>GRAND CLINIC</small>
@@ -1341,6 +1455,7 @@ export function App() {
         </div>
         <p className="nav-label">WORKSPACE</p>
         {[
+          ["quick", "바로상담", HeartHandshake],
           ["patients", "환자목록", Users],
           ["consultations", "상담이력", ClipboardList],
           ["stats", "통계", BarChart3],
@@ -1356,6 +1471,7 @@ export function App() {
             className={"nav-item " + (page === key ? "active" : "")}
             onClick={() => {
               requestNavigation(() => {
+                setHistoryFilter("all");
                 setPage(key);
                 setConsultId("");
                 setPatientId("");
@@ -1379,6 +1495,7 @@ export function App() {
               {
                 (
                   {
+                    quick: "바로상담",
                     patients: "환자",
                     consultations: "상담이력",
                     stats: "통계",
@@ -1411,6 +1528,14 @@ export function App() {
       </aside>
       <main className="workspace">
         <header className="topbar">
+          <button
+            className="home-brand"
+            aria-label="코디메이트 홈"
+            onClick={() => navigateWorkspace("home")}
+          >
+            <HeartHandshake size={22} />
+            코디메이트
+          </button>
           <button
             className="sidebar-toggle"
             aria-label={sidebarCollapsed ? "메뉴 펼치기" : "메뉴 접기"}
@@ -1529,6 +1654,128 @@ export function App() {
           </div>
         )}
         <div className="content">
+          {page === "home" && (
+            <HomeDashboard
+              state={state}
+              user={user}
+              navigate={navigateWorkspace}
+              history={(filter) => {
+                setHistoryFilter(filter);
+                setPage("consultations");
+              }}
+              opinions={() => openOpinion()}
+              unread={unreadReplies.length}
+            />
+          )}
+          {page === "quick" && (
+            <>
+              <Title
+                title="바로상담"
+                description="등록을 기다리지 않고 상담부터 시작하세요. 사진·메모·견적을 저장한 뒤 환자정보를 연결할 수 있습니다."
+              />
+              <div className="quick-start-options">
+                <button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => quickStart("미용")}
+                >
+                  미용 상담 시작
+                </button>
+                <button disabled={busy} onClick={() => quickStart("보험")}>
+                  보험 상담 시작
+                </button>
+              </div>
+              <div className="card">
+                <h2>바로상담환자 · 등록 대기 {quickQueue.length}명</h2>
+                <p>
+                  환자목록에는 아직 표시되지 않습니다. 상담 기록을 확인한 뒤
+                  신규 등록하거나 기존 환자에 연결하세요.
+                </p>
+                {!quickQueue.length && (
+                  <Empty>환자정보 등록을 기다리는 바로상담이 없습니다.</Empty>
+                )}
+                {quickQueue
+                  .slice(
+                    (Math.min(
+                      quickQueuePage,
+                      Math.max(1, Math.ceil(quickQueue.length / 10)),
+                    ) -
+                      1) *
+                      10,
+                    Math.min(
+                      quickQueuePage,
+                      Math.max(1, Math.ceil(quickQueue.length / 10)),
+                    ) * 10,
+                  )
+                  .map((c) => (
+                    <div className="quick-pending-row" key={c.id}>
+                      <div>
+                        <b>{c.patient.name}</b>
+                        <small>
+                          {c.category} ·{" "}
+                          {state.users.find((u) => u.id === c.ownerId)?.name ||
+                            "상담자 미지정"}{" "}
+                          · {status(c)}
+                        </small>
+                      </div>
+                      <button onClick={() => openConsultation(c)}>
+                        상담 이어가기
+                      </button>
+                      <button
+                        className="primary"
+                        onClick={() => openQuickRegistration(c.patientId)}
+                      >
+                        환자정보 등록
+                      </button>
+                    </div>
+                  ))}
+                {quickQueue.length > 10 && (
+                  <div className="toolbar">
+                    <button
+                      disabled={quickQueuePage <= 1}
+                      onClick={() => setQuickQueuePage((p) => p - 1)}
+                    >
+                      이전
+                    </button>
+                    <span>
+                      {Math.min(
+                        quickQueuePage,
+                        Math.ceil(quickQueue.length / 10),
+                      )}{" "}
+                      / {Math.ceil(quickQueue.length / 10)}
+                    </span>
+                    <button
+                      disabled={
+                        quickQueuePage >= Math.ceil(quickQueue.length / 10)
+                      }
+                      onClick={() => setQuickQueuePage((p) => p + 1)}
+                    >
+                      다음
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+          {page === "consult" &&
+            consult &&
+            pendingPatientIds.has(consult.patientId) && (
+              <div className="quick-info-banner">
+                <div>
+                  <strong>바로상담환자 · 환자정보 등록 대기</strong>
+                  <small>
+                    사진·메모·견적을 저장할 수 있습니다. 서명·환자용 출력 전에는
+                    환자정보를 등록하세요.
+                  </small>
+                </div>
+                <button
+                  onClick={() => openQuickRegistration(consult.patientId)}
+                >
+                  환자정보 등록
+                </button>
+              </div>
+            )}
+
           {guidePractice && page !== "guide" && (
             <div className="guide-return">
               <span>사용법 따라 하기 · {guidePractice}</span>
@@ -1618,52 +1865,79 @@ export function App() {
                 title="상담이력"
                 description="함께 이어온 상담을 한눈에 확인하세요."
               />
+              <div className="history-filters">
+                {(
+                  [
+                    ["all", "전체"],
+                    ["pending", "바로상담환자"],
+                    ["held", "보류"],
+                    ["today", "오늘 예약"],
+                    ...(allowed(user, "money.read")
+                      ? [["unpaid", "미수납"]]
+                      : []),
+                  ] as [HistoryFilter, string][]
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    className={historyFilter === key ? "active" : ""}
+                    onClick={() => setHistoryFilter(key)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
               <div className="card">
-                {state.consultations.length ? (
-                  state.consultations
-                    .slice()
-                    .reverse()
-                    .map((c) => (
-                      <div
-                        role="link"
-                        tabIndex={0}
-                        onKeyDown={(e) => {
-                          if (e.target === e.currentTarget && e.key === "Enter")
-                            e.currentTarget.click();
-                        }}
-                        className="list-row"
-                        key={c.id}
-                        onClick={() => {
-                          setConsultId(c.id);
-                          setPatientId(c.patientId);
-                          setPage("consult");
-                          setTab("consult");
-                        }}
-                      >
-                        <span>
-                          <b>{c.patient.name}</b>
-                          <small>
-                            {c.createdAt.slice(0, 10)} · {c.category}
-                          </small>
-                        </span>
-                        <ConsultationOwner
-                          state={state}
-                          consult={c}
-                          user={user}
-                          send={send}
-                        />
-                        <span className={"badge " + c.status}>{status(c)}</span>
-                        <ConsultationPayment
-                          state={state}
-                          consult={c}
-                          user={user}
-                          onPay={() => openPayment(c)}
-                        />
-                        <ChevronRight />
-                      </div>
-                    ))
+                {historyConsultations.length ? (
+                  historyConsultations.map((c) => (
+                    <div
+                      role="link"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.target === e.currentTarget && e.key === "Enter")
+                          e.currentTarget.click();
+                      }}
+                      className="list-row"
+                      key={c.id}
+                      onClick={() => {
+                        setConsultId(c.id);
+                        setPatientId(c.patientId);
+                        setPage("consult");
+                        setTab("consult");
+                      }}
+                    >
+                      <span>
+                        <b>{c.patient.name}</b>
+                        {pendingPatientIds.has(c.patientId) && (
+                          <span className="quick-patient-badge">
+                            바로상담환자 · 등록 대기
+                          </span>
+                        )}
+                        <small>
+                          {c.createdAt.slice(0, 10)} · {c.category}
+                        </small>
+                      </span>
+                      <ConsultationOwner
+                        state={state}
+                        consult={c}
+                        user={user}
+                        send={send}
+                      />
+                      <span className={"badge " + c.status}>{status(c)}</span>
+                      <ConsultationPayment
+                        state={state}
+                        consult={c}
+                        user={user}
+                        onPay={() => openPayment(c)}
+                      />
+                      <ChevronRight />
+                    </div>
+                  ))
                 ) : (
-                  <Empty>환자목록에서 첫 상담을 시작하세요.</Empty>
+                  <Empty>
+                    {historyFilter === "all"
+                      ? "바로상담 또는 환자목록에서 첫 상담을 시작하세요."
+                      : "선택한 조건에 해당하는 상담이 없습니다."}
+                  </Empty>
                 )}
               </div>
             </>
@@ -1679,8 +1953,16 @@ export function App() {
               send={send}
               work={work}
               back={() => {
-                setPage("patients");
-                setPatientId(consult.patientId);
+                setPage(
+                  pendingPatientIds.has(consult.patientId)
+                    ? "quick"
+                    : "patients",
+                );
+                setPatientId(
+                  pendingPatientIds.has(consult.patientId)
+                    ? ""
+                    : consult.patientId,
+                );
                 setConsultId("");
               }}
               guestPhotos={guestPhotos}
@@ -1765,6 +2047,44 @@ export function App() {
       {modal === "recovery" && (
         <Modal title="미전송·충돌 자료 보관함" close={() => setModal("")}>
           <RecoveryView pending={pending} state={state} />
+        </Modal>
+      )}
+      {modal === "quick-register" && quickPatient && (
+        <Modal title="바로상담 환자정보 등록" close={() => setModal("")}>
+          {error && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+          <p>
+            <b>{quickPatient.name}</b>의 상담 사진·메모·견적을 그대로
+            연결합니다.
+          </p>
+          <div className="history-filters">
+            <button
+              className={quickRegistrationMode === "new" ? "active" : ""}
+              onClick={() => setQuickRegistrationMode("new")}
+            >
+              신규 환자로 등록
+            </button>
+            <button
+              className={quickRegistrationMode === "existing" ? "active" : ""}
+              onClick={() => setQuickRegistrationMode("existing")}
+            >
+              기존 환자에 연결
+            </button>
+          </div>
+          {quickRegistrationMode === "existing" ? (
+            <QuickPatientLink
+              link={(p) => registerQuick({ targetId: p.id, targetRev: p.rev })}
+            />
+          ) : (
+            <PatientForm
+              state={state}
+              patient={{ ...quickPatient, name: "" }}
+              save={(data) => registerQuick(data)}
+            />
+          )}
         </Modal>
       )}
       {modal === "patient" && (
@@ -2543,7 +2863,7 @@ function PatientForm({
           save(
             {
               ...data,
-              ...(!patient && referredBy
+              ...((!patient || patient.registrationPending) && referredBy
                 ? { referredByPatientId: referredBy }
                 : {}),
             },
@@ -2630,6 +2950,7 @@ function PatientForm({
           </Field>
           <Field label="성별">
             <select
+              aria-label="성별"
               value={data.sex}
               onChange={(e) =>
                 setData({ ...data, sex: e.target.value as Patient["sex"] })
@@ -2641,11 +2962,13 @@ function PatientForm({
             </select>
           </Field>
         </div>
-        {(!patient || patient.referredByPatientId) && (
+        {(!patient ||
+          patient.registrationPending ||
+          patient.referredByPatientId) && (
           <ReferralPicker
             state={state}
             value={referredBy}
-            disabled={!!patient}
+            disabled={!!patient && !patient.registrationPending}
             onChange={(id) => {
               setReferredBy(id);
               if (id)
@@ -3662,6 +3985,33 @@ function ConsultationView({
       draft.rev,
     );
   };
+  useEffect(() => {
+    const register = (event: Event) => {
+      event.preventDefault();
+      const open = (event as CustomEvent<() => void>).detail;
+      void work(async () => {
+        if (adding)
+          throw new Error("사진 추가가 끝난 뒤 환자정보를 등록하세요.");
+        if (
+          !window.dispatchEvent(
+            new Event("codimate:before-consult-save", { cancelable: true }),
+          )
+        )
+          throw new Error("사진 편집을 저장한 뒤 환자정보를 등록하세요.");
+        if (dirty && !(await save()))
+          throw new Error(
+            "상담 저장이 전송 대기 중입니다. 동기화 후 등록하세요.",
+          );
+        open();
+      });
+    };
+    window.addEventListener("codimate:before-patient-registration", register);
+    return () =>
+      window.removeEventListener(
+        "codimate:before-patient-registration",
+        register,
+      );
+  }, [dirty, draft, adding]);
   const addPhotos = async (files: File[]) => {
     if (adding) return;
     if (draft.photos.length + files.length > 50) {

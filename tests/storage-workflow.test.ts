@@ -856,3 +856,59 @@ it("persists VIP grants and point payments atomically with retry-safe receipts a
     ),
   ).toBe(true);
 });
+it("persists quick consultation atomically, replays safely, hydrates it after reload and registers into directory", async () => {
+  const f = await fixture();
+  const operation = crypto.randomUUID();
+  expect(
+    (
+      await f.cmd(
+        "consultation.quickCreate",
+        { category: "미용" },
+        "quick-test",
+        undefined,
+        operation,
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (
+      await f.cmd(
+        "consultation.quickCreate",
+        { category: "미용" },
+        "quick-test",
+        undefined,
+        operation,
+      )
+    ).status,
+  ).toBe(200);
+  let state = ((await (await f.request("/state?view=workspace")).json()) as any)
+    .state;
+  expect(
+    state.consultations.filter((c: any) => c.id === "quick-test"),
+  ).toHaveLength(1);
+  expect(
+    state.patients.find((p: any) => p.id === "quick-quick-test")
+      .registrationPending,
+  ).toBe(true);
+  const directory = (await (
+    await f.request("/patients/search?search=바로상담")
+  ).json()) as any;
+  expect(directory.rows).toEqual([]);
+  const p = state.patients.find((p: any) => p.id === "quick-quick-test");
+  const response = await f.cmd(
+    "patient.quickRegister",
+    {
+      targetId: "patient",
+      targetRev: state.patients.find((p: any) => p.id === "patient").rev,
+    },
+    p.id,
+    p.rev,
+  );
+  expect(response.status, await response.text()).toBe(200);
+  state = ((await (await f.request("/state?view=workspace")).json()) as any)
+    .state;
+  expect(
+    state.consultations.find((c: any) => c.id === "quick-test"),
+  ).toMatchObject({ patientId: "patient", patient: { name: "테스트" } });
+  expect(f.files.size).toBeGreaterThan(0);
+});

@@ -374,7 +374,11 @@ export function duplicates(
   const key = patientIdentityKey(p);
   return s.patients.filter(
     (x) =>
-      !x.mergedInto && !x.archived && !!key && patientIdentityKey(x) === key,
+      !x.registrationPending &&
+      !x.mergedInto &&
+      !x.archived &&
+      !!key &&
+      patientIdentityKey(x) === key,
   );
 }
 export function patientFor(s: State, id: string) {
@@ -927,10 +931,115 @@ export async function applyCommand(
       text = "환자 등록";
       break;
     }
+    case "patient.quickRegister": {
+      const source = find(s.patients);
+      ensure(
+        source.registrationPending && !source.mergedInto,
+        "등록 대기 중인 바로상담환자가 아닙니다",
+        409,
+      );
+      const consultations = s.consultations.filter(
+        (c) => c.patientId === source.id,
+      );
+      ensure(
+        isAdministrator(user) ||
+          source.ownerId === user.id ||
+          consultations.some((c) => c.ownerId === user.id) ||
+          allowed(user, "patient.edit"),
+        "환자정보를 등록할 권한이 없습니다",
+        403,
+      );
+      ensure(
+        !consultations.some(
+          (c) =>
+            s.signatures.some((x) => x.consultationId === c.id) ||
+            s.quoteConsents.some((x) => x.consultationId === c.id),
+        ),
+        "서명·출력 기록을 먼저 확인하세요",
+        409,
+      );
+      let target = source;
+      if (p.targetId) {
+        const existing = s.patients.find((x) => x.id === p.targetId);
+        ensure(
+          existing &&
+            !existing.registrationPending &&
+            !existing.archived &&
+            !existing.mergedInto,
+          "연결할 등록 환자를 선택하세요",
+        );
+        ensure(
+          existing.rev === p.targetRev,
+          "기존 환자정보가 변경되었습니다. 다시 선택하세요",
+          409,
+        );
+        target = existing;
+        source.mergedInto = target.id;
+        touch(target);
+        for (const row of [...s.notes, ...s.ledger])
+          if (row.patientId === source.id) {
+            row.patientId = target.id;
+            touch(row);
+          }
+        for (const event of s.events)
+          if (event.patientId === source.id) event.patientId = target.id;
+      } else {
+        const d = patientSchema.parse(p);
+        ensure(
+          !duplicates(s, d).length,
+          "이름과 전화번호가 같은 환자가 있습니다. 기존 환자 연결을 이용하세요",
+          409,
+        );
+        const referredBy = z
+          .string()
+          .max(100)
+          .optional()
+          .parse(p.referredByPatientId);
+        if (referredBy) {
+          ensure(
+            referredBy !== source.id &&
+              s.patients.some(
+                (x) =>
+                  x.id === referredBy &&
+                  !x.registrationPending &&
+                  !x.archived &&
+                  !x.mergedInto,
+              ),
+            "소개한 기존 환자를 다시 선택하세요",
+          );
+          source.referredByPatientId = referredBy;
+        }
+        Object.assign(source, d, {
+          addressRegion: d.addressRegion || regionFromAddress(d.address),
+          number: String(
+            Math.max(0, ...s.patients.map((x) => Number(x.number) || 0)) + 1,
+          ).padStart(6, "0"),
+        });
+      }
+      source.registrationPending = false;
+      touch(source);
+      for (const c of consultations) {
+        c.patientId = target.id;
+        c.patient = {
+          name: target.name,
+          sex: target.sex,
+          dob: target.dob,
+          phone: target.phone,
+          address: target.address,
+        };
+        touch(c);
+      }
+      patientId = target.id;
+      text = p.targetId
+        ? "바로상담 · 기존 환자 연결"
+        : "바로상담 · 환자정보 등록 완료";
+      break;
+    }
     case "patient.update": {
       need("patient.edit");
       const x = find(s.patients);
       x.storageName ||= safeName(`${x.number || x.id}${x.sex}${x.name}`);
+      ensure(!x.registrationPending, "바로상담 환자정보 등록을 이용하세요");
       const changed = patientSchema.parse(p);
       Object.assign(x, changed, {
         addressRegion:
@@ -1090,15 +1199,50 @@ export async function applyCommand(
       text = "환자 메모 저장";
       break;
     }
+    case "consultation.quickCreate":
     case "consultation.create": {
       ensure(
         !s.consultations.some((x) => x.id === id),
         "상담 ID가 이미 있습니다",
         409,
       );
-      const patient = patientFor(s, String(p.patientId));
+      const quick = cmd.type === "consultation.quickCreate";
+      if (quick) {
+        ensure(
+          !s.patients.some((x) => x.id === `quick-${id}`),
+          "이미 시작한 바로상담입니다",
+          409,
+        );
+        s.patients.push({
+          ...base,
+          id: `quick-${id}`,
+          registrationPending: true,
+          name: `바로상담 ${new Date(now).toLocaleString("ko-KR", { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })} · ${id.slice(-4)}`,
+          sex: "U",
+          dob: "",
+          phone: "",
+          address: "",
+          ownerId: user.id,
+          storageName: `quick-${id}`,
+        });
+      }
+      const patient = patientFor(
+        s,
+        quick ? `quick-${id}` : String(p.patientId),
+      );
       ensure(patient && !patient.archived, "환자를 선택하세요");
-      patientSchema.parse(patient);
+      if (!quick) {
+        ensure(
+          !patient.registrationPending,
+          "기존 바로상담을 열어 환자정보를 등록하세요",
+        );
+        patientSchema.parse(patient);
+      }
+      if (quick)
+        ensure(
+          !p.sourceConsultationId && (!p.kind || p.kind === "initial"),
+          "바로상담은 새 상담으로 시작합니다",
+        );
       const cat = latestCatalog(s);
       const category = z.enum(["미용", "보험"]).parse(p.category);
       const kind = z
@@ -1136,6 +1280,7 @@ export async function applyCommand(
       s.consultations.push({
         ...base,
         patientId: patient.id,
+        ...(quick ? { quickStarted: true } : {}),
         patient: {
           name: patient.name,
           sex: patient.sex,
@@ -2685,6 +2830,10 @@ export async function applyCommand(
         409,
       );
       ensure(p.agreed === true, "유출방지 안내에 동의해주세요");
+      ensure(
+        !patientFor(s, c.patientId)?.registrationPending,
+        "환자정보 등록 후 서명할 수 있습니다",
+      );
       const contentHash = await quoteContentHash(c);
       ensure(
         contentHash === p.contentHash,
@@ -2724,6 +2873,10 @@ export async function applyCommand(
       );
       const c = s.consultations.find((c) => c.id === p.consultationId);
       ensure(c, "상담을 선택하세요");
+      ensure(
+        !patientFor(s, c.patientId)?.registrationPending,
+        "환자정보 등록 후 서명할 수 있습니다",
+      );
       edit(c);
       const t = s.consents.find(
         (t) => t.id === p.templateId && t.status === "published",
@@ -2768,6 +2921,7 @@ export async function applyCommand(
   if (
     [
       "patient.create",
+      "patient.quickRegister",
       "patient.update",
       "patient.archive",
       "patient.merge",
@@ -2782,6 +2936,7 @@ export async function applyCommand(
   if (
     [
       "patient.create",
+      "patient.quickRegister",
       "patient.update",
       "patient.archive",
       "patient.merge",

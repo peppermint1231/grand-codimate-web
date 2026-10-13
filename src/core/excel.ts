@@ -189,7 +189,7 @@ export async function statisticsWorkbook(s: State) {
     "미수금",
     "등급",
   ]);
-  for (const p of s.patients.filter((p) => !p.mergedInto)) {
+  for (const p of s.patients.filter((p) => !p.registrationPending && !p.mergedInto)) {
     const m = metrics(s, p.id);
     ws.addRow([
       p.id,

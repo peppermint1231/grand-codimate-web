@@ -240,7 +240,9 @@ export function reconcileVip(
   const cash = activeMoneyRows(s).filter(
     (l) => l.tender !== "points" && l.date <= day,
   );
-  const candidates = s.patients.filter((p) => !p.archived && !p.mergedInto);
+  const candidates = s.patients.filter(
+    (p) => !p.registrationPending && !p.archived && !p.mergedInto,
+  );
   for (const p of candidates) {
     const qualification = !vipAccount(s, p.id)
       ? firstVipQualification(s, p.id, now)

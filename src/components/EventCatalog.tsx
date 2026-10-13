@@ -1,3 +1,4 @@
+import { catalogTime } from "../core/catalogStatus";
 import {
   mergeHomepageCatalog,
   activateHomepageCatalog,
@@ -244,8 +245,7 @@ export function EventCatalogRefresh({
   const recent = catalog?.websiteImport;
   return (
     <section className="card event-refresh" aria-label="홈페이지 단가표 갱신">
-      <div className="section-title">
-        <h3>홈페이지 단가표 연동</h3>
+      <div className="homepage-refresh-toolbar">
         <button
           type="button"
           disabled={disabled || busy || !beauty}
@@ -254,37 +254,58 @@ export function EventCatalogRefresh({
           <RefreshCw size={17} />
           {busy ? "갱신 자료 확인 중…" : "홈페이지 갱신"}
         </button>
-      </div>
-      <p>
-        홈페이지에 게시된 모든 분류·배너·상품을 홈페이지 SSOT로 가져옵니다.
-        정가·판매가·할인율·게시 기간과 원본 포스터 링크를 함께 확인할 수
-        있습니다. 신규 상품 분류는 직접 구성한 미용 SSOT를 참고합니다.
-      </p>
-      <p>
-        미용 SSOT는 홈페이지 갱신과 독립적으로 관리됩니다. 홈페이지 SSOT에서
-        직접 배치한 폴더는 유지하며, 상품명·가격·기간은 홈페이지 기준으로
-        맞춥니다. 홈페이지에 없는 이전 상품은 최신 목록에서 제거합니다. 기존
-        상담·견적서와 이전 버전은 보존됩니다.
-      </p>
-      <a href={EVENT_LIST_URL} target="_blank" rel="noopener noreferrer">
-        홈페이지 가격표 열기 <ExternalLink size={14} />
-      </a>
-      {recent && (
-        <small>
-          최근 홈페이지 갱신:{" "}
-          {new Date(recent.checkedAt).toLocaleString("ko-KR")} · 배너{" "}
-          {recent.pageCount}개 / 상품 {recent.offerCount}개
+        <details className="homepage-refresh-help">
+          <summary
+            aria-label="홈페이지 갱신 도움말"
+            title="홈페이지 갱신 도움말"
+          >
+            ?
+          </summary>
+          <div className="homepage-refresh-help-content">
+            <strong>홈페이지 단가표 연동</strong>
+            <p>
+              홈페이지에 게시된 모든 분류·배너·상품을 홈페이지 SSOT로
+              가져옵니다. 정가·판매가·할인율·게시 기간과 원본 포스터 링크를 함께
+              확인할 수 있습니다. 신규 상품 분류는 직접 구성한 미용 SSOT를
+              참고합니다.
+            </p>
+            <p>
+              미용 SSOT는 홈페이지 갱신과 독립적으로 관리됩니다. 홈페이지
+              SSOT에서 직접 배치한 폴더는 유지하며 상품명·가격·기간은 홈페이지
+              기준으로 맞춥니다. 홈페이지에 없는 이전 상품은 최신 목록에서
+              제거하지만 기존 상담·견적서와 이전 버전은 보존됩니다.
+            </p>
+            <p>
+              갱신 결과를 확인한 뒤 ‘동기화하고 적용’을 눌러 반영하세요.
+              신규·변경 상품은 비활성으로 등록되며 내용이 같은 활성 상품은
+              유지됩니다.
+            </p>
+            <a href={EVENT_LIST_URL} target="_blank" rel="noopener noreferrer">
+              홈페이지 가격표 열기 <ExternalLink size={14} />
+            </a>
+            {recent && (
+              <p>
+                최근 확인: 배너 {recent.pageCount}개 / 상품 {recent.offerCount}
+                개
+              </p>
+            )}
+          </div>
+        </details>
+        <small className="homepage-refresh-time">
+          최근 갱신 {recent ? catalogTime(recent.checkedAt) : "기록 없음"}
         </small>
-      )}
+      </div>
       {disabled && (
         <p className="permission-notice">
           편집 중인 내용을 먼저 저장하거나 취소하세요.
         </p>
       )}
       {!beauty && <p>기준 미용 SSOT를 불러오는 중입니다.</p>}
-      <p role="status" aria-live="polite">
-        {progress}
-      </p>
+      {progress && (
+        <p role="status" aria-live="polite">
+          {progress}
+        </p>
+      )}
       {(error || previewError) && (
         <p className="error" role="alert">
           {error || previewError}

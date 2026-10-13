@@ -5461,3 +5461,32 @@ html.custom-pull-refresh {
   padding: 2px;
   cursor: pointer;
 }
+
+/* Keep infrequent tools in settings; make daily catalog actions easy to reach. */
+.event-refresh { padding: 12px 18px; }
+.homepage-refresh-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:10px; position:relative; }
+.homepage-refresh-time { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }
+.homepage-refresh-help > summary { list-style:none; width:32px; height:32px; display:grid; place-items:center; border:1px solid var(--line); border-radius:50%; font-weight:700; cursor:pointer; }
+.homepage-refresh-help > summary::-webkit-details-marker { display:none; }
+.homepage-refresh-help > summary:focus-visible { outline:3px solid #b99248; outline-offset:3px; }
+.homepage-refresh-help[open] > summary { background:#e7f2ed; }
+.homepage-refresh-help-content { position:absolute; top:calc(100% + 8px); left:0; width:min(620px,100%); padding:18px; background:#fff; border:1px solid var(--line); border-radius:12px; box-shadow:0 8px 25px #173b3222; z-index:10; max-height:60dvh; overflow:auto; }
+.settings-tabs { flex-wrap:wrap; gap:4px; }
+.settings-tabs > button { flex-shrink:0; }
+.catalog-exchange .button-row { margin:14px 0; }
+.catalog-exchange .check { margin:12px 0; }
+.catalog-exchange hr { border:0; border-top:1px solid var(--line); margin:24px 0; }
+.folder-primary-actions { gap:5px; }
+.folder-primary-actions button { margin:0; padding:9px 8px; white-space:nowrap; }
+.folder-edit-help { font-size:calc(12px * var(--ui-font-scale,1)); margin-top:8px; }
+.folder-edit-help summary { cursor:pointer; }
+@media (max-width:700px) {
+  .settings-tabs > button { padding:10px; }
+  .homepage-refresh-time { flex-basis:100%; margin-left:0; }
+}
+.catalog-exchange .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.catalog-exchange .field, .catalog-exchange select { min-width:0; max-width:100%; }
+.catalog-exchange select { text-overflow:ellipsis; }
+@media (max-width:700px) {
+  .catalog-exchange .form-grid { grid-template-columns:minmax(0,1fr); }
+}

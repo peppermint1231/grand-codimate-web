@@ -312,6 +312,12 @@ export function FolderWorkspace({
                 <div className="folder-inline-edit">
                   <input
                     autoFocus
+                    onFocus={(e) =>
+                      e.currentTarget.scrollIntoView({
+                        block: "center",
+                        behavior: "smooth",
+                      })
+                    }
                     aria-label="폴더 이름"
                     value={name}
                     style={{ color }}
@@ -419,6 +425,23 @@ export function FolderWorkspace({
           </div>
         );
       });
+  const createFolder = () =>
+    work(async () => {
+      let label = "새 폴더",
+        i = 2;
+      while (nodes.some((f) => f.parentId === selected && f.name === label))
+        label = "새 폴더 " + i++;
+      const result = addFolder(catalog, selected, label);
+      apply(result.catalog);
+      setExpanded((x) => [
+        ...x,
+        ...folderPath(result.catalog, result.id).map((f) => f.id),
+      ]);
+      onSelect(result.id);
+      setRenaming(result.id);
+      setName(label);
+      setColor("#155e59");
+    });
   const targetName = nodes.find((f) => f.id === selected)?.name || "최상위";
   return (
     <aside
@@ -567,40 +590,59 @@ export function FolderWorkspace({
       </div>
       {editing && (
         <div className="folder-edit-toolbar">
+          <div className="button-row folder-primary-actions">
+            <button
+              {...catalogCommand("folderNew")}
+              disabled={
+                !!renaming ||
+                !!collision ||
+                !!deleting ||
+                (!!selected && folderPath(catalog, selected).length >= 4)
+              }
+              onClick={createFolder}
+            >
+              <Plus size={15} />
+              폴더 생성
+            </button>
+            <button
+              className="primary"
+              disabled={!!renaming || !!collision || !!deleting}
+              onClick={() => work(save)}
+            >
+              <Save size={15} />
+              폴더 저장
+            </button>
+            <button
+              {...catalogCommand("folderCancel")}
+              onClick={() => {
+                if (
+                  window.confirm("폴더 수정 내용을 저장하지 않고 취소할까요?")
+                ) {
+                  setRenaming("");
+                  setCollision(undefined);
+                  setDeleting("");
+                  cancel();
+                }
+              }}
+            >
+              취소
+            </button>
+          </div>
           <fieldset
             className="catalog-edit-fieldset"
             disabled={!!renaming || !!collision || !!deleting}
           >
             {editActions}
           </fieldset>
-          <button
-            className="primary"
-            disabled={!!renaming || !!collision || !!deleting}
-            onClick={() => work(save)}
-          >
-            <Save size={15} />
-            폴더 저장
-          </button>
-          <button
-            {...catalogCommand("folderCancel")}
-            onClick={() => {
-              if (
-                window.confirm("폴더 수정 내용을 저장하지 않고 취소할까요?")
-              ) {
-                setRenaming("");
-                setCollision(undefined);
-                setDeleting("");
-                cancel();
-              }
-            }}
-          >
-            취소
-          </button>
-          <p className="small">
-            이름은 두 번 누르면 수정됩니다. 손잡이를 폴더의 위·아래로 끌면 순서
-            변경, 가운데로 끌면 폴더 안으로 이동합니다. 저장하면 추천기에
-            반영됩니다.
-          </p>
+          <details className="folder-edit-help">
+            <summary>폴더 편집 도움말</summary>
+            <p className="small">
+              이름은 두 번 누르면 수정됩니다. 손잡이를 폴더의 위·아래로 끌면
+              순서 변경, 가운데로 끌면 폴더 안으로 이동합니다. 선택한 폴더
+              아래에 새 폴더를 만들며, ‘전체 상품 · 최상위 위치’를 누르면
+              최상위에 만듭니다. 폴더 저장을 누르면 추천기에도 반영됩니다.
+            </p>
+          </details>
         </div>
       )}
       <button
@@ -632,30 +674,8 @@ export function FolderWorkspace({
           )}
           <div className="button-row">
             <button
-              {...catalogCommand("folderNew")}
               disabled={!!selected && folderPath(catalog, selected).length >= 4}
-              onClick={() =>
-                work(async () => {
-                  let label = "새 폴더",
-                    i = 2;
-                  while (
-                    nodes.some(
-                      (f) => f.parentId === selected && f.name === label,
-                    )
-                  )
-                    label = "새 폴더 " + i++;
-                  const result = addFolder(catalog, selected, label);
-                  apply(result.catalog);
-                  setExpanded((x) => [
-                    ...x,
-                    ...folderPath(result.catalog, result.id).map((f) => f.id),
-                  ]);
-                  onSelect(result.id);
-                  setRenaming(result.id);
-                  setName(label);
-                  setColor("#155e59");
-                })
-              }
+              onClick={createFolder}
             >
               <Plus size={15} />
               폴더 생성

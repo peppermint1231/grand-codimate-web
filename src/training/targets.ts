@@ -40,7 +40,14 @@ export function findTarget(spec: GuideTargetSpec): HTMLElement | undefined {
         normalize(e.querySelector("span")?.textContent || "") ===
           normalize(spec.label!),
     );
-    return l?.querySelector<HTMLElement>("input,textarea,select") || l;
+    const control = (l as HTMLLabelElement | undefined)?.control;
+    return (
+      (control instanceof HTMLElement && visible(control)
+        ? control
+        : undefined) ||
+      l?.querySelector<HTMLElement>("input,textarea,select") ||
+      l
+    );
   }
   if (spec.text) {
     const n = normalize(spec.text);

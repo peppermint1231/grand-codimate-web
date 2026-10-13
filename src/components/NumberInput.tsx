@@ -46,7 +46,11 @@ export function NumberInput({
         onPointerCancel?.(event);
       }}
       onChange={(event) => {
-        setDraft(event.target.value);
+        const raw = event.target.value;
+        const editing = document.activeElement === event.currentTarget;
+        setDraft(editing ? raw : null);
+        // Practice checkpoint replay restores values without focusing the field.
+        if (!editing && raw !== "") onValueCommit?.(raw);
         onChange?.(event);
       }}
       onKeyDown={(event) => {
@@ -56,7 +60,7 @@ export function NumberInput({
       }}
       onBlur={(event) => {
         // Keep native validation; callers decide what an empty optional value means.
-        if (draft !== null && draft !== "")
+        if (event.currentTarget.value !== "")
           onValueCommit?.(event.currentTarget.value);
         setDraft(null);
         selectOnRelease.current = false;

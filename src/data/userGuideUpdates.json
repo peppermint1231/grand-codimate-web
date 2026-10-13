@@ -1,6 +1,6 @@
 {
   "start": {
-    "revision": "f8211894f3253cdbd27e",
+    "revision": "634591dc01da1c80b5da",
     "updatedIn": "0.18.26"
   },
   "find-patient": {
@@ -20,7 +20,7 @@
     "updatedIn": "0.18.26"
   },
   "consult-start": {
-    "revision": "52aa98d52d1602a804ba",
+    "revision": "c7a350f68291693e39b4",
     "updatedIn": "0.18.26"
   },
   "photos": {
@@ -28,7 +28,7 @@
     "updatedIn": "0.18.26"
   },
   "editor": {
-    "revision": "3ba1395b1ca69b6ec9d2",
+    "revision": "9a2435eec9d8a123ddaf",
     "updatedIn": "0.18.26"
   },
   "procedures": {
@@ -56,7 +56,7 @@
     "updatedIn": "0.18.26"
   },
   "payments": {
-    "revision": "470c0afe22f7246a276b",
+    "revision": "0d120942d8a739101b7a",
     "updatedIn": "0.18.26"
   },
   "followup": {
@@ -64,7 +64,7 @@
     "updatedIn": "0.18.26"
   },
   "points": {
-    "revision": "6a2e419839cd24bd7ad4",
+    "revision": "989d6bb1c4c972a066e2",
     "updatedIn": "0.18.26"
   },
   "recovery": {
@@ -72,19 +72,19 @@
     "updatedIn": "0.18.26"
   },
   "catalog-basics": {
-    "revision": "cb48c019631bebe248cf",
+    "revision": "f4f5affb4ba932f6393a",
     "updatedIn": "0.18.26"
   },
   "product": {
-    "revision": "7aeb4281f8f525857986",
+    "revision": "2fb7c9e769089f1e7c33",
     "updatedIn": "0.18.26"
   },
   "packages": {
-    "revision": "84e89067f940d4bec90f",
+    "revision": "812963df6749201a325b",
     "updatedIn": "0.18.26"
   },
   "catalog-bulk": {
-    "revision": "fe58961485eb5428c719",
+    "revision": "3574cbf7e8f901847a1d",
     "updatedIn": "0.18.26"
   },
   "homepage": {
@@ -104,7 +104,7 @@
     "updatedIn": "0.18.26"
   },
   "grades-admin": {
-    "revision": "dd34da8ae74f5b16b13e",
+    "revision": "0d116b0e4aec1e0bfcb1",
     "updatedIn": "0.18.26"
   },
   "accounts": {
@@ -112,7 +112,7 @@
     "updatedIn": "0.18.26"
   },
   "statistics": {
-    "revision": "9816f12c2bf10d782256",
+    "revision": "c2bb21c82a53b93520ea",
     "updatedIn": "0.18.26"
   },
   "marketing": {

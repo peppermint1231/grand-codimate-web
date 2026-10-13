@@ -1,4 +1,4 @@
-import { trainingMode } from "../training/environment";
+import { trainingMode, trainingRuntime } from "../training/environment";
 import { StylusSettings, useStylusButton } from "./StylusSettings";
 import { stylusErasing } from "../core/stylus";
 import { native, NativeClinic } from "../lib/native";
@@ -292,7 +292,18 @@ export function PhotoEditor({
   directSave?: boolean;
   leaveEvent?: string;
 }) {
-  const [photo, onChange] = useState(savedPhoto);
+  const restored = useRef<any>(undefined);
+  const restoredLoaded = useRef(false);
+  if (!restoredLoaded.current) {
+    restoredLoaded.current = true;
+    restored.current = trainingMode
+      ? trainingRuntime().editor?.(savedPhoto.id)
+      : undefined;
+  }
+  const restoredOnce = useRef(false);
+  const [photo, onChange] = useState<Photo>(
+    restored.current?.photo || savedPhoto,
+  );
   const [savedMessage, setSavedMessage] = useState("");
   const [saving, setSaving] = useState(false),
     [saveError, setSaveError] = useState("");
@@ -563,6 +574,36 @@ export function PhotoEditor({
     };
   }, [font, photo.annotations, stamp]);
   useEffect(() => {
+    const r = restored.current;
+    if (r && !restoredOnce.current) {
+      restoredOnce.current = true;
+      setUndo(r.undo);
+      setRedo(r.redo);
+      setTool(r.tool);
+      setWidth(r.width);
+      setColor(r.color);
+      setOpacity(r.opacity);
+      setDashed(r.dashed);
+      setFont(r.font);
+      setHidden(r.hidden);
+      setOwnOnly(r.ownOnly);
+      setZoom(r.zoom);
+      setOffset(r.offset);
+      setSelectedId(r.selectedId);
+      setTextDraft(r.textDraft);
+      setTextAnchor(r.textAnchor);
+      setFontSize(r.fontSize);
+      setStamp(r.stamp);
+      setTextOpen(r.textOpen);
+      setStyleOpen(r.styleOpen);
+      setFrame(r.frame);
+      localStorage.setItem(
+        "codimate.stylus-button",
+        r.stylusButtonEnabled ? "on" : "off",
+      );
+      window.dispatchEvent(new Event("codimate:stylus-setting"));
+      return;
+    }
     setUndo([]);
     setRedo([]);
     setZoom(25);
@@ -576,10 +617,88 @@ export function PhotoEditor({
     activePen.current = null;
     setTemporaryEraser(false);
   }, [photo.id]);
+  useEffect(() => {
+    if (!trainingMode) return;
+    window.dispatchEvent(
+      new CustomEvent("practice:editor", {
+        detail: {
+          id: photo.id,
+          state: {
+            photo,
+            undo,
+            redo,
+            tool,
+            width,
+            color,
+            opacity,
+            dashed,
+            font,
+            hidden,
+            ownOnly,
+            zoom,
+            offset,
+            selectedId,
+            textDraft,
+            textAnchor,
+            fontSize,
+            stamp,
+            textOpen,
+            styleOpen,
+            frame,
+            stylusButtonEnabled,
+          },
+        },
+      }),
+    );
+  }, [
+    photo,
+    undo,
+    redo,
+    tool,
+    width,
+    color,
+    opacity,
+    dashed,
+    font,
+    hidden,
+    ownOnly,
+    zoom,
+    offset,
+    selectedId,
+    textDraft,
+    textAnchor,
+    fontSize,
+    stamp,
+    textOpen,
+    styleOpen,
+    frame,
+    stylusButtonEnabled,
+  ]);
+  useEffect(
+    () => () => {
+      if (trainingMode)
+        window.dispatchEvent(
+          new CustomEvent("practice:editor", { detail: { id: savedPhoto.id } }),
+        );
+    },
+    [savedPhoto.id],
+  );
   const commit = (next: Photo) => {
-    if (trainingMode && next.annotations.length > photo.annotations.length)
-      window.dispatchEvent(new CustomEvent("practice:annotation"));
     if (readonly) return;
+    if (trainingMode) {
+      const action =
+        next.annotations.length > photo.annotations.length
+          ? next.annotations.at(-1)?.tool
+          : next.annotations.length < photo.annotations.length
+            ? "erase"
+            : next.crop !== photo.crop ||
+                next.viewportCrop !== photo.viewportCrop
+              ? "crop"
+              : "edit";
+      window.dispatchEvent(
+        new CustomEvent("practice:annotation", { detail: { action } }),
+      );
+    }
     setUndo((x) => [...x.slice(-49), photo]);
     setRedo([]);
     onChange(next);
@@ -1067,6 +1186,16 @@ export function PhotoEditor({
     }
     if (primaryPointer.current !== e.pointerId) return;
     primaryPointer.current = null;
+    if (
+      trainingMode &&
+      !cancelled &&
+      pan.current &&
+      (Math.abs(e.clientX - pan.current.x) > 2 ||
+        Math.abs(e.clientY - pan.current.y) > 2)
+    )
+      window.dispatchEvent(
+        new CustomEvent("practice:annotation", { detail: { action: "pan" } }),
+      );
     pan.current = null;
     const a = drawing.current,
       erased = erasing.current,
@@ -1099,13 +1228,20 @@ export function PhotoEditor({
     if (
       dragged &&
       JSON.stringify(dragged.original) !== JSON.stringify(dragged.preview)
-    )
+    ) {
       commit({
         ...photo,
         annotations: photo.annotations.map((a) =>
           a.id === dragged.original.id ? dragged.preview : a,
         ),
       });
+      if (trainingMode)
+        window.dispatchEvent(
+          new CustomEvent("practice:annotation", {
+            detail: { action: dragged.resize ? "resize" : "move" },
+          }),
+        );
+    }
     if (erased && erased !== photo) commit(erased);
     if (action?.tool === "text") {
       setTextAnchor(action.point);
@@ -1611,6 +1747,17 @@ export function PhotoEditor({
                 setFrame({ x, y, width: w, height: h });
               }}
               onPointerUp={() => {
+                if (
+                  trainingMode &&
+                  frameDrag.current &&
+                  JSON.stringify(frameDrag.current.frame) !==
+                    JSON.stringify(frame)
+                )
+                  window.dispatchEvent(
+                    new CustomEvent("practice:annotation", {
+                      detail: { action: "frame" },
+                    }),
+                  );
                 frameDrag.current = null;
               }}
               onPointerCancel={() => {
@@ -1728,7 +1875,21 @@ export function PhotoEditor({
         )}
         {saveButton}
         <button
-          onClick={() => canvas.current?.parentElement?.requestFullscreen?.()}
+          onClick={() => {
+            const el = canvas.current?.parentElement;
+            if (!el) return;
+            const fallback = () => {
+              if (trainingMode) {
+                el.classList.add("training-expanded-stage");
+                window.dispatchEvent(
+                  new CustomEvent("practice:fullscreen", { detail: el }),
+                );
+              }
+            };
+            if (document.fullscreenEnabled && el.requestFullscreen)
+              void el.requestFullscreen().catch(fallback);
+            else fallback();
+          }}
         >
           크게 보기
         </button>

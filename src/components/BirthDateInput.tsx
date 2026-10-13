@@ -10,7 +10,8 @@ export function BirthDateInput({
   onChange: (value: string) => void;
 }) {
   const id = useId(),
-    input = useRef<HTMLInputElement>(null);
+    input = useRef<HTMLInputElement>(null),
+    calendar = useRef<HTMLInputElement>(null);
   const latest = new Date().toISOString().slice(0, 10);
   const update = (next: string) => {
     const formatted = formatBirthDate(next);
@@ -42,11 +43,24 @@ export function BirthDateInput({
           value={value}
           onChange={(e) => update(e.target.value)}
           aria-describedby={id + "-hint"}
+          aria-keyshortcuts="Alt+ArrowDown"
+          onKeyDown={(e) => {
+            if (e.altKey && e.key === "ArrowDown") {
+              e.preventDefault();
+              try {
+                calendar.current?.showPicker?.();
+              } catch {
+                calendar.current?.focus();
+              }
+            }
+          }}
         />
         <span className="birth-date-calendar">
           <CalendarDays size={20} aria-hidden="true" />
           <input
             type="date"
+            ref={calendar}
+            tabIndex={-1}
             aria-label="생년월일 달력으로 선택"
             title="달력으로 선택"
             value={/^\d{4}-\d{2}-\d{2}$/.test(value) ? value : ""}
@@ -63,7 +77,8 @@ export function BirthDateInput({
         </span>
       </div>
       <small id={id + "-hint"}>
-        숫자 8자리로 입력하거나 달력에서 선택하세요.
+        숫자 8자리로 입력하거나 달력에서 선택하세요. Tab: 다음 입력 · Alt+↓:
+        달력
       </small>
     </div>
   );

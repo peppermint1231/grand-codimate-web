@@ -30,6 +30,7 @@ export function StylusSettings() {
       <label>
         <input
           type="checkbox"
+          aria-label="편집기에서 S펜 버튼을 누르는 동안 지우개 사용"
           checked={enabled}
           onChange={(e) => {
             try {

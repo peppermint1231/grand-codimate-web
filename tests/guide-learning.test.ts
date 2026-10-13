@@ -140,8 +140,74 @@ describe("account based hands-on guide", () => {
       (await f.call("a", undefined, "?checkpoint=start")).checkpoint,
     ).toBeNull();
     const restart = await f.call("a", command(r.id, "restart"));
-    expect(restart.lessons.start.steps).toEqual([]);
-    expect(restart.lessons.start.completed).toBe(false);
+    expect(restart.lessons.start.steps).toEqual(r.steps.map((s) => s.id));
+    expect(restart.lessons.start.completed).toBe(true);
+    expect(restart.lessons.start.replaySteps).toEqual([]);
+    const cp = {
+      kind: "codimate-practice-v1",
+      state: practiceState(),
+      route: { page: "patients" },
+      actions: [],
+    };
+    await f.call(
+      "a",
+      command(r.id, "step", { stepId: r.steps[0].id, checkpoint: cp }),
+    );
+    const tablet = await f.call("a", undefined, "?checkpoint=start");
+    expect(tablet.progress.lessons.start.completed).toBe(true);
+    expect(tablet.progress.lessons.start.replaySteps).toEqual([r.steps[0].id]);
+    expect(tablet.checkpoint).toEqual(cp);
+    const reopened = await f.call("a", command(r.id, "restart"));
+    expect(reopened.lessons.start.replaySteps).toEqual([r.steps[0].id]);
+    expect(
+      guideAccountReport(practiceUser, reopened).lessons.find(
+        (l) => l.id === r.id,
+      )?.completed,
+    ).toBe(true);
+    for (const step of r.steps.slice(1))
+      await f.call("a", command(r.id, "step", { stepId: step.id }));
+    expect(
+      (await f.call("a", undefined, "?checkpoint=start")).checkpoint,
+    ).toBeNull();
+    expect((await f.call("a")).lessons.start.completed).toBe(true);
+  });
+  it("restores unfinished photo work and history once without replaying editing commands", () => {
+    const editor = {
+      photo: practiceState().consultations[0].photos[0],
+      tool: "text",
+      textDraft: "경과 비교",
+      undo: [],
+      redo: [],
+    };
+    const runtime = installPractice({
+      kind: "codimate-practice-v1",
+      state: practiceState(),
+      route: { page: "consult" },
+      actions: [],
+      editors: { photo: editor },
+    });
+    expect(trainingRuntime().editor?.("photo")).toEqual(editor);
+    expect(trainingRuntime().editor?.("photo")).toBeUndefined();
+    expect(runtime.editors()).toEqual({ photo: editor });
+    const evidence = practiceRecipe("editor")!
+      .steps.map((s) => s.evidence)
+      .filter(Boolean);
+    expect(evidence).toEqual(
+      expect.arrayContaining([
+        "pen",
+        "arrow",
+        "rect",
+        "ellipse",
+        "mosaic",
+        "erase",
+        "move",
+        "resize",
+        "stamp",
+        "pan",
+        "crop",
+        "frame",
+      ]),
+    );
   });
   it("migrates legacy acknowledgements without treating manual checks as practice completion", async () => {
     const f = fixture();

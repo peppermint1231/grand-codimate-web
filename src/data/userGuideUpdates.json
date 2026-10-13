@@ -1,122 +1,122 @@
 {
   "start": {
-    "revision": "6d281564fbcc5c9b68ed",
-    "updatedIn": "0.18.22"
+    "revision": "a081d8286feb75eea6d0",
+    "updatedIn": "0.18.23"
   },
   "find-patient": {
-    "revision": "4bc22bd1cb3a160db66c",
-    "updatedIn": "0.18.22"
+    "revision": "c1ee2292416c297e1e57",
+    "updatedIn": "0.18.23"
   },
   "register": {
-    "revision": "2ceeb28a9a0169852832",
-    "updatedIn": "0.18.22"
+    "revision": "a7720922a214d500bbc1",
+    "updatedIn": "0.18.23"
   },
   "requests": {
-    "revision": "738a89f813703196f3e5",
-    "updatedIn": "0.18.22"
+    "revision": "e3ab5804e215e00b0651",
+    "updatedIn": "0.18.23"
   },
   "consult-start": {
-    "revision": "1223183ed2cfb9e5d30e",
-    "updatedIn": "0.18.22"
+    "revision": "12f0f2aeda76fea7aa26",
+    "updatedIn": "0.18.23"
   },
   "photos": {
-    "revision": "21305ca833317f9c80f3",
-    "updatedIn": "0.18.22"
+    "revision": "854744f85384bd0c6c76",
+    "updatedIn": "0.18.23"
   },
   "editor": {
-    "revision": "d541578e43cafddc3ab5",
-    "updatedIn": "0.18.22"
+    "revision": "4c3657b914782193930e",
+    "updatedIn": "0.18.23"
   },
   "procedures": {
-    "revision": "a3f3d8778ae83a731ee1",
-    "updatedIn": "0.18.22"
+    "revision": "b1d3bca73d1d952bfe98",
+    "updatedIn": "0.18.23"
   },
   "pricing": {
-    "revision": "2a0df1017f8afb6b9f5b",
-    "updatedIn": "0.18.22"
+    "revision": "e0169c0f0037b7c84b08",
+    "updatedIn": "0.18.23"
   },
   "notes-opinions": {
-    "revision": "de69313fb2710cd0278d",
-    "updatedIn": "0.18.22"
+    "revision": "b6d76b14fbcf7b1eebbf",
+    "updatedIn": "0.18.23"
   },
   "doctor": {
-    "revision": "4b8857212f2973098940",
-    "updatedIn": "0.18.22"
+    "revision": "c1e0bcbf85c522011d91",
+    "updatedIn": "0.18.23"
   },
   "quote-consent": {
-    "revision": "dc722fc2c0f0488290ae",
-    "updatedIn": "0.18.22"
+    "revision": "839f399ef13bd58925fb",
+    "updatedIn": "0.18.23"
   },
   "finish": {
-    "revision": "328628a92cc4109f9538",
-    "updatedIn": "0.18.22"
+    "revision": "5926c032180456e71955",
+    "updatedIn": "0.18.23"
   },
   "payments": {
-    "revision": "a9a051da637623e80c6a",
-    "updatedIn": "0.18.22"
+    "revision": "bc444691db7fa089bb44",
+    "updatedIn": "0.18.23"
   },
   "followup": {
-    "revision": "4ea4bb3c5817b0720d34",
-    "updatedIn": "0.18.22"
+    "revision": "f955f43b15f2cbba2921",
+    "updatedIn": "0.18.23"
   },
   "points": {
-    "revision": "9c86fde6922804a07061",
-    "updatedIn": "0.18.22"
+    "revision": "97de23b4c506e51b4f3a",
+    "updatedIn": "0.18.23"
   },
   "recovery": {
-    "revision": "75e7a72ec6a0f0c54054",
-    "updatedIn": "0.18.22"
+    "revision": "76fcade96b20794d0ff4",
+    "updatedIn": "0.18.23"
   },
   "catalog-basics": {
-    "revision": "94b69f164283180add33",
-    "updatedIn": "0.18.22"
+    "revision": "e5b4dd665c3e4cbae95b",
+    "updatedIn": "0.18.23"
   },
   "product": {
-    "revision": "548635b2b065f443903d",
-    "updatedIn": "0.18.22"
+    "revision": "aca2d59d37a824e25e9a",
+    "updatedIn": "0.18.23"
   },
   "packages": {
-    "revision": "a35a998dfbe01a2fe0fc",
-    "updatedIn": "0.18.22"
+    "revision": "e4a01b0f7048378c651b",
+    "updatedIn": "0.18.23"
   },
   "catalog-bulk": {
-    "revision": "3307666030d99d73825a",
-    "updatedIn": "0.18.22"
+    "revision": "92cdb78b9b528ee4c076",
+    "updatedIn": "0.18.23"
   },
   "homepage": {
-    "revision": "54e60774e1ce26672989",
-    "updatedIn": "0.18.22"
+    "revision": "f04f1f71176a06361347",
+    "updatedIn": "0.18.23"
   },
   "discovery-settings": {
-    "revision": "184c43e6cbcf5307df4e",
-    "updatedIn": "0.18.22"
+    "revision": "a786421a6a5075f94384",
+    "updatedIn": "0.18.23"
   },
   "insurance-membership": {
-    "revision": "65e4f0195d8d5d3649cc",
-    "updatedIn": "0.18.22"
+    "revision": "e130dacfb608db7581ea",
+    "updatedIn": "0.18.23"
   },
   "consent-admin": {
-    "revision": "9e01fd01072c5af5a43b",
-    "updatedIn": "0.18.22"
+    "revision": "813aa0bfe7daa5a51e3b",
+    "updatedIn": "0.18.23"
   },
   "grades-admin": {
-    "revision": "6da8e7150808a2bf045b",
-    "updatedIn": "0.18.22"
+    "revision": "34ff3792c1754da34d26",
+    "updatedIn": "0.18.23"
   },
   "accounts": {
-    "revision": "e9e0b7d7322b60290a1b",
-    "updatedIn": "0.18.22"
+    "revision": "36eee146c2ec3c1d8fab",
+    "updatedIn": "0.18.23"
   },
   "statistics": {
-    "revision": "278fb015467ea9f9f8f6",
-    "updatedIn": "0.18.22"
+    "revision": "97447353bd903159edf6",
+    "updatedIn": "0.18.23"
   },
   "marketing": {
-    "revision": "b90a900804c89f9d7c5d",
-    "updatedIn": "0.18.22"
+    "revision": "465a40fc3f13b20b9504",
+    "updatedIn": "0.18.23"
   },
   "operations": {
-    "revision": "a0dedaa7c6c78e89a252",
-    "updatedIn": "0.18.22"
+    "revision": "24ae6f56cf614570bb06",
+    "updatedIn": "0.18.23"
   }
 }

@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import scenarios from "../data/guidePracticeScenarios.json";
 import { useEffect, useRef, useState } from "react";
 import { practiceRecipe } from "../core/guideTraining";
@@ -22,6 +23,19 @@ export function TrainingCoach({
   initial: PracticeInit;
   runtime: ReturnType<typeof installPractice>;
 }) {
+  const [fullscreen, setFullscreen] = useState<Element | null>(
+    document.fullscreenElement,
+  );
+  useEffect(() => {
+    const changed = () => setFullscreen(document.fullscreenElement);
+    const fallback = (e: Event) => setFullscreen((e as CustomEvent).detail);
+    document.addEventListener("fullscreenchange", changed);
+    window.addEventListener("practice:fullscreen", fallback);
+    return () => {
+      document.removeEventListener("fullscreenchange", changed);
+      window.removeEventListener("practice:fullscreen", fallback);
+    };
+  }, []);
   const recipe = practiceRecipe(initial.lessonId)!;
   const scenario = scenarios[initial.lessonId as keyof typeof scenarios];
   const [briefed, setBriefed] = useState(initial.steps.length > 0),
@@ -29,8 +43,20 @@ export function TrainingCoach({
     [hint, setHint] = useState(
       initial.steps.length === recipe.steps.length - 1,
     ),
-    [collapsed, setCollapsed] = useState(false);
+    [collapsed, setCollapsed] = useState(false),
+    [feedback, setFeedback] = useState<{
+      rect: DOMRect | null;
+      why: string;
+      id: string;
+    } | null>(null),
+    [defaultReady, setDefaultReady] = useState(false);
+  const success = useRef<{
+    rect: DOMRect | null;
+    why: string;
+    id: string;
+  } | null>(null);
   const coach = useRef<HTMLElement>(null);
+  const actionRect = useRef<DOMRect | null>(null);
   const [coachHeight, setCoachHeight] = useState(200);
   useEffect(() => {
     if (!coach.current) return;
@@ -128,6 +154,7 @@ export function TrainingCoach({
         e.data.type !== "practice:ack"
       )
         return;
+      if (success.current) setFeedback(success.current);
       setHint(e.data.steps.length === recipe.steps.length - 1);
       setCollapsed(false);
       setSteps(e.data.steps);
@@ -139,16 +166,30 @@ export function TrainingCoach({
   }, []);
   useEffect(() => {
     if (!ready || !briefed || !step) return;
+    target.current = undefined;
+    actionRect.current = null;
     let dead = false;
     const locate = () => {
       const el = findTarget(step.target);
-      target.current = el;
-      setRect(el ? el.getBoundingClientRect() : null);
+      if (el) target.current = el;
+      const nextRect = el ? el.getBoundingClientRect() : null;
+      if (nextRect) actionRect.current = nextRect;
+      setRect(nextRect);
+      setDefaultReady(
+        step.kind === "value" &&
+          el instanceof HTMLSelectElement &&
+          normalize(el.value) === normalize(step.value || ""),
+      );
     };
     locate();
     const timer = setInterval(locate, 180);
     const finish = () => {
       if (pending.current || dead) return;
+      success.current = {
+        rect: actionRect.current,
+        why: scenario.steps[index].why,
+        id: step.id,
+      };
       pending.current = true;
       setWaiting(true);
       setTimeout(() => {
@@ -160,15 +201,37 @@ export function TrainingCoach({
               kind: "codimate-practice-v1",
               state: runtime.snapshot(),
               drafts: runtime.drafts(),
+              editors: runtime.editors(),
               inquiries: runtime.inquiries(),
               route: route.current,
-              actions: actions.current,
+              actions:
+                initial.lessonId === "editor"
+                  ? document.querySelector(".photo-editor")
+                    ? [
+                        ...actions.current.slice(0, 1),
+                        ...[
+                          ...document.querySelectorAll(
+                            ".photo-editor details[open] > summary",
+                          ),
+                        ].map((el) => ({ selector: selectorFor(el) })),
+                        ...(document.fullscreenElement ||
+                        document.querySelector(".training-expanded-stage")
+                          ? actions.current
+                              .filter((a) => {
+                                const el = document.querySelector(a.selector);
+                                return el?.textContent === "크게 보기";
+                              })
+                              .slice(-1)
+                          : []),
+                      ]
+                    : []
+                  : actions.current,
             },
           });
       }, 180);
     };
     const match = (e: Event) => {
-      const el = findTarget(step.target);
+      const el = target.current || findTarget(step.target);
       return !!el && (el === e.target || el.contains(e.target as Node));
     };
     const click = (e: Event) => {
@@ -176,7 +239,11 @@ export function TrainingCoach({
       const el = (e.target as Element).closest<HTMLElement>(
         'button,summary,a,input[type="checkbox"]',
       );
-      if (el && !el.closest(".training-coach") && step.kind !== "command")
+      if (
+        el &&
+        !el.closest(".training-coach,.training-success") &&
+        step.kind !== "command"
+      )
         actions.current.push({ selector: selectorFor(el) });
       if (step.kind === "click" && match(e))
         setTimeout(() => {
@@ -211,9 +278,24 @@ export function TrainingCoach({
         finish();
       }
     };
-    const annotated = () => {
-      if (step.kind === "draw") finish();
+    const annotated = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (
+        step.kind === "draw" &&
+        (!step.evidence || detail?.action === step.evidence)
+      )
+        finish();
     };
+    const confirmDefault = () => {
+      const el = findTarget(step.target);
+      if (
+        step.kind === "value" &&
+        el instanceof HTMLSelectElement &&
+        normalize(el.value) === normalize(step.value || "")
+      )
+        finish();
+    };
+    window.addEventListener("practice:confirm-default", confirmDefault);
     window.addEventListener("practice:annotation", annotated);
 
     document.addEventListener("click", click, true);
@@ -223,6 +305,7 @@ export function TrainingCoach({
     return () => {
       dead = true;
       window.removeEventListener("practice:annotation", annotated);
+      window.removeEventListener("practice:confirm-default", confirmDefault);
       clearInterval(timer);
 
       document.removeEventListener("click", click, true);
@@ -232,20 +315,37 @@ export function TrainingCoach({
     };
   }, [ready, index, briefed]);
   useEffect(() => {
+    if (!feedback) return;
+    const nextField = (e: KeyboardEvent) => {
+      if (
+        e.key === "Tab" &&
+        (e.target as Element)?.matches("input,textarea,select")
+      ) {
+        setFeedback(null);
+        success.current = null;
+      }
+    };
+    document.addEventListener("keydown", nextField, true);
+    return () => document.removeEventListener("keydown", nextField, true);
+  }, [feedback]);
+  useEffect(() => {
     if (ready && briefed && !waiting) return;
     const block = (e: KeyboardEvent) => {
-      if ((e.target as Element)?.matches("input,textarea,select"))
+      if (
+        e.key !== "Tab" &&
+        (e.target as Element)?.matches("input,textarea,select")
+      )
         e.preventDefault();
     };
     document.addEventListener("keydown", block, true);
     return () => document.removeEventListener("keydown", block, true);
   }, [ready, waiting, briefed]);
-  return (
+  return createPortal(
     <>
       {(!ready || !briefed || waiting) && (
         <div className="training-busy-shield" aria-hidden="true" />
       )}
-      {hint && rect && (
+      {hint && rect && !feedback && (
         <div
           className="training-highlight"
           style={{
@@ -256,7 +356,45 @@ export function TrainingCoach({
           }}
         />
       )}
+      {feedback && (
+        <section
+          className="training-success"
+          role="status"
+          aria-label="정답 · 작업의 의미"
+          style={{
+            left: Math.max(
+              12,
+              Math.min(
+                feedback.rect?.left || 12,
+                innerWidth - Math.min(360, innerWidth - 24) - 12,
+              ),
+            ),
+            top: Math.max(
+              12,
+              Math.min((feedback.rect?.bottom || 40) + 12, innerHeight - 230),
+            ),
+          }}
+        >
+          <span className="training-success-mark" aria-hidden="true">
+            ✓
+          </span>
+          <div>
+            <strong>정확하게 처리했어요!</strong>
+            <p>{feedback.why}</p>
+          </div>
+          <button
+            className="primary"
+            onClick={() => {
+              setFeedback(null);
+              success.current = null;
+            }}
+          >
+            {step ? "다음 목표 보기" : "완료 안내 보기"}
+          </button>
+        </section>
+      )}
       <aside
+        hidden={!!feedback}
         ref={coach}
         className={"training-coach" + (briefed ? " is-working" : "")}
         style={
@@ -319,17 +457,29 @@ export function TrainingCoach({
           <p>조작 결과 확인 완료 · 계정에 진도를 저장하고 있습니다…</p>
         ) : step ? (
           <>
-            <details className="training-case" open>
-              <summary>상황·접수 정보 다시 보기</summary>
-              <p>{scenario.scene}</p>
-            </details>
-            {index > 0 && (
-              <div className="training-feedback">
-                <strong>방금 한 작업의 의미</strong>
-                <p>{scenario.steps[index - 1].why}</p>
-              </div>
+            <p className="training-mission">{scenario.steps[index].goal}</p>
+            {step.kind === "value" &&
+              [
+                "start",
+                "find-patient",
+                "register",
+                "requests",
+                "quote-consent",
+              ].includes(initial.lessonId) && (
+                <p className="training-case-reference">
+                  상단의 「상황·접수 정보」를 참고해 입력·선택하세요.
+                </p>
+              )}
+            {defaultReady && (
+              <button
+                className="primary"
+                onClick={() =>
+                  window.dispatchEvent(new Event("practice:confirm-default"))
+                }
+              >
+                현재 선택으로 확인
+              </button>
             )}
-            <p>{scenario.steps[index].goal}</p>
             <small>
               화면에서 직접 해결해보세요. 결과가 확인되면 자동으로 다음 목표로
               넘어갑니다.
@@ -350,7 +500,6 @@ export function TrainingCoach({
             {hint && (
               <div className="training-hint">
                 <p>{step.instruction}</p>
-                <small>{scenario.steps[index].why}</small>
               </div>
             )}
             {hint && !rect && (
@@ -373,6 +522,22 @@ export function TrainingCoach({
           </>
         )}
       </aside>
-    </>
+      {fullscreen && (
+        <button
+          className="training-fullscreen-exit"
+          aria-label="연습 크게 보기 닫기"
+          onClick={() => {
+            if (document.fullscreenElement) void document.exitFullscreen();
+            else {
+              fullscreen?.classList.remove("training-expanded-stage");
+              setFullscreen(null);
+            }
+          }}
+        >
+          크게 보기 닫기
+        </button>
+      )}
+    </>,
+    fullscreen || document.body,
   );
 }

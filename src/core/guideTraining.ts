@@ -84,7 +84,7 @@ add("start", { page: "home" }, [
     text: "닫기",
     scope: ".display-settings-overlay",
   }),
-  click("홈의 환자목록으로 이동하세요.", text("환자목록"), label("환자 검색")),
+  click("홈의 환자목록으로 이동하세요.", css(".home-primary button.patients"), label("환자 검색")),
   value("환자 검색에 「이서연」를 입력하세요.", label("환자 검색"), "이서연"),
   click(
     "검색된 이서연 이름을 눌러 상세 화면을 여세요.",
@@ -1094,7 +1094,7 @@ add("consent-admin", settings, [
 add("quick-consult", { page: "home" }, [
   click(
     "접수 전 상담이 필요합니다. 홈에서 바로상담을 여세요.",
-    text("바로상담"),
+    css(".home-primary button.quick"),
     text("미용 상담 시작"),
   ),
   command(

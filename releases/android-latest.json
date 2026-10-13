@@ -1,7 +1,7 @@
 {
-  "version": "0.18.24",
-  "versionCode": 94,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.24.apk",
-  "sha256": "e481d2fd28e3e04f692693eb180ebaef1588e8a0ff67a2bb79c3c3b54b6cfb0d",
+  "version": "0.18.25",
+  "versionCode": 95,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.25.apk",
+  "sha256": "3acde2d7797ae21aca582f5dcdea18ce037e279d396af95c37b55a2e87b20307",
   "notes": "로그인 홈과 업무 대시보드, 바로상담을 추가했습니다. 환자정보 없이 상담을 시작하고 이후 신규 등록 또는 기존 환자에 연결할 수 있습니다. 등록 대기 관리와 관련 사용법 실습을 제공합니다."
 }

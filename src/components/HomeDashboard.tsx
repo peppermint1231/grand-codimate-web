@@ -1,3 +1,4 @@
+import { hasOpinionAnswer } from "../core/opinions";
 import {
   ArrowRight,
   BookOpen,
@@ -91,7 +92,7 @@ export function HomeDashboard({
   );
   const scheduled = active.filter((c) => c.appointment?.slice(0, 10) === today);
   const waiting = state.opinions.filter(
-    (o) => !o.answer && (o.fromId === user.id || o.toId === user.id),
+    (o) => !hasOpinionAnswer(o) && (o.fromId === user.id || o.toId === user.id),
   );
   const cards = [
     {

@@ -271,6 +271,8 @@ export interface Photo {
 }
 export interface Consultation extends Base {
   quickStarted?: boolean;
+  /** Removed from the shared quick consultation list; history and money records remain. */
+  quickListHiddenAt?: string;
   priceReasonHistory?: string[];
   intakeSource?: {
     receiptId: string;

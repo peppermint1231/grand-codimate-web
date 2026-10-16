@@ -912,3 +912,35 @@ it("persists quick consultation atomically, replays safely, hydrates it after re
   ).toMatchObject({ patientId: "patient", patient: { name: "테스트" } });
   expect(f.files.size).toBeGreaterThan(0);
 });
+it("persists quick cancellation and shared-list removal across workspace reloads", async () => {
+  const f = await fixture();
+  expect(
+    (
+      await f.cmd(
+        "consultation.quickCreate",
+        { category: "미용" },
+        "quick-cleanup",
+      )
+    ).status,
+  ).toBe(200);
+  expect(
+    (await f.cmd("consultation.quickCancel", {}, "quick-cleanup", 1)).status,
+  ).toBe(200);
+  const operation = crypto.randomUUID();
+  expect(
+    (await f.cmd("consultation.quickHide", {}, "quick-cleanup", 2, operation))
+      .status,
+  ).toBe(200);
+  expect(
+    (await f.cmd("consultation.quickHide", {}, "quick-cleanup", 2, operation))
+      .status,
+  ).toBe(200);
+  const state = (
+    (await (await f.request("/state?view=workspace")).json()) as any
+  ).state;
+  const c = state.consultations.find((c: any) => c.id === "quick-cleanup");
+  expect(c).toMatchObject({ rev: 3, cancelled: true, quickStarted: true });
+  expect(c.quickListHiddenAt).toBeTruthy();
+  expect(state.patients.some((p: any) => p.id === c.patientId)).toBe(true);
+  expect(f.files.size).toBeGreaterThan(0);
+});

@@ -1,7 +1,7 @@
 {
-  "version": "0.18.29",
-  "versionCode": 99,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.29.apk",
-  "sha256": "263a1dfebcb6eeef8859abd532dba7b85bb39d180448bd78a20e8d236bfc0cc2",
-  "notes": "환자목록 바로가기를 정리하고 단가표 파일 가져오기·내보내기를 설정으로 옮겼습니다. 홈페이지 갱신 도움말을 접고 목록 위에 상품·폴더 추가와 저장 버튼을 배치했습니다. 기기 보관은 운영 설정 탭에서 관리합니다."
+  "version": "0.18.30",
+  "versionCode": 100,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.30.apk",
+  "sha256": "87333de4d194078221886b76565d20e25137dbf1144cc1eccbcafba872d2235d",
+  "notes": "바로상담 화면과 목록에 상담취소를 추가하고, 보류·등록 완료·취소 건을 목록에서 삭제할 수 있게 했습니다. 환자정보·상담이력·수납 기록은 유지되며 담당자·관리자만 처리할 수 있습니다. 사용법도 갱신했습니다."
 }

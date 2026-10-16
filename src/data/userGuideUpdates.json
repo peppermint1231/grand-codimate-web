@@ -1,7 +1,7 @@
 {
   "start": {
-    "revision": "cdc181b0a690ca3050fa",
-    "updatedIn": "0.18.29",
+    "revision": "a8ef1fd092c91313ff53",
+    "updatedIn": "0.18.31",
     "learningVersion": 1,
     "compatibleRevisions": [
       "0614d1348ddb103a64bb",
@@ -12,7 +12,8 @@
       "7ae1e38451f5608ba723",
       "b6b6662df54028d2daed",
       "9d7f3d446941d6343b83",
-      "ea1162a6ff05bb871b29"
+      "ea1162a6ff05bb871b29",
+      "cdc181b0a690ca3050fa"
     ],
     "stepIds": [
       "practice-1",
@@ -74,15 +75,16 @@
     ]
   },
   "quick-consult": {
-    "revision": "72329f9b69d32ba9073c",
-    "updatedIn": "0.18.29",
+    "revision": "918cda30be7b0fda0825",
+    "updatedIn": "0.18.31",
     "learningVersion": 1,
     "compatibleRevisions": [
       "28161c62c4cc6a2957f3",
       "fc5fc30da1eeeb6ab524",
       "b1dc5dc10de222ab5431",
       "daa8b4e42af82b9c2330",
-      "2e8a6f2dd285c04ccda4"
+      "2e8a6f2dd285c04ccda4",
+      "72329f9b69d32ba9073c"
     ],
     "stepIds": [
       "practice-1",

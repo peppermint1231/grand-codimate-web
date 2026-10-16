@@ -1,7 +1,7 @@
 {
-  "version": "0.18.30",
-  "versionCode": 100,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.30.apk",
-  "sha256": "87333de4d194078221886b76565d20e25137dbf1144cc1eccbcafba872d2235d",
-  "notes": "바로상담 화면과 목록에 상담취소를 추가하고, 보류·등록 완료·취소 건을 목록에서 삭제할 수 있게 했습니다. 환자정보·상담이력·수납 기록은 유지되며 담당자·관리자만 처리할 수 있습니다. 사용법도 갱신했습니다."
+  "version": "0.18.31",
+  "versionCode": 101,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.31.apk",
+  "sha256": "16084eba820bd753374264cef21abedd1f2ebed96afb08c26e7920ac1d4a2e09",
+  "notes": "바로상담의 목록에서 삭제 버튼을 제거했습니다. 상담취소 또는 환자정보 등록 완료 시 목록에서 자동으로 제외되며, 환자정보·상담이력·수납 기록은 유지됩니다."
 }

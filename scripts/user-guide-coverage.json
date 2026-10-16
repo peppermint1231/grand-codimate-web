@@ -25,7 +25,11 @@
       "src/components/HomeDashboard.tsx",
       "src/components/HomeDashboard.css",
       "src/components/NumberInput.tsx",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/components/FirstPasswordChange.tsx",
+      "server/crypto.ts",
+      "server/worker.ts",
+      "src/core/model.ts"
     ],
     "commands": []
   },
@@ -144,7 +148,11 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/lib/clipboardPhotos.ts",
+      "src/lib/native.ts",
+      "android/app/src/main/java/kr/co/grand/codimate/ClinicDevicePlugin.java",
+      "src/style.css"
     ],
     "commands": []
   },
@@ -308,7 +316,8 @@
       "consultation.save",
       "consultation.finalize",
       "consultation.cancel",
-      "consultation.rewrite"
+      "consultation.rewrite",
+      "consultation.historyDelete"
     ]
   },
   "payments": {
@@ -637,7 +646,11 @@
       "src/components/GuideLearningAdmin.tsx",
       "src/core/guideLearningReport.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/components/FirstPasswordChange.tsx",
+      "server/crypto.ts",
+      "server/worker.ts",
+      "src/core/model.ts"
     ],
     "commands": []
   },

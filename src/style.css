@@ -5490,3 +5490,76 @@ html.custom-pull-refresh {
 @media (max-width:700px) {
   .catalog-exchange .form-grid { grid-template-columns:minmax(0,1fr); }
 }
+
+.photo-import-toolbar {
+  flex-wrap: wrap;
+}
+.photo-import-toolbar h3 {
+  flex: 1 0 120px;
+}
+.photo-import-toolbar button,
+.photo-import-toolbar .button {
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .consultation-header .consultation-heading-text {
+    flex: 1 0 calc(100% - 48px);
+  }
+  .photo-import-toolbar {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .photo-import-toolbar h3 {
+    flex-basis: 100%;
+  }
+  .photo-import-toolbar button,
+  .photo-import-toolbar .button {
+    font-size: calc(13px * var(--ui-font-scale, 1));
+    padding: 10px 12px;
+  }
+}
+
+.history-selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 12px 0;
+}
+.history-select {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  cursor: pointer;
+}
+.history-select input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .history-row { display:grid; grid-template-columns:0 minmax(0,1fr) auto; gap:10px; align-items:start; }
+  .history-row:has(.history-select) { grid-template-columns:24px minmax(0,1fr) auto; }
+  .history-row .history-select { grid-column:1; grid-row:1; padding:4px 0; }
+  .history-row > span:first-of-type { grid-column:2; grid-row:1; min-width:0; }
+  .history-row > .badge { grid-column:3; grid-row:1; }
+  .history-row > .consultation-owner { grid-column:2 / -1; grid-row:2; }
+  .history-row > .consultation-payment { grid-column:2 / -1; grid-row:3; align-items:flex-start; }
+  .history-row > svg { display:none; }
+}
+
+.top-utility-actions { display:flex; align-items:center; gap:inherit; }
+.sync-count { display:none; }
+@media (max-width:600px) {
+  .topbar { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:0 8px; padding:4px 12px; }
+  .topbar .home-brand { grid-column:1; grid-row:1; justify-self:start; min-height:40px; white-space:nowrap; }
+  .topbar .top-actions { display:contents; }
+  .topbar .header-update { grid-column:2; grid-row:1; padding:8px 4px; font-size:12px; }
+  .topbar .sync { grid-column:3; grid-row:1; justify-content:center; min-width:24px; }
+  .topbar .sync-label { display:none; }
+  .topbar .sync-count { display:inline; font-weight:700; }
+  .topbar button[aria-label="의견 요청 알림"] { grid-column:4; grid-row:1; padding:8px 4px; }
+  .topbar .top-utility-actions { grid-column:1 / -1; grid-row:2; display:flex; justify-content:space-between; gap:4px; min-width:0; overflow-x:auto; }
+  .topbar .top-utility-actions > button { font-size:calc(12px * var(--ui-font-scale,1)); padding:8px 6px; min-height:40px; }
+}

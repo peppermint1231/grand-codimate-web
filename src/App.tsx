@@ -1,3 +1,8 @@
+import {
+  readClipboardPhotos,
+  clipboardPhotoFiles,
+} from "./lib/clipboardPhotos";
+import { FirstPasswordChange } from "./components/FirstPasswordChange";
 import { CatalogExchange } from "./components/CatalogExchange";
 import { NumberInput } from "./components/NumberInput";
 import { HomeDashboard, type HistoryFilter } from "./components/HomeDashboard";
@@ -347,6 +352,9 @@ export function App() {
     if (trainingMode && user)
       window.dispatchEvent(new CustomEvent("practice:ready"));
   }, [user?.id]);
+  const [historySelection, setHistorySelection] = useState<string[]>([]);
+  const [historySelecting, setHistorySelecting] = useState(false);
+  const [historyDeleting, setHistoryDeleting] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
   const [quickPatientId, setQuickPatientId] = useState("");
   const [quickRegistrationMode, setQuickRegistrationMode] = useState<
@@ -354,7 +362,9 @@ export function App() {
   >("new");
   const [quickQueuePage, setQuickQueuePage] = useState(1);
   const [opinionFocus, setOpinionFocus] = useState("");
-  const guideLearning = useGuideProgress(user?.id || "");
+  const guideLearning = useGuideProgress(
+    user?.mustChangePassword ? "" : user?.id || "",
+  );
   const guideUnread = guideLessons.filter(
     (lesson) => guideStatus(lesson, guideLearning.progress).unread,
   ).length;
@@ -449,7 +459,7 @@ export function App() {
     };
   }, []);
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.mustChangePassword) return;
     const targetId = page === "consult" ? consultId : patientId;
     if (!targetId) return;
     void api(
@@ -560,7 +570,7 @@ export function App() {
       .catch(() => setError("서버에 연결할 수 없습니다."));
   }, []);
   useEffect(() => {
-    if (!user) return;
+    if (!user || user.mustChangePassword) return;
     const t = setInterval(() => {
       if (
         document.visibilityState === "visible" &&
@@ -573,7 +583,7 @@ export function App() {
     return () => clearInterval(t);
   }, [user, pending.length, consultId]);
   useEffect(() => {
-    if (!user || needsServer) return;
+    if (!user || user.mustChangePassword || needsServer) return;
     let active = true,
       fetching = false;
     const poll = async () => {
@@ -795,7 +805,7 @@ export function App() {
     }
   };
   useEffect(() => {
-    if (!user || !pending.length) return;
+    if (!user || user.mustChangePassword || !pending.length) return;
     const run = () => {
       if (!workInFlight.current && document.visibilityState === "visible")
         void drainPending();
@@ -933,6 +943,7 @@ export function App() {
         c.quickStarted &&
         !c.cancelled &&
         !c.quickListHiddenAt &&
+        !c.historyDeletedAt &&
         pendingPatientIds.has(c.patientId),
     )
     .slice()
@@ -940,22 +951,70 @@ export function App() {
   const historyConsultations = state.consultations
     .filter(
       (c) =>
-        historyFilter === "all" ||
-        (historyFilter === "pending"
-          ? !c.cancelled && pendingPatientIds.has(c.patientId)
-          : !c.cancelled &&
-            (historyFilter === "held"
-              ? c.status === "H"
-              : historyFilter === "today"
-                ? c.appointment?.slice(0, 10) ===
-                  new Intl.DateTimeFormat("sv-SE", {
-                    timeZone: "Asia/Seoul",
-                  }).format(new Date())
-                : c.status === "P" &&
-                  ledgerAvailable(state, c.id, "receipt") > 0)),
+        !c.historyDeletedAt &&
+        (historyFilter === "all" ||
+          (historyFilter === "cancelled"
+            ? c.cancelled
+            : !c.cancelled &&
+              (historyFilter === "pending"
+                ? pendingPatientIds.has(c.patientId)
+                : historyFilter === "held"
+                  ? c.status === "H"
+                  : historyFilter === "today"
+                    ? c.appointment?.slice(0, 10) ===
+                      new Intl.DateTimeFormat("sv-SE", {
+                        timeZone: "Asia/Seoul",
+                      }).format(new Date())
+                    : c.status === "P" &&
+                      ledgerAvailable(state, c.id, "receipt") > 0))),
     )
     .slice()
     .reverse();
+  const syncLabel = pending.length
+    ? `기기 저장 · ${pending.length}건 ${syncingNow ? "전송 중" : "대기"}`
+    : trainingMode
+      ? "가상 자료 연습"
+      : health.mode === "local-development"
+        ? "개발 서버"
+        : health.driveConnected
+          ? "OneDrive 연결됨"
+          : "OneDrive 연결 필요";
+  const selectedHistory = historyConsultations.filter((c) =>
+    historySelection.includes(c.id),
+  );
+  const deleteHistory = () => {
+    if (
+      historyDeleting ||
+      !user ||
+      !isAdministrator(user) ||
+      !selectedHistory.length
+    )
+      return;
+    if (
+      !window.confirm(
+        `선택한 상담이력 ${selectedHistory.length}건을 삭제할까요? 상담이력과 바로상담 목록에서 제외됩니다. 수납·환불·서명 원본 및 통계는 보존되며, 계약 취소나 환불이 자동으로 처리되지는 않습니다.`,
+      )
+    )
+      return;
+    setHistoryDeleting(true);
+    void work(async () => {
+      try {
+        if (
+          await send("consultation.historyDelete", {
+            items: selectedHistory.map((c) => ({ id: c.id, rev: c.rev })),
+          })
+        ) {
+          setHistorySelection([]);
+          setHistorySelecting(false);
+          setNotice(
+            "선택한 상담이력을 삭제했습니다. 수납·환불·서명 기록은 보존됩니다.",
+          );
+        }
+      } finally {
+        setHistoryDeleting(false);
+      }
+    });
+  };
   const openConsultation = (c: Consultation) =>
     requestNavigation(() => {
       setConsultId(c.id);
@@ -1188,6 +1247,21 @@ export function App() {
           {error && <p role="alert">{error}</p>}
         </form>
       </div>
+    );
+  if (user?.mustChangePassword)
+    return (
+      <FirstPasswordChange
+        user={user}
+        logout={() => void logout()}
+        complete={async (result) => {
+          setToken(result.token);
+          await rememberLogin(result.token);
+          setUser(result.user);
+          setPage("home");
+          await refresh(false, "");
+          setNotice("비밀번호를 변경했습니다.");
+        }}
+      />
     );
   if (!user)
     return (
@@ -1585,32 +1659,36 @@ export function App() {
             </span>
           </div>
           <div className="top-actions">
-            <DisplaySettings />
+            <div className="top-utility-actions">
+              <DisplaySettings />
+              <button
+                className="mobile-logout"
+                aria-label="로그아웃"
+                onClick={() => requestNavigation(logout)}
+              >
+                <LogOut size={18} />
+              </button>
+              <button aria-label="뒤로가기" onClick={appBack}>
+                ← 뒤로
+              </button>
+              <button
+                disabled={busy}
+                onClick={() =>
+                  work(async () => {
+                    await refresh(true);
+                    setNotice(
+                      "최신 자료를 불러왔습니다. 작업 중인 상담은 유지됩니다.",
+                    );
+                  })
+                }
+              >
+                새로고침
+              </button>
+              <button onClick={() => setModal("recovery")}>복구 자료</button>
+              {pending.length > 0 && <button onClick={sync}>재시도</button>}
+            </div>
             <button
-              className="mobile-logout"
-              aria-label="로그아웃"
-              onClick={() => requestNavigation(logout)}
-            >
-              <LogOut size={18} />
-            </button>
-            <button aria-label="뒤로가기" onClick={appBack}>
-              ← 뒤로
-            </button>
-            <button
-              disabled={busy}
-              onClick={() =>
-                work(async () => {
-                  await refresh(true);
-                  setNotice(
-                    "최신 자료를 불러왔습니다. 작업 중인 상담은 유지됩니다.",
-                  );
-                })
-              }
-            >
-              새로고침
-            </button>
-            <button onClick={() => setModal("recovery")}>복구 자료</button>
-            <button
+              className="header-update"
               onClick={() =>
                 work(async () => {
                   if (native) {
@@ -1632,19 +1710,18 @@ export function App() {
               업데이트
             </button>
 
-            <span className={"sync " + (pending.length ? "warning" : "")}>
+            <span
+              className={"sync " + (pending.length ? "warning" : "")}
+              title={syncLabel}
+              aria-label={syncLabel}
+              role="status"
+            >
               <Cloud size={16} />
-              {pending.length
-                ? `기기 저장 · ${pending.length}건 ${syncingNow ? "전송 중" : "대기"}`
-                : trainingMode
-                  ? "가상 자료 연습"
-                  : health.mode === "local-development"
-                    ? "개발 서버"
-                    : health.driveConnected
-                      ? "OneDrive 연결됨"
-                      : "OneDrive 연결 필요"}
+              <span className="sync-label">{syncLabel}</span>
+              {!!pending.length && (
+                <span className="sync-count">{pending.length}</span>
+              )}
             </span>
-            {pending.length > 0 && <button onClick={sync}>재시도</button>}
             <button aria-label="의견 요청 알림" onClick={() => openOpinion()}>
               <Bell size={20} />
               <span>
@@ -1892,6 +1969,7 @@ export function App() {
                     ["all", "전체"],
                     ["pending", "바로상담환자"],
                     ["held", "보류"],
+                    ["cancelled", "상담취소"],
                     ["today", "오늘 예약"],
                     ...(allowed(user, "money.read")
                       ? [["unpaid", "미수납"]]
@@ -1901,12 +1979,68 @@ export function App() {
                   <button
                     key={key}
                     className={historyFilter === key ? "active" : ""}
-                    onClick={() => setHistoryFilter(key)}
+                    onClick={() => {
+                      setHistoryFilter(key);
+                      setHistorySelection([]);
+                    }}
                   >
                     {label}
                   </button>
                 ))}
               </div>
+              {isAdministrator(user) && (
+                <div className="history-selection-bar">
+                  <button
+                    disabled={historyDeleting}
+                    onClick={() => {
+                      setHistorySelecting(!historySelecting);
+                      setHistorySelection([]);
+                    }}
+                  >
+                    {historySelecting ? "선택 취소" : "상담이력 선택"}
+                  </button>
+                  {historySelecting && (
+                    <>
+                      <button
+                        disabled={
+                          historyDeleting || !historyConsultations.length
+                        }
+                        onClick={() =>
+                          setHistorySelection(
+                            selectedHistory.length ===
+                              Math.min(100, historyConsultations.length)
+                              ? []
+                              : historyConsultations
+                                  .slice(0, 100)
+                                  .map((c) => c.id),
+                          )
+                        }
+                      >
+                        {selectedHistory.length ===
+                          Math.min(100, historyConsultations.length) &&
+                        selectedHistory.length
+                          ? "전체 선택 해제"
+                          : "전체 선택"}
+                      </button>
+                      <span>
+                        {selectedHistory.length}건 선택
+                        {historyConsultations.length > 100
+                          ? " · 한 번에 최대 100건"
+                          : ""}
+                      </span>
+                      <button
+                        className="danger"
+                        disabled={historyDeleting || !selectedHistory.length}
+                        onClick={deleteHistory}
+                      >
+                        {historyDeleting
+                          ? "삭제 중…"
+                          : `선택한 상담 ${selectedHistory.length}건 삭제`}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               <div className="card">
                 {historyConsultations.length ? (
                   historyConsultations.map((c) => (
@@ -1917,7 +2051,7 @@ export function App() {
                         if (e.target === e.currentTarget && e.key === "Enter")
                           e.currentTarget.click();
                       }}
-                      className="list-row"
+                      className="list-row history-row"
                       key={c.id}
                       onClick={() => {
                         setConsultId(c.id);
@@ -1926,6 +2060,30 @@ export function App() {
                         setTab("consult");
                       }}
                     >
+                      {isAdministrator(user) && historySelecting && (
+                        <label
+                          className="history-select"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            aria-label={`${c.patient.name} ${c.createdAt.slice(0, 10)} 상담 선택`}
+                            checked={selectedHistory.some((x) => x.id === c.id)}
+                            disabled={
+                              historyDeleting ||
+                              (!historySelection.includes(c.id) &&
+                                selectedHistory.length >= 100)
+                            }
+                            onChange={(e) =>
+                              setHistorySelection((ids) =>
+                                e.target.checked
+                                  ? [...ids, c.id]
+                                  : ids.filter((id) => id !== c.id),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
                       <span>
                         <b>{c.patient.name}</b>
                         {pendingPatientIds.has(c.patientId) && (
@@ -2038,6 +2196,7 @@ export function App() {
               work={work}
               refresh={refresh}
               health={health}
+              onPasswordChange={() => setModal("password-change")}
               onCatalogImport={(catalog) => {
                 setCatalogImport(catalog);
                 setPage("catalog");
@@ -2077,6 +2236,25 @@ export function App() {
         </div>
       </main>
       {busy && <div className="busy-bar" />}
+      {modal === "password-change" && (
+        <Modal title="내 계정" close={() => setModal("")}>
+          <FirstPasswordChange
+            embedded
+            user={user}
+            logout={() => setModal("")}
+            complete={async (result) => {
+              setToken(result.token);
+              await rememberLogin(result.token);
+              setUser(result.user);
+              setModal("");
+              await refresh();
+              setNotice(
+                "비밀번호를 변경했습니다. 다른 기기에서는 새 비밀번호로 로그인하세요.",
+              );
+            }}
+          />
+        </Modal>
+      )}
       {modal === "recovery" && (
         <Modal title="미전송·충돌 자료 보관함" close={() => setModal("")}>
           <RecoveryView pending={pending} state={state} />
@@ -3059,7 +3237,8 @@ function PatientDetail({
   const m = metrics(s, p.id),
     g = gradeFor(s, p),
     cs = s.consultations.filter((c) => c.patientId === p.id);
-  const sources = cs.filter(
+  const visibleHistory = cs.filter((c) => !c.historyDeletedAt);
+  const sources = visibleHistory.filter(
     (x) =>
       x.category === startCategory &&
       !x.cancelled &&
@@ -3374,8 +3553,8 @@ function PatientDetail({
         <div className="detail-grid">
           <div className="card">
             <h3>상담이력</h3>
-            {cs.length ? (
-              cs
+            {visibleHistory.length ? (
+              visibleHistory
                 .slice()
                 .reverse()
                 .map((c) => (
@@ -3744,6 +3923,7 @@ function ConsultationView({
     [productLimit, setProductLimit] = useState(70),
     [historyOpen, setHistoryOpen] = useState(false),
     [adding, setAdding] = useState(false),
+    [pasting, setPasting] = useState(false),
     [photoError, setPhotoError] = useState(""),
     [ratio, setRatio] = useState(50),
     [sig, setSig] = useState(""),
@@ -3849,10 +4029,12 @@ function ConsultationView({
       source.kind === "interim" ||
       source.patientId !== c.patientId ||
       source.category !== c.category);
-  const readonly = !(
-    isAdministrator(user) ||
-    (c.status === "H" && !c.cancelled && c.ownerId === user.id)
-  );
+  const readonly =
+    !!c.historyDeletedAt ||
+    !(
+      isAdministrator(user) ||
+      (c.status === "H" && !c.cancelled && c.ownerId === user.id)
+    );
   const [categoryMode, setCategoryMode] =
     useState<CatalogCategoryMode>("concern");
   const categoryCatalog = useMemo(
@@ -3992,6 +4174,7 @@ function ConsultationView({
   const updateQuote = (patch: Partial<typeof draft.quote>) =>
     setDraft({ ...draft, quote: { ...draft.quote, ...patch } });
   const save = () => {
+    if (adding || pasting) throw new Error("사진 추가가 끝난 뒤 저장해주세요.");
     if (
       !window.dispatchEvent(
         new Event("codimate:before-consult-save", { cancelable: true }),
@@ -4026,7 +4209,7 @@ function ConsultationView({
       event.preventDefault();
       const open = (event as CustomEvent<() => void>).detail;
       void work(async () => {
-        if (adding)
+        if (adding || pasting)
           throw new Error("사진 추가가 끝난 뒤 환자정보를 등록하세요.");
         if (
           !window.dispatchEvent(
@@ -4047,7 +4230,7 @@ function ConsultationView({
         "codimate:before-patient-registration",
         register,
       );
-  }, [dirty, draft, adding]);
+  }, [dirty, draft, adding, pasting]);
   const addPhotos = async (files: File[]) => {
     if (adding) return;
     if (draft.photos.length + files.length > 50) {
@@ -4126,7 +4309,8 @@ function ConsultationView({
         finish={async (status) => {
           let done = false;
           await work(async () => {
-            if (adding) throw new Error("사진 추가가 끝난 뒤 저장해주세요.");
+            if (adding || pasting)
+              throw new Error("사진 추가가 끝난 뒤 저장해주세요.");
             if (
               !window.dispatchEvent(
                 new Event("codimate:before-consult-save", { cancelable: true }),
@@ -4201,7 +4385,11 @@ function ConsultationView({
           />
         </div>
         {c.quickStarted && c.status === "H" && !c.cancelled && !readonly && (
-          <button className="danger" disabled={adding} onClick={cancelQuick}>
+          <button
+            className="danger"
+            disabled={adding || pasting}
+            onClick={cancelQuick}
+          >
             상담취소
           </button>
         )}
@@ -4298,6 +4486,24 @@ function ConsultationView({
         >
           <div className="consultation-photo-column">
             <section
+              onPaste={(event) => {
+                if (
+                  tab !== "photo" ||
+                  readonly ||
+                  adding ||
+                  pasting ||
+                  (event.target instanceof Element &&
+                    event.target.closest(
+                      "input,textarea,[contenteditable=true]",
+                    ))
+                )
+                  return;
+                const files = clipboardPhotoFiles(event.clipboardData);
+                if (files.length) {
+                  event.preventDefault();
+                  void addPhotos(files);
+                }
+              }}
               className={
                 "card photo-panel" +
                 (tab === "consult" ? " consultation-viewer-panel" : "")
@@ -4310,7 +4516,7 @@ function ConsultationView({
             >
               {tab === "photo" ? (
                 <>
-                  <div className="section-title">
+                  <div className="section-title photo-import-toolbar">
                     <h3>
                       상담 사진 <small>{draft.photos.length}장</small>
                     </h3>
@@ -4325,6 +4531,26 @@ function ConsultationView({
                         카메라
                       </button>
                     )}
+                    <button
+                      disabled={readonly || adding || pasting}
+                      onClick={async () => {
+                        setPasting(true);
+                        setPhotoError("");
+                        try {
+                          await addPhotos(await readClipboardPhotos());
+                        } catch (e) {
+                          setPhotoError(
+                            e instanceof Error
+                              ? e.message
+                              : "클립보드 사진을 읽지 못했습니다.",
+                          );
+                        } finally {
+                          setPasting(false);
+                        }
+                      }}
+                    >
+                      {pasting ? "사진 읽는 중…" : "클립보드 붙여넣기"}
+                    </button>
                     <label className="button">
                       <Camera size={18} />
                       촬영·추가
@@ -7569,9 +7795,11 @@ function SettingsView({
   health,
   deviceStorage,
   onCatalogImport,
+  onPasswordChange,
 }: {
   deviceStorage: React.ReactNode;
   onCatalogImport: (catalog: Catalog) => void;
+  onPasswordChange: () => void;
   state: State;
   user: User;
   send: (...args: any[]) => Promise<any>;
@@ -7589,12 +7817,14 @@ function SettingsView({
             : "device",
     ),
     [account, setAccount] = useState<User | undefined>(),
+    [accountNotice, setAccountNotice] = useState(""),
     [storageRoot, setStorageRoot] = useState(health.storageRoot || "상담"),
     [storageNotice, setStorageNotice] = useState("");
   useEffect(() => {
     setStorageRoot(health.storageRoot || "상담");
   }, [health.storageRoot]);
   const tabs = [
+    ["account", "내 계정", true],
     ["grade", "환자 등급", isAdministrator(user)],
     ["users", "직원·권한", isAdministrator(user)],
     ["consent", "동의서 양식", canUseExecutiveFeatures(user)],
@@ -7630,6 +7860,19 @@ function SettingsView({
           </button>
         ))}
       </div>
+      {activeTab === "account" && (
+        <div className="card">
+          <h3>내 계정</h3>
+          <p>
+            {user.name} · {user.username}
+          </p>
+          <button onClick={onPasswordChange}>비밀번호 변경</button>
+          <p className="small">
+            현재 비밀번호 확인 후 12자 이상으로 변경합니다. 다른 기기의 로그인은
+            해제됩니다.
+          </p>
+        </div>
+      )}
       {activeTab === "device" && deviceStorage}
       {activeTab === "exchange" && allowed(user, "catalog.edit") && (
         <CatalogExchange
@@ -7706,6 +7949,7 @@ function SettingsView({
         <div className="detail-grid employee-settings">
           <div className="card">
             <h3>직원 계정</h3>
+            {accountNotice && <p role="status">{accountNotice}</p>}
             {s.users.map((u) => (
               <button
                 className="list-row"
@@ -7750,10 +7994,14 @@ function SettingsView({
                       ...account,
                       name: d.get("name"),
                       username: d.get("username"),
-                      password: d.get("password") || undefined,
                     }),
                   });
                   await refresh();
+                  setAccountNotice(
+                    account.id
+                      ? "계정 정보를 저장했습니다."
+                      : "계정을 만들었습니다. 초기 비밀번호는 아이디와 같으며 첫 로그인에서 변경합니다.",
+                  );
                   setAccount(undefined);
                 });
               }}
@@ -7768,14 +8016,41 @@ function SettingsView({
                   required
                 />
               </Field>
-              <Field label="새 비밀번호 (12자 이상)">
-                <input
-                  type="password"
-                  name="password"
-                  minLength={12}
-                  required={!account.id}
-                />
-              </Field>
+              <p className="small">
+                새 계정의 초기 비밀번호는 아이디와 같습니다. 첫 로그인 시 본인이
+                12자 이상으로 변경합니다.
+              </p>
+              {account.id && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `${account.name}님의 비밀번호를 아이디(${account.username})로 초기화할까요? 기존 로그인은 해제되고 다음 로그인에서 새 비밀번호를 설정합니다.`,
+                      )
+                    )
+                      return;
+                    void work(async () => {
+                      await api("/users/reset-password", {
+                        method: "POST",
+                        body: JSON.stringify({ id: account.id }),
+                      });
+                      if (account.id === user.id) {
+                        await forgetLogin();
+                        location.reload();
+                        return;
+                      }
+                      await refresh();
+                      setAccountNotice(
+                        "비밀번호를 아이디로 초기화했습니다. 다음 로그인에서 새 비밀번호를 설정해야 합니다.",
+                      );
+                      setAccount(undefined);
+                    });
+                  }}
+                >
+                  비밀번호 초기화
+                </button>
+              )}
               <Field label="역할">
                 <select
                   aria-label="역할"

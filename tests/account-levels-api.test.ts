@@ -16,7 +16,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   dbs.splice(0).forEach((db) => db.close());
 });
-async function fixture() {
+async function fixture(requireOneDrive = false) {
   const db = new DatabaseSync(":memory:");
   dbs.push(db);
   const key = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString(
@@ -51,7 +51,7 @@ async function fixture() {
     {
       ENCRYPTION_KEY: key,
       APP_ORIGIN: "https://test.example",
-      REQUIRE_ONEDRIVE: "false",
+      REQUIRE_ONEDRIVE: String(requireOneDrive),
     } as any,
   );
   const passwordHash = await hashPassword("test-password-12345");
@@ -104,7 +104,18 @@ async function fixture() {
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
     );
-  return { db, key, add, request, admin, executive, standard, passwordHash };
+  return {
+    db,
+    key,
+    add,
+    request,
+    admin,
+    executive,
+    standard,
+    passwordHash,
+    clinic,
+    tokens,
+  };
 }
 it("creates and reads all job/grade combinations; rejects invalid or ambiguous legacy writes", async () => {
   const f = await fixture();
@@ -391,4 +402,193 @@ it("keeps source scanning authenticated and out of the clinic write queue", asyn
     );
   }
   expect((await pending).status).toBe(422);
+});
+
+it("new accounts use their ID, require first-login change, and cannot read clinical data or issue commands until changed", async () => {
+  const f = await fixture();
+  const create = await f.request(f.admin, "/users", {
+    id: "new-staff",
+    username: "newstaff",
+    name: "김수진",
+    role: "coordinator",
+    permissionLevel: "standard",
+    active: true,
+    permissions: {},
+    password: "ignored-old-client-password",
+  });
+  expect(create.status, await create.text()).toBe(200);
+  const login = await f.request(f.admin, "/login", {
+    username: "newstaff",
+    password: "newstaff",
+  });
+  const session = (await login.json()) as any;
+  expect(login.status).toBe(200);
+  expect(session.user.mustChangePassword).toBe(true);
+  expect(session.user).not.toHaveProperty("passwordHash");
+  f.tokens.set(session.user.id, session.token);
+  const state = (await (await f.request(session.user, "/state")).json()) as any;
+  expect(state.state.patients).toEqual([]);
+  expect(state.state.users).toEqual([]);
+  for (const path of [
+    "/patients/search",
+    "/opinions",
+    "/guide-progress",
+    "/catalog/event-source",
+  ])
+    expect((await f.request(session.user, path)).status).toBe(403);
+  expect(
+    (
+      await f.request(session.user, "/commands", {
+        id: "blocked",
+        type: "consultation.quickCreate",
+        payload: { category: "미용" },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await f.request(session.user, "/password", {
+        currentPassword: "wrong",
+        password: "new-password-12345",
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await f.request(session.user, "/password", {
+        currentPassword: "newstaff",
+        password: "short",
+      })
+    ).status,
+  ).toBe(400);
+  const changed = await f.request(session.user, "/password", {
+    currentPassword: "newstaff",
+    password: "new-password-12345",
+  });
+  expect(changed.status).toBe(200);
+  const next = (await changed.json()) as any;
+  expect(next.user.mustChangePassword).toBe(false);
+  expect(next.user).not.toHaveProperty("passwordHash");
+  expect((await f.request(session.user, "/state")).status).toBe(401);
+  f.tokens.set(session.user.id, next.token);
+  expect((await f.request(session.user, "/state")).status).toBe(200);
+  expect(
+    (
+      await f.request(f.admin, "/login", {
+        username: "newstaff",
+        password: "newstaff",
+      })
+    ).status,
+  ).toBe(401);
+  expect(
+    (
+      await f.request(f.admin, "/login", {
+        username: "newstaff",
+        password: "new-password-12345",
+      })
+    ).status,
+  ).toBe(200);
+});
+it("only administrators can reset an existing account to its ID and revoke every previous session", async () => {
+  const f = await fixture();
+  for (const actor of [f.standard, f.executive])
+    expect(
+      (await f.request(actor, "/users/reset-password", { id: f.standard.id }))
+        .status,
+    ).toBe(403);
+  expect(
+    (await f.request(f.admin, "/users/reset-password", { id: f.standard.id }))
+      .status,
+  ).toBe(200);
+  expect((await f.request(f.standard, "/state")).status).toBe(401);
+  expect(
+    (
+      await f.request(f.admin, "/login", {
+        username: f.standard.username,
+        password: "test-password-12345",
+      })
+    ).status,
+  ).toBe(401);
+  const login = (await (
+    await f.request(f.admin, "/login", {
+      username: f.standard.username,
+      password: f.standard.username,
+    })
+  ).json()) as any;
+  expect(login.user.mustChangePassword).toBe(true);
+  // Administrative edits cannot clear the first-login requirement.
+  expect(
+    (
+      await f.request(f.admin, "/users", {
+        ...f.standard,
+        mustChangePassword: false,
+      })
+    ).status,
+  ).toBe(200);
+  f.tokens.set(f.standard.id, login.token);
+  expect(
+    ((await (await f.request(f.standard, "/state")).json()) as any).user
+      .mustChangePassword,
+  ).toBe(true);
+});
+it("existing accounts can change only their own password without losing permissions or learning records", async () => {
+  const f = await fixture();
+  expect(
+    ((await (await f.request(f.standard, "/state")).json()) as any).user
+      .mustChangePassword,
+  ).toBeUndefined();
+  const updated = await f.request(f.standard, "/password", {
+    id: f.admin.id,
+    currentPassword: "test-password-12345",
+    password: "existing-new-password",
+  });
+  expect(updated.status).toBe(200);
+  const next = (await updated.json()) as any;
+  expect(next.user.id).toBe(f.standard.id);
+  expect(next.user.permissionLevel).toBe("standard");
+  expect((await f.request(f.standard, "/state")).status).toBe(401);
+  expect((await f.request(f.admin, "/state")).status).toBe(200);
+  const stored = await open<any>(
+    (
+      f.db
+        .prepare("SELECT value FROM secrets WHERE id=?")
+        .get("user:" + f.admin.id) as any
+    ).value,
+    f.key,
+  );
+  expect(stored.passwordHash).toBe(f.passwordHash);
+  f.tokens.set(f.standard.id, next.token);
+  expect(
+    (
+      await f.request(f.standard, "/password", {
+        currentPassword: "existing-new-password",
+        password: "existing-new-password",
+      })
+    ).status,
+  ).toBe(400);
+});
+it("does not change the password or revoke sessions when account backup fails", async () => {
+  const f = await fixture(true);
+  vi.spyOn(Drive.prototype, "put").mockRejectedValue(
+    new Error("backup unavailable"),
+  );
+  const response = await f.request(f.standard, "/password", {
+    currentPassword: "test-password-12345",
+    password: "changed-password-12345",
+  });
+  expect(response.status).toBe(503);
+  const stored = await open<any>(
+    (
+      f.db
+        .prepare("SELECT value FROM secrets WHERE id=?")
+        .get("user:" + f.standard.id) as any
+    ).value,
+    f.key,
+  );
+  expect(stored.passwordHash).toBe(f.passwordHash);
+  expect(
+    f.db
+      .prepare("SELECT id FROM secrets WHERE id=?")
+      .get("session:" + (await sha(f.tokens.get(f.standard.id)!))),
+  ).toBeTruthy();
 });

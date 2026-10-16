@@ -60,8 +60,21 @@ const derive = (password: string, salt: string) =>
     ),
   );
 export async function hashPassword(password: string) {
-  if (password.length < 12 || password.length > 128)
+  if (
+    typeof password !== "string" ||
+    password.length < 12 ||
+    password.length > 128
+  )
     throw new Error("비밀번호는 12~128자로 입력하세요");
+  return hashSecret(password);
+}
+// Only administrator-created/reset accounts may use a short initial password.
+export async function hashInitialPassword(username: string) {
+  if (typeof username !== "string" || !/^[a-zA-Z0-9_.-]{3,40}$/.test(username))
+    throw new Error("아이디를 확인하세요");
+  return hashSecret(username);
+}
+async function hashSecret(password: string) {
   const salt = Buffer.from(randomBytes(16)).toString("hex");
   return salt + ":" + Buffer.from(await derive(password, salt)).toString("hex");
 }

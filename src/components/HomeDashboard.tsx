@@ -65,7 +65,8 @@ export const workspaceMenus = [
     icon: BookOpen,
   },
 ];
-export type HistoryFilter = "all" | "pending" | "held" | "today" | "unpaid";
+export type HistoryFilter =
+  "all" | "pending" | "held" | "today" | "unpaid" | "cancelled";
 export function HomeDashboard({
   state,
   user,
@@ -84,7 +85,9 @@ export function HomeDashboard({
   const today = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Seoul",
   }).format(new Date());
-  const active = state.consultations.filter((c) => !c.cancelled);
+  const active = state.consultations.filter(
+    (c) => !c.cancelled && !c.historyDeletedAt,
+  );
   const pendingIds = new Set(
     state.patients
       .filter((p) => p.registrationPending && !p.mergedInto)

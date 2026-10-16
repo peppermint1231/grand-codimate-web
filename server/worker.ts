@@ -91,7 +91,13 @@ import {
   type Command,
 } from "../src/core/model";
 import { applyCommand, DomainError, ensure, sha } from "../src/core/domain";
-import { seal, open, hashPassword, verifyPassword } from "./crypto";
+import {
+  seal,
+  open,
+  hashPassword,
+  hashInitialPassword,
+  verifyPassword,
+} from "./crypto";
 import {
   Drive,
   exchange,
@@ -427,7 +433,38 @@ export class Clinic extends DurableObject<Env> {
     );
     const u = await this.account(session.id);
     ensure(u?.active, "계정이 비활성화되었습니다", 401);
+    ensure(
+      !u.mustChangePassword ||
+        ["/api/state", "/api/password", "/api/logout"].includes(
+          new URL(req.url).pathname,
+        ),
+      "처음 로그인한 계정입니다. 비밀번호를 먼저 변경하세요",
+      403,
+    );
     return u;
+  }
+  private async saveAccount(account: Account) {
+    if (this.env.REQUIRE_ONEDRIVE === "true")
+      await this.drive().put(
+        (await this.storageRoot()) +
+          "/_codimate/accounts/" +
+          account.id +
+          ".enc",
+        await seal(account, this.env.ENCRYPTION_KEY),
+      );
+    await this.setSecret("user:" + account.id, account);
+  }
+  private async revokeSessions(id: string) {
+    for (const row of this.sql
+      .exec<{ id: string }>(
+        "SELECT id FROM secrets WHERE id LIKE ?",
+        "session:%",
+      )
+      .toArray()) {
+      const session = await this.secret<{ id: string }>(row.id);
+      if (session?.id === id)
+        this.sql.exec("DELETE FROM secrets WHERE id=?", row.id);
+    }
   }
   private async inquiryStore() {
     return new Inquiries(
@@ -1414,6 +1451,65 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true, receipt: ticket.id });
     }
     const user = await this.user(req);
+    if (path === "/api/password" && req.method === "POST") {
+      const b = await body();
+      const key = "password-attempt:" + user.id;
+      const attempts = await this.secret<{ count: number; until: number }>(key);
+      ensure(
+        !attempts || attempts.until < Date.now() || attempts.count < 5,
+        "비밀번호 확인 시도가 많습니다. 5분 후 다시 시도하세요",
+        429,
+      );
+      const verified =
+        typeof b.currentPassword === "string" &&
+        (await verifyPassword(b.currentPassword, user.passwordHash));
+      await this.setSecret(key, {
+        count: verified
+          ? 0
+          : (attempts && attempts.until > Date.now() ? attempts.count : 0) + 1,
+        until: Date.now() + 300000,
+      });
+      ensure(verified, "현재 비밀번호를 확인하세요", 403);
+      ensure(
+        typeof b.password === "string" &&
+          b.password.length >= 12 &&
+          b.password.length <= 128,
+        "새 비밀번호는 12~128자로 입력하세요",
+      );
+      ensure(
+        b.password !== user.username && b.password !== b.currentPassword,
+        "아이디 및 현재 비밀번호와 다른 새 비밀번호를 입력하세요",
+      );
+      const updated = {
+        ...user,
+        passwordHash: await hashPassword(b.password),
+        mustChangePassword: false,
+      };
+      await this.saveAccount(updated);
+      await this.revokeSessions(user.id);
+      const token = crypto.randomUUID() + crypto.randomUUID();
+      await this.setSecret("session:" + (await sha(token)), {
+        id: user.id,
+        expires: Date.now() + 30 * 24 * 3600000,
+      });
+      const { passwordHash, ...safeUser } = updated;
+      const response = json({ ok: true, token, user: safeUser });
+      response.headers.set(
+        "Set-Cookie",
+        `codimate=${token}; HttpOnly; SameSite=Strict; Path=/api; Max-Age=2592000${this.env.APP_ORIGIN.startsWith("https") ? "; Secure" : ""}`,
+      );
+      return response;
+    }
+    if (path === "/api/state" && user.mustChangePassword)
+      return json({
+        state: emptyState(),
+        user: { ...user, passwordHash: undefined },
+        pending: 0,
+        mode:
+          this.env.REQUIRE_ONEDRIVE === "true"
+            ? "onedrive"
+            : "local-development",
+      });
     if (path === "/api/guide-progress/accounts") {
       ensure(
         isAdministrator(user),
@@ -2805,6 +2901,20 @@ export class Clinic extends DurableObject<Env> {
       await this.setSecret("oauth", { value, expires: Date.now() + 600000 });
       return json({ url: loginUrl(this.env, value) });
     }
+    if (path === "/api/users/reset-password" && req.method === "POST") {
+      admin();
+      const b = await body();
+      ensure(typeof b.id === "string", "계정을 선택하세요");
+      const account = await this.account(b.id);
+      ensure(account, "계정을 찾을 수 없습니다", 404);
+      await this.saveAccount({
+        ...account,
+        passwordHash: await hashInitialPassword(account.username),
+        mustChangePassword: true,
+      });
+      await this.revokeSessions(account.id);
+      return json({ ok: true, username: account.username });
+    }
     if (path === "/api/users" && req.method === "POST") {
       admin();
       const b = await body();
@@ -2842,29 +2952,22 @@ export class Clinic extends DurableObject<Env> {
               permissions.includes(k as any) && typeof v === "boolean",
           ),
         ),
-        passwordHash: b.password
-          ? await hashPassword(b.password)
-          : old?.passwordHash || "",
+        mustChangePassword:
+          !old || !!b.password || old.mustChangePassword === true,
+        passwordHash:
+          !old || (old.mustChangePassword && old.username !== b.username)
+            ? await hashInitialPassword(b.username)
+            : b.password
+              ? await hashPassword(b.password)
+              : old.passwordHash,
       };
-      ensure(a.passwordHash, "비밀번호를 입력하세요");
-      if (this.env.REQUIRE_ONEDRIVE === "true")
-        await this.drive().put(
-          (await this.storageRoot()) + "/_codimate/accounts/" + id + ".enc",
-          await seal(a, this.env.ENCRYPTION_KEY),
-        );
-      await this.setSecret("user:" + id, a);
-      if (b.password || !a.active) {
-        for (const row of this.sql
-          .exec<{ id: string }>(
-            "SELECT id FROM secrets WHERE id LIKE ?",
-            "session:%",
-          )
-          .toArray()) {
-          const session = await this.secret<{ id: string }>(row.id);
-          if (session?.id === id)
-            this.sql.exec("DELETE FROM secrets WHERE id=?", row.id);
-        }
-      }
+      await this.saveAccount(a);
+      if (
+        b.password ||
+        !a.active ||
+        (old?.mustChangePassword && old.username !== a.username)
+      )
+        await this.revokeSessions(id);
       return json({ ok: true });
     }
     if (path === "/api/commands" && req.method === "POST") {

@@ -25,6 +25,56 @@ import javax.crypto.spec.GCMParameterSpec;
 
 @CapacitorPlugin(name="ClinicDevice")
 public class ClinicDevicePlugin extends Plugin {
+  @Override public void load() {
+    // Remove unfinished clipboard imports left by an interrupted previous app session.
+    File directory=new File(getContext().getCacheDir(),"clipboard-photos");
+    File[] files=directory.listFiles();if(files!=null)for(File file:files)file.delete();
+  }
+  @PluginMethod public void readClipboardImages(PluginCall call) {
+    getActivity().runOnUiThread(() -> {
+      android.content.ClipData clip;
+      try {
+        android.content.ClipboardManager manager=(android.content.ClipboardManager)getContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+        clip=manager==null?null:manager.getPrimaryClip();
+      } catch(Exception e) {call.reject("클립보드를 읽을 수 없습니다. 앱을 화면에 연 상태에서 다시 눌러주세요.");return;}
+      if(clip==null){call.reject("클립보드에 사진이 없습니다. 사진을 복사한 뒤 다시 눌러주세요.");return;}
+      getBridge().execute(() -> {
+        ArrayList<File> created=new ArrayList<>();
+        try {
+          JSArray files=new JSArray();long total=0;
+          File directory=new File(getContext().getCacheDir(),"clipboard-photos");directory.mkdirs();
+          for(int i=0;i<clip.getItemCount();i++){
+            Uri uri=clip.getItemAt(i).getUri();
+            if(uri==null||!"content".equals(uri.getScheme()))continue;
+            String mime=getContext().getContentResolver().getType(uri);
+            if(mime==null||!mime.matches("image/(png|jpeg|webp)"))continue;
+            if(files.length()>=50)throw new IOException("한 번에 50장까지 붙여넣을 수 있습니다.");
+            String name="붙여넣기_"+java.util.UUID.randomUUID()+"."+mime.substring(6);
+            File file=new File(directory,name);created.add(file);
+            try(InputStream in=getContext().getContentResolver().openInputStream(uri);OutputStream out=new FileOutputStream(file)){
+              if(in==null)throw new IOException("사진을 읽을 수 없습니다.");
+              byte[] bytes=new byte[65536];int n;long size=0;
+              while((n=in.read(bytes))!=-1){size+=n;total+=n;if(size>25000000||total>50000000)throw new IOException("사진은 한 장당 25MB, 한 번에 50MB 이하로 붙여넣으세요.");out.write(bytes,0,n);}
+              if(size==0)throw new IOException("사진이 비어 있습니다.");
+            }
+            JSObject image=new JSObject();image.put("path",Uri.fromFile(file).toString());image.put("name",name);image.put("type",mime);files.put(image);
+          }
+          if(files.length()==0)throw new IOException("클립보드에 사진이 없습니다. 사진이나 캡처 이미지를 복사한 뒤 다시 눌러주세요.");
+          JSObject result=new JSObject();result.put("files",files);call.resolve(result);
+        }catch(Exception e){for(File f:created)f.delete();call.reject(e instanceof IOException?e.getMessage():"복사한 사진에 접근할 수 없습니다. 원본 앱에서 사진을 다시 복사해주세요.");}
+      });
+    });
+  }
+  @PluginMethod public void clearClipboardImages(PluginCall call) {
+    try {
+      JSArray paths=call.getArray("paths");File directory=new File(getContext().getCacheDir(),"clipboard-photos").getCanonicalFile();
+      if(paths!=null)for(int i=0;i<paths.length();i++){
+        Uri uri=Uri.parse(paths.getString(i));if(!"file".equals(uri.getScheme()))continue;
+        File file=new File(uri.getPath()).getCanonicalFile();if(directory.equals(file.getParentFile()))file.delete();
+      }
+      call.resolve();
+    }catch(Exception e){call.reject("임시 사진 정리 실패");}
+  }
   @PluginMethod public void setStylusEditor(PluginCall call) {
     String id = call.getString("id", "");
     boolean active = call.getBoolean("active", false);

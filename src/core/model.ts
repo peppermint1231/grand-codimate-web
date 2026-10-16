@@ -40,6 +40,7 @@ export const permissions = [
 ] as const;
 export type Permission = (typeof permissions)[number];
 export interface User {
+  mustChangePassword?: boolean;
   id: string;
   name: string;
   username: string;
@@ -273,6 +274,9 @@ export interface Consultation extends Base {
   quickStarted?: boolean;
   /** Removed from the shared quick consultation list; history and money records remain. */
   quickListHiddenAt?: string;
+  /** Hidden from consultation history; financial and signed records are retained. */
+  historyDeletedAt?: string;
+  historyDeletedBy?: string;
   priceReasonHistory?: string[];
   intakeSource?: {
     receiptId: string;

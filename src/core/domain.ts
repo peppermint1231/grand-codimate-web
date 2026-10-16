@@ -1676,6 +1676,47 @@ export async function applyCommand(
         : "패키지 진행 중으로 전환";
       break;
     }
+    case "consultation.historyDelete": {
+      admin();
+      const targets = z
+        .array(
+          z.object({ id: z.string().min(1), rev: z.number().int().positive() }),
+        )
+        .min(1)
+        .max(100)
+        .parse(p.items);
+      ensure(
+        new Set(targets.map((x) => x.id)).size === targets.length,
+        "중복 선택된 상담이 있습니다",
+      );
+      // Validate the entire batch before touching anything; never remove ledger or signed records.
+      const consultations = targets.map((target) => {
+        const c = s.consultations.find((x) => x.id === target.id);
+        ensure(c, "상담을 찾을 수 없습니다", 404);
+        ensure(
+          c.rev === target.rev && !c.historyDeletedAt,
+          "다른 기기에서 상담이 변경되었습니다. 새로고침 후 다시 선택하세요.",
+          409,
+        );
+        return c;
+      });
+      for (const c of consultations) {
+        c.historyDeletedAt = now;
+        c.historyDeletedBy = user.id;
+        touch(c);
+        s.events.push({
+          ...base,
+          id: cmd.id + "-" + c.id,
+          patientId: c.patientId,
+          actorId: user.id,
+          kind: cmd.type,
+          text: "상담이력에서 삭제 · 수납·환불·서명 기록 보존",
+          operationId: cmd.id,
+        });
+      }
+      text = `상담이력 ${consultations.length}건 삭제 · 수납·환불·서명 기록 보존`;
+      break;
+    }
     case "consultation.quickCancel":
     case "consultation.quickHide": {
       const c = consultation();

@@ -4,6 +4,10 @@ import { Camera, CameraResultType, CameraSource } from "@capacitor/camera";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
 export const native = !trainingMode && Capacitor.isNativePlatform();
 export const NativeClinic = registerPlugin<{
+  readClipboardImages(): Promise<{
+    files: { path: string; name: string; type: string }[];
+  }>;
+  clearClipboardImages(o: { paths: string[] }): Promise<void>;
   openDeviceSettings(): Promise<void>;
   appInfo(): Promise<{ version: string; versionCode: number }>;
   setStylusEditor(o: { id: string; active: boolean }): Promise<void>;

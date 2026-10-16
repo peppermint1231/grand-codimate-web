@@ -289,3 +289,20 @@
 .clinic-home .home-metrics button > span {
   word-break: keep-all;
 }
+
+.quick-pending-row > .quick-row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 1 auto;
+}
+.quick-row-actions button {
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .quick-pending-row > .quick-row-actions {
+    flex-basis: 100%;
+    justify-content: flex-start;
+  }
+}

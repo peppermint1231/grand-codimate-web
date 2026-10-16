@@ -160,10 +160,129 @@ it("rejects unauthorized registration, incomplete identity and ordinary-update b
   ).rejects.toThrow("다른 기기");
 });
 it("accepts a real referrer on deferred registration and rejects self-referral", async () => {
-  let s=await run(emptyState(),"patient.create",fields,"referrer");
-  s=await run(s,"consultation.quickCreate",{category:"미용"},"consult");
-  const other={...fields,name:"이서연",phone:"01000000002"};
-  await expect(run(s,"patient.quickRegister",{...other,referredByPatientId:"quick-consult"},"quick-consult",1)).rejects.toThrow("소개한 기존 환자");
-  s=await run(s,"patient.quickRegister",{...other,referredByPatientId:"referrer"},"quick-consult",1);
-  expect(s.patients.find(p=>p.id==="quick-consult")?.referredByPatientId).toBe("referrer");
+  let s = await run(emptyState(), "patient.create", fields, "referrer");
+  s = await run(s, "consultation.quickCreate", { category: "미용" }, "consult");
+  const other = { ...fields, name: "이서연", phone: "01000000002" };
+  await expect(
+    run(
+      s,
+      "patient.quickRegister",
+      { ...other, referredByPatientId: "quick-consult" },
+      "quick-consult",
+      1,
+    ),
+  ).rejects.toThrow("소개한 기존 환자");
+  s = await run(
+    s,
+    "patient.quickRegister",
+    { ...other, referredByPatientId: "referrer" },
+    "quick-consult",
+    1,
+  );
+  expect(
+    s.patients.find((p) => p.id === "quick-consult")?.referredByPatientId,
+  ).toBe("referrer");
+});
+
+it("cancels a held quick consultation without erasing its saved records", async () => {
+  const before = await run(
+    emptyState(),
+    "consultation.quickCreate",
+    { category: "미용" },
+    "consult",
+  );
+  before.consultations[0].memo = "저장된 상담 메모";
+  before.consultations[0].photos = [{ id: "photo", mediaId: "media" } as any];
+  before.ledger.push({
+    id: "receipt",
+    consultationId: "consult",
+    patientId: "quick-consult",
+    amount: 10000,
+  } as any);
+  const after = await run(before, "consultation.quickCancel", {}, "consult", 1);
+  expect(after.consultations[0]).toMatchObject({
+    cancelled: true,
+    status: "H",
+    rev: 2,
+    memo: "저장된 상담 메모",
+    reason: "바로상담 취소",
+  });
+  expect(after.consultations[0].photos).toEqual(before.consultations[0].photos);
+  expect(after.patients).toEqual(before.patients);
+  expect(after.ledger).toEqual(before.ledger);
+  expect(before.consultations[0].cancelled).toBe(false);
+  await expect(
+    run(after, "consultation.quickCancel", {}, "consult", 2),
+  ).rejects.toThrow("진행·보류");
+});
+it("removes held, cancelled and registered quick consultations from the shared list only", async () => {
+  for (const variant of ["held", "cancelled", "registered"] as const) {
+    let before = await run(
+      emptyState(),
+      "consultation.quickCreate",
+      { category: "미용" },
+      "consult",
+    );
+    if (variant === "registered")
+      before = await run(
+        before,
+        "patient.quickRegister",
+        fields,
+        "quick-consult",
+        1,
+      );
+    if (variant === "cancelled")
+      before = await run(before, "consultation.quickCancel", {}, "consult", 1);
+    const c = before.consultations[0];
+    const after = await run(before, "consultation.quickHide", {}, c.id, c.rev);
+    expect(after.consultations).toHaveLength(1);
+    expect(after.consultations[0].quickListHiddenAt).toBeTruthy();
+    expect(after.consultations[0].cancelled).toBe(c.cancelled);
+    expect(after.consultations[0].status).toBe(c.status);
+    expect(after.patients).toEqual(before.patients);
+    expect(after.ledger).toEqual(before.ledger);
+    await expect(
+      run(after, "consultation.quickHide", {}, c.id, c.rev + 1),
+    ).rejects.toThrow("이미");
+  }
+});
+it("enforces ownership, quick-only scope, finalized state and revision checks on quick actions", async () => {
+  const before = await run(
+    emptyState(),
+    "consultation.quickCreate",
+    { category: "미용" },
+    "consult",
+  );
+  for (const action of ["consultation.quickCancel", "consultation.quickHide"]) {
+    await expect(
+      run(before, action, {}, "consult", 1, { ...staff, id: "other" }),
+    ).rejects.toThrow("담당 상담자");
+    await expect(run(before, action, {}, "consult", 99)).rejects.toThrow(
+      "다른 기기",
+    );
+    const ordinary = structuredClone(before);
+    ordinary.consultations[0].quickStarted = false;
+    await expect(run(ordinary, action, {}, "consult", 1)).rejects.toThrow(
+      "바로상담에서",
+    );
+    const admin = {
+      ...staff,
+      id: "admin",
+      role: "admin",
+      permissionLevel: "admin",
+    } as User;
+    await expect(
+      run(before, action, {}, "consult", 1, admin),
+    ).resolves.toBeDefined();
+  }
+  for (const status of ["P", "F"] as const) {
+    const finalized = structuredClone(before);
+    finalized.consultations[0].status = status;
+    await expect(
+      run(finalized, "consultation.quickCancel", {}, "consult", 1),
+    ).rejects.toThrow("진행·보류");
+    await expect(
+      run(finalized, "consultation.quickHide", {}, "consult", 1),
+    ).resolves.toBeDefined();
+  }
 });

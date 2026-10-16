@@ -625,7 +625,11 @@ export function App() {
           c.entityId!,
           ((c.payload.photos || []) as Photo[]).map((p) => p.mediaId),
         ).catch(() => {});
-      if (c.type === "consultation.save" && vaultEnabled())
+      if (
+        (c.type === "consultation.save" ||
+          c.type === "consultation.quickCancel") &&
+        vaultEnabled()
+      )
         await vaultWrite("draft:" + c.entityId, null);
       if (vaultEnabled()) {
         const q = ((await vaultRead<Command[]>("pending")) || []).filter(
@@ -924,7 +928,7 @@ export function App() {
       .map((p) => p.id),
   );
   const quickQueue = state.consultations
-    .filter((c) => pendingPatientIds.has(c.patientId))
+    .filter((c) => c.quickStarted && !c.quickListHiddenAt)
     .slice()
     .reverse();
   const historyConsultations = state.consultations
@@ -932,7 +936,7 @@ export function App() {
       (c) =>
         historyFilter === "all" ||
         (historyFilter === "pending"
-          ? pendingPatientIds.has(c.patientId)
+          ? !c.cancelled && pendingPatientIds.has(c.patientId)
           : !c.cancelled &&
             (historyFilter === "held"
               ? c.status === "H"
@@ -965,6 +969,29 @@ export function App() {
         "바로상담을 시작했습니다. 환자정보는 상담 후 등록할 수 있습니다.",
       );
     });
+  const manageQuick = (c: Consultation, action: "cancel" | "hide") => {
+    const message =
+      action === "cancel"
+        ? "바로상담을 취소할까요? 저장하지 않은 변경 내용은 버려집니다. 저장된 상담이력과 수납 기록은 남으며, 환불은 별도로 처리해야 합니다."
+        : "바로상담 목록에서 삭제할까요? 모든 기기의 바로상담 목록과 홈의 등록 대기 안내에서 제외됩니다. 환자정보·상담이력·수납 기록은 삭제되지 않으며, 상담이력에서 다시 열 수 있습니다.";
+    if (!window.confirm(message)) return;
+    void work(async () => {
+      const result = await send(
+        action === "cancel"
+          ? "consultation.quickCancel"
+          : "consultation.quickHide",
+        {},
+        c.id,
+        c.rev,
+      );
+      if (result)
+        setNotice(
+          action === "cancel"
+            ? "바로상담을 취소했습니다. 저장된 기록은 상담이력에 남습니다."
+            : "바로상담 목록에서 삭제했습니다. 상담이력은 유지됩니다.",
+        );
+    });
+  };
   const registerQuick = (data: Record<string, unknown>) =>
     work(async () => {
       if (!quickPatient) return;
@@ -1683,13 +1710,21 @@ export function App() {
                 </button>
               </div>
               <div className="card">
-                <h2>바로상담환자 · 등록 대기 {quickQueue.length}명</h2>
+                <h2>
+                  바로상담 목록 · 등록 대기{" "}
+                  {
+                    quickQueue.filter(
+                      (c) => !c.cancelled && pendingPatientIds.has(c.patientId),
+                    ).length
+                  }
+                  건
+                </h2>
                 <p>
-                  환자목록에는 아직 표시되지 않습니다. 상담 기록을 확인한 뒤
-                  신규 등록하거나 기존 환자에 연결하세요.
+                  미등록 상담은 환자정보를 연결하세요. 보류·등록 완료·취소 건은
+                  목록에서 삭제해 정리할 수 있으며, 상담이력은 유지됩니다.
                 </p>
                 {!quickQueue.length && (
-                  <Empty>환자정보 등록을 기다리는 바로상담이 없습니다.</Empty>
+                  <Empty>바로상담 목록이 비어 있습니다.</Empty>
                 )}
                 {quickQueue
                   .slice(
@@ -1708,6 +1743,13 @@ export function App() {
                     <div className="quick-pending-row" key={c.id}>
                       <div>
                         <b>{c.patient.name}</b>
+                        <span className="badge">
+                          {c.cancelled
+                            ? "상담 취소"
+                            : pendingPatientIds.has(c.patientId)
+                              ? "등록 대기"
+                              : "등록 완료"}
+                        </span>
                         <small>
                           {c.category} ·{" "}
                           {state.users.find((u) => u.id === c.ownerId)?.name ||
@@ -1715,15 +1757,38 @@ export function App() {
                           · {status(c)}
                         </small>
                       </div>
-                      <button onClick={() => openConsultation(c)}>
-                        상담 이어가기
-                      </button>
-                      <button
-                        className="primary"
-                        onClick={() => openQuickRegistration(c.patientId)}
-                      >
-                        환자정보 등록
-                      </button>
+                      <div className="quick-row-actions">
+                        <button onClick={() => openConsultation(c)}>
+                          {c.cancelled ? "상담 기록 보기" : "상담 이어가기"}
+                        </button>
+                        {!c.cancelled && pendingPatientIds.has(c.patientId) && (
+                          <button
+                            className="primary"
+                            onClick={() => openQuickRegistration(c.patientId)}
+                          >
+                            환자정보 등록
+                          </button>
+                        )}
+                        {(c.ownerId === user.id || isAdministrator(user)) && (
+                          <>
+                            {c.status === "H" && !c.cancelled && (
+                              <button
+                                disabled={busy}
+                                onClick={() => manageQuick(c, "cancel")}
+                              >
+                                상담취소
+                              </button>
+                            )}
+                            <button
+                              className="danger"
+                              disabled={busy}
+                              onClick={() => manageQuick(c, "hide")}
+                            >
+                              목록에서 삭제
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   ))}
                 {quickQueue.length > 10 && (
@@ -1756,6 +1821,7 @@ export function App() {
           )}
           {page === "consult" &&
             consult &&
+            !consult.cancelled &&
             pendingPatientIds.has(consult.patientId) && (
               <div className="quick-info-banner">
                 <div>
@@ -1930,6 +1996,7 @@ export function App() {
             <ConsultationView
               key={consult.id + "-" + consult.rev}
               consult={consult}
+              cancelQuick={() => manageQuick(consult, "cancel")}
               state={state}
               user={user}
               tab={tab}
@@ -3670,6 +3737,7 @@ function ConsultationPayment({
 }
 function ConsultationView({
   consult: c,
+  cancelQuick,
   state: s,
   user,
   tab,
@@ -3681,6 +3749,7 @@ function ConsultationView({
   clearGuest,
 }: {
   consult: Consultation;
+  cancelQuick: () => void;
   state: State;
   user: User;
   tab: string;
@@ -3915,6 +3984,7 @@ function ConsultationView({
         if (!active) return;
         if (
           saved &&
+          !c.cancelled &&
           JSON.stringify(saved) !== JSON.stringify(c) &&
           window.confirm(
             saved.rev === c.rev
@@ -4159,6 +4229,11 @@ function ConsultationView({
             disabled={dirty}
           />
         </div>
+        {c.quickStarted && c.status === "H" && !c.cancelled && !readonly && (
+          <button className="danger" disabled={adding} onClick={cancelQuick}>
+            상담취소
+          </button>
+        )}
         <button
           className="primary consultation-save"
           disabled={readonly || !!validationError}

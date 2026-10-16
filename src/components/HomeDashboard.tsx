@@ -109,7 +109,11 @@ export function HomeDashboard({
     },
     {
       title: "환자정보 등록 대기",
-      count: pendingIds.size,
+      count: new Set(
+        active
+          .filter((c) => !c.quickListHiddenAt && pendingIds.has(c.patientId))
+          .map((c) => c.patientId),
+      ).size,
       hint: "바로상담환자 정보 입력",
       click: () => navigate("quick"),
     },

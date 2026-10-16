@@ -735,7 +735,9 @@
     ],
     "commands": [
       "consultation.quickCreate",
-      "patient.quickRegister"
+      "patient.quickRegister",
+      "consultation.quickCancel",
+      "consultation.quickHide"
     ]
   }
 }

@@ -1676,6 +1676,35 @@ export async function applyCommand(
         : "패키지 진행 중으로 전환";
       break;
     }
+    case "consultation.quickCancel":
+    case "consultation.quickHide": {
+      const c = consultation();
+      ensure(c.quickStarted, "바로상담에서 시작한 상담만 처리할 수 있습니다");
+      ensure(
+        c.ownerId === user.id || isAdministrator(user),
+        "담당 상담자 또는 관리자만 처리할 수 있습니다",
+        403,
+      );
+      if (cmd.type === "consultation.quickCancel") {
+        ensure(
+          c.status === "H" && !c.cancelled,
+          "진행·보류 중인 바로상담만 취소할 수 있습니다",
+        );
+        c.cancelled = true;
+        c.reason = "바로상담 취소";
+        text = "바로상담 취소 · 기록 유지 (환불 별도)";
+      } else {
+        ensure(
+          !c.quickListHiddenAt,
+          "이미 바로상담 목록에서 삭제했습니다",
+          409,
+        );
+        c.quickListHiddenAt = now;
+        text = "바로상담 목록에서 삭제 · 환자·상담·수납 기록 유지";
+      }
+      touch(c);
+      break;
+    }
     case "consultation.cancel": {
       admin();
       const c = consultation();

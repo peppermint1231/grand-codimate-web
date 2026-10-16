@@ -928,7 +928,13 @@ export function App() {
       .map((p) => p.id),
   );
   const quickQueue = state.consultations
-    .filter((c) => c.quickStarted && !c.quickListHiddenAt)
+    .filter(
+      (c) =>
+        c.quickStarted &&
+        !c.cancelled &&
+        !c.quickListHiddenAt &&
+        pendingPatientIds.has(c.patientId),
+    )
     .slice()
     .reverse();
   const historyConsultations = state.consultations
@@ -969,26 +975,17 @@ export function App() {
         "바로상담을 시작했습니다. 환자정보는 상담 후 등록할 수 있습니다.",
       );
     });
-  const manageQuick = (c: Consultation, action: "cancel" | "hide") => {
-    const message =
-      action === "cancel"
-        ? "바로상담을 취소할까요? 저장하지 않은 변경 내용은 버려집니다. 저장된 상담이력과 수납 기록은 남으며, 환불은 별도로 처리해야 합니다."
-        : "바로상담 목록에서 삭제할까요? 모든 기기의 바로상담 목록과 홈의 등록 대기 안내에서 제외됩니다. 환자정보·상담이력·수납 기록은 삭제되지 않으며, 상담이력에서 다시 열 수 있습니다.";
-    if (!window.confirm(message)) return;
+  const cancelQuick = (c: Consultation) => {
+    if (
+      !window.confirm(
+        "바로상담을 취소할까요? 저장하지 않은 변경 내용은 버려지고 바로상담 목록에서 자동으로 제외됩니다. 저장된 상담이력과 수납 기록은 남으며, 환불은 별도로 처리해야 합니다.",
+      )
+    )
+      return;
     void work(async () => {
-      const result = await send(
-        action === "cancel"
-          ? "consultation.quickCancel"
-          : "consultation.quickHide",
-        {},
-        c.id,
-        c.rev,
-      );
-      if (result)
+      if (await send("consultation.quickCancel", {}, c.id, c.rev))
         setNotice(
-          action === "cancel"
-            ? "바로상담을 취소했습니다. 저장된 기록은 상담이력에 남습니다."
-            : "바로상담 목록에서 삭제했습니다. 상담이력은 유지됩니다.",
+          "바로상담을 취소하고 목록에서 제외했습니다. 저장된 기록은 상담이력에 남습니다.",
         );
     });
   };
@@ -1710,18 +1707,10 @@ export function App() {
                 </button>
               </div>
               <div className="card">
-                <h2>
-                  바로상담 목록 · 등록 대기{" "}
-                  {
-                    quickQueue.filter(
-                      (c) => !c.cancelled && pendingPatientIds.has(c.patientId),
-                    ).length
-                  }
-                  건
-                </h2>
+                <h2>바로상담 목록 · 등록 대기 {quickQueue.length}건</h2>
                 <p>
-                  미등록 상담은 환자정보를 연결하세요. 보류·등록 완료·취소 건은
-                  목록에서 삭제해 정리할 수 있으며, 상담이력은 유지됩니다.
+                  상담취소 또는 환자정보 등록이 완료되면 목록에서 자동으로
+                  제외됩니다. 상담이력은 그대로 남습니다.
                 </p>
                 {!quickQueue.length && (
                   <Empty>바로상담 목록이 비어 있습니다.</Empty>
@@ -1743,13 +1732,7 @@ export function App() {
                     <div className="quick-pending-row" key={c.id}>
                       <div>
                         <b>{c.patient.name}</b>
-                        <span className="badge">
-                          {c.cancelled
-                            ? "상담 취소"
-                            : pendingPatientIds.has(c.patientId)
-                              ? "등록 대기"
-                              : "등록 완료"}
-                        </span>
+                        <span className="badge">등록 대기</span>
                         <small>
                           {c.category} ·{" "}
                           {state.users.find((u) => u.id === c.ownerId)?.name ||
@@ -1759,35 +1742,23 @@ export function App() {
                       </div>
                       <div className="quick-row-actions">
                         <button onClick={() => openConsultation(c)}>
-                          {c.cancelled ? "상담 기록 보기" : "상담 이어가기"}
+                          상담 이어가기
                         </button>
-                        {!c.cancelled && pendingPatientIds.has(c.patientId) && (
-                          <button
-                            className="primary"
-                            onClick={() => openQuickRegistration(c.patientId)}
-                          >
-                            환자정보 등록
-                          </button>
-                        )}
-                        {(c.ownerId === user.id || isAdministrator(user)) && (
-                          <>
-                            {c.status === "H" && !c.cancelled && (
-                              <button
-                                disabled={busy}
-                                onClick={() => manageQuick(c, "cancel")}
-                              >
-                                상담취소
-                              </button>
-                            )}
+                        <button
+                          className="primary"
+                          onClick={() => openQuickRegistration(c.patientId)}
+                        >
+                          환자정보 등록
+                        </button>
+                        {c.status === "H" &&
+                          (c.ownerId === user.id || isAdministrator(user)) && (
                             <button
-                              className="danger"
                               disabled={busy}
-                              onClick={() => manageQuick(c, "hide")}
+                              onClick={() => cancelQuick(c)}
                             >
-                              목록에서 삭제
+                              상담취소
                             </button>
-                          </>
-                        )}
+                          )}
                       </div>
                     </div>
                   ))}
@@ -1996,7 +1967,7 @@ export function App() {
             <ConsultationView
               key={consult.id + "-" + consult.rev}
               consult={consult}
-              cancelQuick={() => manageQuick(consult, "cancel")}
+              cancelQuick={() => cancelQuick(consult)}
               state={state}
               user={user}
               tab={tab}

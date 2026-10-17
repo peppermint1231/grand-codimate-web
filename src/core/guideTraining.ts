@@ -1322,10 +1322,12 @@ add("points", patient, [
     ),
   ),
 ]);
-add("recovery", { page: "patients" }, [
+add("recovery", { ...settings, tab: "device" }, [
   step(
     "practice-1",
-    click("복구 자료를 눌러 복구 도구 위치를 확인하세요.", text("복구 자료")),
+    {
+      ...click("설정 → 기기 보관의 복구 자료를 눌러 복구 도구 위치를 확인하세요.", text("복구 자료")),
+    },
   ),
 ]);
 add("packages", catalog, [

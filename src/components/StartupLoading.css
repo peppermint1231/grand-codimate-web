@@ -33,15 +33,12 @@
   height: 88px;
   margin: 0 auto 30px;
   border-radius: 28px;
-  background: #17594e;
+  background: #145d56;
   box-shadow: 0 12px 40px #17594e20;
 }
-.startup-mark span {
-  color: #fffdf5;
-  font-size: 50px;
-  font-weight: 600;
-  font-family: Georgia, serif;
-  line-height: 1;
+.startup-mark img {
+  width: 100%;
+  height: 100%;
 }
 .startup-mark i {
   position: absolute;

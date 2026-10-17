@@ -29,7 +29,13 @@
       "src/components/FirstPasswordChange.tsx",
       "server/crypto.ts",
       "server/worker.ts",
-      "src/core/model.ts"
+      "src/core/model.ts",
+      "src/components/BrandMark.tsx",
+      "scripts/generate-brand-assets.mjs",
+      "vite.config.ts",
+      "src/components/ReleaseHistory.tsx",
+      "src/components/ReleaseHistory.css",
+      "src/data/releaseHistory.json"
     ],
     "commands": []
   },
@@ -735,7 +741,10 @@
       "src/data/guidePracticeScenarios.json",
       "src/data/userGuideLearningLegacy.json",
       "src/components/CatalogExchange.tsx",
-      "src/style.css"
+      "src/style.css",
+      "src/components/ReleaseHistory.tsx",
+      "src/components/ReleaseHistory.css",
+      "src/data/releaseHistory.json"
     ],
     "commands": []
   },

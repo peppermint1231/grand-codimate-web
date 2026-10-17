@@ -10,12 +10,32 @@ export default defineConfig({
       manifest: {
         name: "코디메이트",
         short_name: "코디메이트",
-        theme_color: "#155e59",
-        background_color: "#f7f7f0",
+        theme_color: "#145d56",
+        background_color: "#f5f8f3",
         display: "standalone",
+        icons: [
+          {
+            src: "/brand/icon-192.png",
+            sizes: "192x192",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/brand/icon-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "any",
+          },
+          {
+            src: "/brand/icon-maskable-512.png",
+            sizes: "512x512",
+            type: "image/png",
+            purpose: "maskable",
+          },
+        ],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,ttf,svg}"],
+        globPatterns: ["**/*.{js,css,html,ttf,svg,png,ico}"],
         maximumFileSizeToCacheInBytes: 15000000,
         navigateFallbackDenylist: [/^\/api/],
         cleanupOutdatedCaches: true,

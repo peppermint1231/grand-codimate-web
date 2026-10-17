@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { PhotoModal } from "./PhotoBoard";
 import { useAppBack } from "../lib/navigation";
 
-export function DisplaySettings() {
+export function DisplaySettings({ compact = false }: { compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const [scale, setScale] = useState(() => {
     const saved = Number(localStorage.getItem("codimate-ui-font-scale"));
@@ -21,10 +21,10 @@ export function DisplaySettings() {
       <button
         type="button"
         aria-label="UI 글자 크기 설정"
-        title="글자 크기"
+        title={`글자 크기 ${scale}%`}
         onClick={() => setOpen(true)}
       >
-        가 <small>{scale}%</small>
+        <span aria-hidden="true">가</span> {!compact && <small>{scale}%</small>}
       </button>
       {open && (
         <PhotoModal

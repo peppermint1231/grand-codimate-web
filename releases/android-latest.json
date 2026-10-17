@@ -1,7 +1,7 @@
 {
-  "version": "0.18.32",
-  "versionCode": 102,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.32.apk",
-  "sha256": "f1804ad91ca6b9720a191a3a8a5acba415c57114538072bf984ac3a0ce7a4def",
-  "notes": "관리자 상담이력 선택·일괄삭제와 상담취소 필터를 추가했습니다. 수납·환불·서명 기록은 보존합니다. 신규 계정 초기 비밀번호는 아이디이며 첫 로그인에서 변경합니다. 기존 계정도 내 계정에서 비밀번호를 바꿀 수 있고 관리자는 초기화할 수 있습니다. 사진탭 클립보드 붙여넣기와 모바일 배치를 개선했습니다."
+  "version": "0.18.33",
+  "versionCode": 103,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.33.apk",
+  "sha256": "88608bda9b6716109a0017f88980ea556e28604b5abcd07ddab2a100f82d0e0b",
+  "notes": "환자 체크 선택·일괄삭제와 관리자 전용 자료 영구삭제를 추가했습니다. 기본정보·상담·사진·메모·수납·서명 중 범위를 선택하고 서버 및 연결 백업의 정리 진행을 확인할 수 있습니다. 상담이력 이름·연락처·환자번호 검색과 상담자·상태·분야·종류·기간 필터를 추가했습니다."
 }

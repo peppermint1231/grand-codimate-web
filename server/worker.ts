@@ -1,3 +1,9 @@
+import { PatientPurgeJobs, patientPurgeSchema } from "./patientPurge";
+import {
+  normalizedDeletionScope,
+  deletionScopeSchema,
+  type PatientPurgePlan,
+} from "../src/core/patientDeletion";
 import { guideAccountReport } from "../src/core/guideLearningReport";
 import type { GuideProgress } from "../src/core/userGuide";
 import { guideLearning } from "./guideLearning";
@@ -43,7 +49,7 @@ import {
   lightCatalog,
   visibleChanges,
   diffStateChanges,
-  isConsentDeletion,
+  isEntityDeletion,
 } from "../src/core/stateChanges";
 import {
   QuoteShares,
@@ -202,6 +208,7 @@ export class Clinic extends DurableObject<Env> {
     super(ctx, env);
     this.readProtection = new ReadProtection(ctx.storage.sql);
     this.sql = this.readProtection.sql;
+    this.sql.exec(patientPurgeSchema);
     this.sql.exec(
       "CREATE TABLE IF NOT EXISTS access_log(id TEXT PRIMARY KEY,at TEXT NOT NULL,value TEXT NOT NULL,backedUp INTEGER NOT NULL DEFAULT 0);CREATE TABLE IF NOT EXISTS entities(section TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(section,id));CREATE TABLE IF NOT EXISTS operations(id TEXT PRIMARY KEY,actor TEXT,digest TEXT,value TEXT,done INTEGER DEFAULT 0);CREATE TABLE IF NOT EXISTS secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE IF NOT EXISTS inquiries(id TEXT PRIMARY KEY,value TEXT NOT NULL,expires INTEGER NOT NULL,remoteId TEXT);CREATE INDEX IF NOT EXISTS inquiries_expiry ON inquiries(expires);CREATE TABLE IF NOT EXISTS quote_shares(id TEXT,part TEXT,consultationId TEXT,expires INTEGER,value TEXT,PRIMARY KEY(id,part));CREATE INDEX IF NOT EXISTS quote_shares_expiry ON quote_shares(expires);",
     );
@@ -219,6 +226,13 @@ export class Clinic extends DurableObject<Env> {
       "INSERT OR REPLACE INTO secrets VALUES(?,?)",
       id,
       await seal(v, this.env.ENCRYPTION_KEY),
+    );
+  }
+  private purgeJobs() {
+    return new PatientPurgeJobs(
+      this.sql,
+      this.env.ENCRYPTION_KEY,
+      this.env.REQUIRE_ONEDRIVE === "true" ? this.drive() : undefined,
     );
   }
   private async account(id: string) {
@@ -539,6 +553,8 @@ export class Clinic extends DurableObject<Env> {
           await this.settleStorageRename();
           await this.flush();
           await this.flushAccess();
+          const purge = await this.purgeJobs().step();
+          if (purge && purge.phase !== "done") return;
           await this.runVipDay();
           this.patientDirectory().scanAddresses(100);
           await this.patientDirectory().step(200);
@@ -557,19 +573,22 @@ export class Clinic extends DurableObject<Env> {
             this.sql
               .exec("SELECT id FROM operations WHERE done=0 LIMIT 1")
               .toArray().length;
+          const purge = await this.purgeJobs().active();
           await this.ctx.storage.setAlarm(
-            !this.patientDirectory().status().ready ||
-              this.patientDirectory().status().dirty ||
-              this.patientDirectory().addresses.pending()
-              ? Date.now() + 1000
-              : queued
-                ? Date.now() + 60000
-                : Math.min(
-                    Date.now() + 3600_000,
-                    Date.parse(
-                      seoulDay(new Date().toISOString()) + "T00:00:00+09:00",
-                    ) + 86400000,
-                  ),
+            purge && purge.phase !== "done"
+              ? Date.now() + (purge.error ? 60000 : 2000)
+              : !this.patientDirectory().status().ready ||
+                  this.patientDirectory().status().dirty ||
+                  this.patientDirectory().addresses.pending()
+                ? Date.now() + 1000
+                : queued
+                  ? Date.now() + 60000
+                  : Math.min(
+                      Date.now() + 3600_000,
+                      Date.parse(
+                        seoulDay(new Date().toISOString()) + "T00:00:00+09:00",
+                      ) + 86400000,
+                    ),
           );
         }
       }),
@@ -660,11 +679,13 @@ export class Clinic extends DurableObject<Env> {
     actor: string,
     digest: string,
     changes: Change[],
+    purge?: PatientPurgePlan,
   ) {
     const seq = Date.now().toString().padStart(16, "0");
     const value = await seal(
       {
         changes,
+        purge,
         operation: { id, actor, digest },
         path: `${await this.storageRoot()}/_codimate/commits/${seq}_${id}.enc`,
       },
@@ -775,13 +796,14 @@ export class Clinic extends DurableObject<Env> {
         )
         .toArray()[0];
       if (!row) continue;
-      const op = await open<{ changes: Change[]; path: string }>(
-        row.value,
-        this.env.ENCRYPTION_KEY,
-      );
+      const op = await open<{
+        changes: Change[];
+        path: string;
+        purge?: PatientPurgePlan;
+      }>(row.value, this.env.ENCRYPTION_KEY);
       if (this.env.REQUIRE_ONEDRIVE === "true") {
         for (const change of op.changes.filter(
-          (x) => x.section === "consultations",
+          (x) => x.section === "consultations" && x.value !== null,
         )) {
           const c = change.value as State["consultations"][number];
           let patient = op.changes.find(
@@ -830,18 +852,19 @@ export class Clinic extends DurableObject<Env> {
           "application/json",
         );
       }
+      if (op.purge) await this.purgeJobs().enqueue(row.id, op.purge, root);
       const encrypted: Change[] = [];
       for (const c of op.changes)
         encrypted.push({
           ...c,
-          value: isConsentDeletion(c)
+          value: isEntityDeletion(c)
             ? null
             : await seal(c.value, this.env.ENCRYPTION_KEY),
         });
       const directory = this.patientDirectory();
       this.ctx.storage.transactionSync(() => {
         for (const c of encrypted)
-          if (isConsentDeletion(c))
+          if (isEntityDeletion(c))
             this.sql.exec(
               "DELETE FROM entities WHERE section=? AND id=?",
               c.section,
@@ -855,6 +878,16 @@ export class Clinic extends DurableObject<Env> {
               c.value,
             );
         directory.track(op.changes);
+        if (op.purge) {
+          for (const id of op.purge.consultationIds)
+            this.sql.exec(
+              "DELETE FROM quote_shares WHERE consultationId=?",
+              id,
+            );
+          if (op.purge.scope.money)
+            for (const id of op.purge.patientIds)
+              this.sql.exec("DELETE FROM vip_shares WHERE patientId=?", id);
+        }
         this.sql.exec("UPDATE operations SET done=1 WHERE id=?", row.id);
       });
     }
@@ -877,6 +910,7 @@ export class Clinic extends DurableObject<Env> {
     const run = sourceRequest
       ? (async () => {
           const user = await this.user(req);
+
           ensure(
             allowed(user, "catalog.edit"),
             "단가표 관리 권한이 필요합니다",
@@ -1451,6 +1485,14 @@ export class Clinic extends DurableObject<Env> {
       return json({ ok: true, receipt: ticket.id });
     }
     const user = await this.user(req);
+    if (path.startsWith("/api/restore")) {
+      const job = await this.purgeJobs().active();
+      ensure(
+        !job || job.phase === "done",
+        "영구삭제 자료 정리가 끝난 뒤 복구하세요",
+        409,
+      );
+    }
     if (path === "/api/password" && req.method === "POST") {
       const b = await body();
       const key = "password-attempt:" + user.id;
@@ -2901,6 +2943,19 @@ export class Clinic extends DurableObject<Env> {
       await this.setSecret("oauth", { value, expires: Date.now() + 600000 });
       return json({ url: loginUrl(this.env, value) });
     }
+    if (path === "/api/patient-deletions") {
+      admin();
+      await this.flush();
+      if (req.method === "POST") {
+        const result = await this.purgeJobs().step();
+        if (result && result.phase !== "done")
+          await this.ctx.storage.setAlarm?.(Date.now() + 2000);
+        return json({ job: result });
+      }
+      return json({
+        job: this.purgeJobs().public(await this.purgeJobs().active()),
+      });
+    }
     if (path === "/api/users/reset-password" && req.method === "POST") {
       admin();
       const b = await body();
@@ -3013,7 +3068,7 @@ export class Clinic extends DurableObject<Env> {
               ...changed,
               value: await open(current.value, this.env.ENCRYPTION_KEY),
             });
-          else if (changed.section === "consents")
+          else if (isEntityDeletion({ ...changed, value: null }))
             changes.push({ ...changed, value: null });
         }
         return json({
@@ -3055,6 +3110,25 @@ export class Clinic extends DurableObject<Env> {
           String(cmd.payload.toId || ""),
           String(cmd.payload.targetId || ""),
         ]);
+      }
+      if (["patient.archiveBatch", "patient.purge"].includes(cmd.type)) {
+        ensure(
+          Array.isArray(cmd.payload.items) && cmd.payload.items.length <= 30,
+          "한 번에 30명까지 선택하세요",
+        );
+        await this.includePatients(
+          before,
+          cmd.payload.items.map((x: any) => String(x.id || "")),
+        );
+      }
+      if (cmd.type === "patient.purge") {
+        admin();
+        const active = await this.purgeJobs().active();
+        ensure(
+          !active || active.phase === "done",
+          "이전 영구삭제 자료 정리를 마친 뒤 다시 시도하세요",
+          409,
+        );
       }
       const after = await applyCommand(before, user, cmd);
       if (
@@ -3151,7 +3225,52 @@ export class Clinic extends DurableObject<Env> {
         if (current)
           changes.push({ section: "catalogs", id: current.id, value: current });
       }
-      await this.persistChanges(cmd.id, user.id, digest, changes);
+      let purge: PatientPurgePlan | undefined;
+      if (cmd.type === "patient.purge") {
+        const patientIds = (cmd.payload.items as { id: string }[]).map(
+            (x) => x.id,
+          ),
+          scope = normalizedDeletionScope(
+            deletionScopeSchema.parse(cmd.payload.scope),
+          ),
+          consultations = before.consultations.filter((c) =>
+            patientIds.includes(c.patientId),
+          ),
+          root = await this.storageRoot();
+        purge = {
+          patientIds,
+          scope,
+          consultationIds: consultations.map((c) => c.id),
+          documentMediaIds: consultations.flatMap((c) => c.documents),
+          protectedMediaIds: after.consultations.flatMap((c) => [
+            ...c.photos.map((p) => p.mediaId),
+            ...c.documents,
+          ]),
+          snapshots: consultations.map((c) => {
+            const patient = before.patients.find((p) => p.id === c.patientId)!,
+              next = after.consultations.find((x) => x.id === c.id);
+            return {
+              path: `${patientFolder(patient, c.category, root)}/상담_${c.id}.json`,
+              consultationId: c.id,
+              ...(next
+                ? {
+                    content: JSON.stringify({
+                      schemaVersion: 1,
+                      consultation: next,
+                    }),
+                  }
+                : {}),
+            };
+          }),
+          inquiryIds: scope.profile
+            ? consultations.flatMap((c) =>
+                c.intakeSource ? [c.intakeSource.receiptId] : [],
+              )
+            : [],
+        };
+      }
+      await this.persistChanges(cmd.id, user.id, digest, changes, purge);
+      if (purge) await this.ctx.storage.setAlarm?.(Date.now() + 1000);
       if (
         ["vip.policy", "grade.policy"].includes(cmd.type) &&
         this.ctx.storage.setAlarm
@@ -3200,7 +3319,7 @@ export class Clinic extends DurableObject<Env> {
       const encrypted = await Promise.all(
         changes.map(async (c) => ({
           ...c,
-          value: isConsentDeletion(c)
+          value: isEntityDeletion(c)
             ? null
             : await seal(c.value, this.env.ENCRYPTION_KEY),
         })),
@@ -3300,7 +3419,7 @@ export class Clinic extends DurableObject<Env> {
             r.value,
           );
         for (const c of encrypted)
-          if (isConsentDeletion(c))
+          if (isEntityDeletion(c))
             this.sql.exec(
               "DELETE FROM entities WHERE section=? AND id=?",
               c.section,
@@ -3341,6 +3460,14 @@ export class Clinic extends DurableObject<Env> {
       const consultationId = starting
         ? String(input!.consultationId)
         : session?.consultationId;
+      ensure(
+        !(await this.purgeJobs().blocksMedia(id, {
+          consultationId: consultationId || "",
+          mime: String(input?.mime || session?.mime || ""),
+        })),
+        "삭제 중이거나 삭제된 파일입니다. 새 파일로 추가하세요",
+        409,
+      );
       const state = await this.state(false, ["patients", "consultations"]),
         c = state.consultations.find((c) => c.id === consultationId);
       ensure(
@@ -3548,6 +3675,11 @@ export class Clinic extends DurableObject<Env> {
       );
       const id = req.headers.get("X-Upload-Id") || crypto.randomUUID();
       ensure(/^[\w-]{8,100}$/.test(id), "업로드 ID를 확인하세요");
+      ensure(
+        !(await this.purgeJobs().blocksMedia(id, { consultationId, mime })),
+        "삭제 중이거나 삭제된 파일입니다. 새 파일로 추가하세요",
+        409,
+      );
       const fingerprint = await sha(Buffer.from(data).toString("base64"));
       const previous = await this.media(id);
       if (previous) {
@@ -3638,6 +3770,11 @@ export class Clinic extends DurableObject<Env> {
       const id = path.split("/").pop()!,
         m = await this.media(id);
       ensure(m, "파일이 없습니다", 404);
+      ensure(
+        !(await this.purgeJobs().blocksMedia(id, m)),
+        "삭제된 파일입니다",
+        404,
+      );
       // Stored consultation PDFs contain the unredacted quotation. Hiding
       // amounts in /state alone does not protect these downloadable documents.
       if (m.mime === "application/pdf")

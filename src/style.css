@@ -5563,3 +5563,22 @@ html.custom-pull-refresh {
   .topbar .top-utility-actions { grid-column:1 / -1; grid-row:2; display:flex; justify-content:space-between; gap:4px; min-width:0; overflow-x:auto; }
   .topbar .top-utility-actions > button { font-size:calc(12px * var(--ui-font-scale,1)); padding:8px 6px; min-height:40px; }
 }
+
+.history-search-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:14px; margin-bottom:14px; background:#fff; border:1px solid var(--line); border-radius:12px; align-items:end; }
+.history-search-panel .field { margin:0; min-width:0; }
+.history-search-panel input,.history-search-panel select { width:100%; min-width:0; }
+.history-search-panel > button { white-space:nowrap; }
+.history-extra-filters { grid-column:1 / -1; min-width:0; }
+.history-extra-filters summary { cursor:pointer; padding:10px 0; font-size:13px; color:var(--primary); }
+.history-filter-fields { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; padding-top:10px; }
+@media(max-width:600px) {
+ .history-search-panel { padding:12px; }
+ .history-search-query { grid-column:1 / -1; }
+ .history-search-panel > button { grid-column:1 / -1; justify-self:end; font-size:12px; padding:6px 10px; min-height:36px; }
+ .history-filter-fields { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+
+.patient-deletion-dialog fieldset { border:0; padding:0; min-width:0; }
+.patient-deletion-dialog .deletion-scope { border:1px solid #e3a396; border-radius:10px; padding:14px; margin:12px 0; background:#fff9f6; }
+.patient-deletion-dialog .check { align-items:flex-start; padding:8px 0; }
+.deletion-patients { max-height:100px; overflow:auto; font-size:13px; overflow-wrap:anywhere; }

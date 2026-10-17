@@ -65,8 +65,8 @@ export const workspaceMenus = [
     icon: BookOpen,
   },
 ];
-export type HistoryFilter =
-  "all" | "pending" | "held" | "today" | "unpaid" | "cancelled";
+import type { HistoryFilter } from "../core/consultationSearch";
+export type { HistoryFilter } from "../core/consultationSearch";
 export function HomeDashboard({
   state,
   user,

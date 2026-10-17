@@ -400,3 +400,27 @@ it("keeps quick patients out of directory and marketing until identity registrat
   );
   f.db.close();
 });
+
+it("removes permanently erased patients from persistent search, duplicate and marketing indexes", async () => {
+  const f = fixture(),
+    d = f.dir();
+  await f.save("patients", patient("gone", "홍길동"));
+  await f.save("patients", patient("stay", "홍길동"));
+  while (!d.status().ready) await d.step();
+  expect((await d.search({ ...filter, duplicateOnly: true })).total).toBe(2);
+  f.db
+    .prepare("DELETE FROM entities WHERE section='patients' AND id='gone'")
+    .run();
+  d.track([{ section: "patients", id: "gone", value: null }]);
+  await d.step();
+  const cold = f.dir();
+  expect((await cold.search(filter)).total).toBe(1);
+  expect((await cold.search({ ...filter, archived: true })).total).toBe(0);
+  expect((await cold.search({ ...filter, duplicateOnly: true })).total).toBe(0);
+  expect(
+    f.db
+      .prepare("SELECT * FROM patient_marketing_members WHERE id='gone'")
+      .all(),
+  ).toEqual([]);
+  f.db.close();
+});

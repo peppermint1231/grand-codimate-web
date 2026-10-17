@@ -1,3 +1,9 @@
+import {
+  deletionItemsSchema,
+  deletionScopeSchema,
+  normalizedDeletionScope,
+  applyPatientPurge,
+} from "./patientDeletion";
 import { discoverySettingsSchema } from "./discoverySettings";
 import { patientIdentityKey } from "./patientIdentity";
 import { importedRevenue } from "./patientHistory";
@@ -1050,6 +1056,71 @@ export async function applyCommand(
       touch(x);
       patientId = id;
       text = "환자정보 수정";
+      break;
+    }
+    case "patient.archiveBatch": {
+      executive();
+      const items = deletionItemsSchema.parse(p.items);
+      ensure(
+        new Set(items.map((x) => x.id)).size === items.length,
+        "동일 환자가 중복 선택됐습니다",
+      );
+      const patients = items.map((item) => {
+        const patient = s.patients.find((x) => x.id === item.id);
+        ensure(patient && !patient.mergedInto, "환자를 찾을 수 없습니다");
+        ensure(
+          patient.rev === item.rev,
+          "다른 기기에서 환자정보가 변경되었습니다. 새로고침 후 다시 선택하세요.",
+          409,
+        );
+        return patient;
+      });
+      for (const patient of patients) {
+        patient.archived = true;
+        touch(patient);
+      }
+      text = `환자 ${patients.length}명 삭제목록으로 이동 · 자료 보존`;
+      break;
+    }
+    case "patient.purge": {
+      admin();
+      ensure(p.confirmation === "영구삭제", "영구삭제 확인 문구를 입력하세요");
+      const items = deletionItemsSchema.parse(p.items),
+        scope = normalizedDeletionScope(deletionScopeSchema.parse(p.scope));
+      ensure(Object.values(scope).some(Boolean), "삭제할 자료를 선택하세요");
+      ensure(
+        new Set(items.map((x) => x.id)).size === items.length,
+        "동일 환자가 중복 선택됐습니다",
+      );
+      for (const item of items) {
+        const patient = s.patients.find((x) => x.id === item.id);
+        ensure(patient && !patient.mergedInto, "환자를 찾을 수 없습니다");
+        ensure(
+          patient.rev === item.rev,
+          "다른 기기에서 환자정보가 변경되었습니다. 새로고침 후 다시 선택하세요.",
+          409,
+        );
+      }
+      const patientIds = items.map((x) => x.id),
+        consultationIds = s.consultations
+          .filter((c) => patientIds.includes(c.patientId))
+          .map((c) => c.id);
+      applyPatientPurge(
+        s,
+        {
+          patientIds,
+          consultationIds,
+          scope,
+          protectedMediaIds: [],
+          snapshots: [],
+          inquiryIds: [],
+        },
+        now,
+      );
+      text = `관리자 영구삭제 · 환자 ${items.length}명 · ${Object.entries(scope)
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+        .join(", ")}`;
       break;
     }
     case "patient.archive": {

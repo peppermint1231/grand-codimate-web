@@ -230,6 +230,40 @@ export class Drive {
       expirationDateTime?: string;
     };
   }
+  async cancelUpload(url: string) {
+    this.checkUploadURL(url);
+    const r = await fetch(url, { method: "DELETE" });
+    if (!r.ok && r.status !== 404 && r.status !== 410)
+      throw new Error(`OneDrive 업로드 정리 실패 (${r.status})`);
+  }
+  async permanentRemove(id: string) {
+    const path = "/me/drive/items/" + encodeURIComponent(id);
+    const item = await fetch(
+      "https://graph.microsoft.com/v1.0" + path + "?$select=id,parentReference",
+      { headers: { Authorization: "Bearer " + (await this.token()) } },
+    );
+    if (item.status === 404) return;
+    if (!item.ok)
+      throw new Error(`OneDrive 영구삭제 파일 확인 실패 (${item.status})`);
+    const data = (await item.json()) as {
+      parentReference?: { driveId?: string };
+    };
+    if (!data.parentReference?.driveId)
+      throw new Error("OneDrive 드라이브를 확인할 수 없습니다");
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/drives/" +
+        encodeURIComponent(data.parentReference.driveId) +
+        "/items/" +
+        encodeURIComponent(id) +
+        "/permanentDelete",
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + (await this.token()) },
+      },
+    );
+    if (!r.ok && r.status !== 404)
+      throw new Error(`OneDrive 영구삭제 실패 (${r.status})`);
+  }
   async remove(id: string) {
     const r = await fetch(
       "https://graph.microsoft.com/v1.0/me/drive/items/" +

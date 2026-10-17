@@ -1,4 +1,4 @@
-import { isConsentDeletion } from "../src/core/stateChanges";
+import { isEntityDeletion } from "../src/core/stateChanges";
 import { open, seal } from "./crypto";
 import { ensure } from "../src/core/domain";
 import { emptyState, isAdministrator } from "../src/core/model";
@@ -140,10 +140,10 @@ export class RestoreJobs {
             ensure(
               change.section in emptyState() &&
                 change.section !== "users" &&
-                (isConsentDeletion(change) || change.id === change.value?.id),
+                (isEntityDeletion(change) || change.id === change.value?.id),
               "원본 자료 ID가 다릅니다",
             );
-            if (isConsentDeletion(change)) {
+            if (isEntityDeletion(change)) {
               this.sql.exec(
                 "DELETE FROM restore_staging WHERE kind='entity' AND section=? AND id=?",
                 change.section,

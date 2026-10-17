@@ -1,3 +1,5 @@
+import { ReleaseHistory } from "./components/ReleaseHistory";
+import { BrandMark } from "./components/BrandMark";
 import {
   PatientDeletionDialog,
   PatientDeletionProgress,
@@ -197,6 +199,8 @@ import {
   Plus,
   Search,
   ArrowLeft,
+  RefreshCw,
+  Download,
   Check,
   Cloud,
   FileSpreadsheet,
@@ -1281,7 +1285,7 @@ export function App() {
       <div className="login-page">
         <div className="login-brand">
           <span className="brand-icon">
-            <HeartHandshake size={30} />
+            <BrandMark size={46} />
           </span>
           <b>코디메이트</b>
           <span>GRAND · CONSULTATION WORKSPACE</span>
@@ -1556,7 +1560,7 @@ export function App() {
             }
           }}
         >
-          <HeartHandshake />
+          <BrandMark size={34} />
           <div>
             코디메이트<small>GRAND CLINIC</small>
           </div>
@@ -1641,8 +1645,8 @@ export function App() {
             aria-label="코디메이트 홈"
             onClick={() => navigateWorkspace("home")}
           >
-            <HeartHandshake size={22} />
-            코디메이트
+            <BrandMark size={28} />
+            <span className="home-brand-name">코디메이트</span>
           </button>
           <button
             className="sidebar-toggle"
@@ -1673,18 +1677,13 @@ export function App() {
           </div>
           <div className="top-actions">
             <div className="top-utility-actions">
-              <DisplaySettings />
-              <button
-                className="mobile-logout"
-                aria-label="로그아웃"
-                onClick={() => requestNavigation(logout)}
-              >
-                <LogOut size={18} />
-              </button>
-              <button aria-label="뒤로가기" onClick={appBack}>
-                ← 뒤로
+              <DisplaySettings compact />
+              <button aria-label="뒤로가기" title="뒤로가기" onClick={appBack}>
+                <ArrowLeft size={19} />
               </button>
               <button
+                aria-label="새로고침"
+                title="새로고침"
                 disabled={busy}
                 onClick={() =>
                   work(async () => {
@@ -1695,53 +1694,42 @@ export function App() {
                   })
                 }
               >
-                새로고침
+                <RefreshCw size={18} />
               </button>
-              <button onClick={() => setModal("recovery")}>복구 자료</button>
-              {pending.length > 0 && <button onClick={sync}>재시도</button>}
             </div>
-            <button
-              className="header-update"
-              onClick={() =>
-                work(async () => {
-                  if (native) {
-                    requestAndroidUpdate();
-                    return;
-                  }
-                  const r = await api("/update");
-                  if (!r) throw new Error("게시된 업데이트가 없습니다.");
-                  if (
-                    window.confirm(
-                      `${r.version}\n${r.notes}\n업데이트 파일을 열까요?`,
-                    )
-                  ) {
-                    window.open(r.url, "_blank", "noopener,noreferrer");
-                  }
-                })
-              }
-            >
-              업데이트
-            </button>
+            <div className="update-controls">
+              <button
+                className="header-update"
+                aria-label="업데이트"
+                title="업데이트"
+                onClick={() =>
+                  work(async () => {
+                    if (native) {
+                      requestAndroidUpdate();
+                      return;
+                    }
+                    const r = await api("/update");
+                    if (!r) throw new Error("게시된 업데이트가 없습니다.");
+                    if (
+                      window.confirm(
+                        `${r.version}\n${r.notes}\n업데이트 파일을 열까요?`,
+                      )
+                    ) {
+                      window.open(r.url, "_blank", "noopener,noreferrer");
+                    }
+                  })
+                }
+              >
+                <Download size={19} />
+              </button>
+              <ReleaseHistory />
+            </div>
 
-            <span
-              className={"sync " + (pending.length ? "warning" : "")}
-              title={syncLabel}
-              aria-label={syncLabel}
-              role="status"
-            >
-              <Cloud size={16} />
-              <span className="sync-label">{syncLabel}</span>
-              {!!pending.length && (
-                <span className="sync-count">{pending.length}</span>
-              )}
-            </span>
-            <button aria-label="의견 요청 알림" onClick={() => openOpinion()}>
+            <button className="header-opinions" aria-label="의견 요청 알림" title="의견 요청 알림" onClick={() => openOpinion()}>
               <Bell size={20} />
-              <span>
-                {state.opinions.filter(
-                  (o) => o.toId === user.id && !hasOpinionAnswer(o),
-                ).length + unreadReplies.length}
-              </span>
+              {(state.opinions.filter((o) => o.toId === user.id && !hasOpinionAnswer(o)).length + unreadReplies.length) > 0 && (
+                <span className="header-opinion-count">{state.opinions.filter((o) => o.toId === user.id && !hasOpinionAnswer(o)).length + unreadReplies.length}</span>
+              )}
             </button>
           </div>
         </header>
@@ -2355,6 +2343,7 @@ export function App() {
             ))}
           {page === "settings" && (
             <SettingsView
+              initialTab={trainingMode && tab === "device" ? "device" : undefined}
               state={state}
               user={user}
               send={send}
@@ -2362,12 +2351,19 @@ export function App() {
               refresh={refresh}
               health={health}
               onPasswordChange={() => setModal("password-change")}
+              onLogout={() => requestNavigation(logout)}
               onCatalogImport={(catalog) => {
                 setCatalogImport(catalog);
                 setPage("catalog");
               }}
               deviceStorage={
                 <div className="card">
+                  <h3>연결 상태 · 복구 자료</h3>
+                  <p className="sync" role="status"><Cloud size={16} />{syncLabel}</p>
+                  <div className="button-row">
+                    <button onClick={() => setModal("recovery")}>복구 자료</button>
+                    {pending.length > 0 && <button onClick={sync}>전송 재시도 ({pending.length}건)</button>}
+                  </div>
                   <h3>이 기기의 오프라인 보관</h3>
                   <p>
                     {vaultEnabled()
@@ -8053,6 +8049,7 @@ function CatalogView({
   );
 }
 function SettingsView({
+  initialTab,
   state: s,
   user,
   send,
@@ -8062,10 +8059,13 @@ function SettingsView({
   deviceStorage,
   onCatalogImport,
   onPasswordChange,
+  onLogout,
 }: {
+  initialTab?: string;
   deviceStorage: React.ReactNode;
   onCatalogImport: (catalog: Catalog) => void;
   onPasswordChange: () => void;
+  onLogout: () => void;
   state: State;
   user: User;
   send: (...args: any[]) => Promise<any>;
@@ -8074,13 +8074,13 @@ function SettingsView({
   health: any;
 }) {
   const [tab, setTab] = useState(
-      isAdministrator(user)
+      initialTab || (isAdministrator(user)
         ? "grade"
         : canUseExecutiveFeatures(user)
           ? "consent"
           : allowed(user, "catalog.edit")
             ? "exchange"
-            : "device",
+            : "device"),
     ),
     [account, setAccount] = useState<User | undefined>(),
     [accountNotice, setAccountNotice] = useState(""),
@@ -8132,7 +8132,7 @@ function SettingsView({
           <p>
             {user.name} · {user.username}
           </p>
-          <button onClick={onPasswordChange}>비밀번호 변경</button>
+          <div className="button-row"><button onClick={onPasswordChange}>비밀번호 변경</button><button onClick={onLogout}><LogOut size={17} /> 로그아웃</button></div>
           <p className="small">
             현재 비밀번호 확인 후 12자 이상으로 변경합니다. 다른 기기의 로그인은
             해제됩니다.

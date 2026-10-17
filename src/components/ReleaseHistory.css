@@ -1,0 +1,128 @@
+.update-controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0;
+}
+.top-actions .release-history-trigger {
+  display: grid;
+  place-items: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+}
+.release-history-trigger span {
+  border: 1px solid #bcd3cb;
+  border-radius: 20px;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+  background: #eaf2ee;
+  color: #145d56;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.release-history-trigger:hover span {
+  background: #dcebe3;
+}
+.release-history-dialog {
+  padding: 0;
+  border: 1px solid #d1dfd8;
+  border-radius: 20px;
+  width: min(560px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(760px, 85dvh);
+  color: #23463f;
+  background: #fbfcf9;
+  box-shadow: 0 24px 80px #0e302e33;
+  overflow: hidden;
+}
+.release-history-dialog::backdrop {
+  background: #102e2b66;
+}
+.release-history-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #dce6df;
+  gap: 12px;
+}
+.release-history-heading h2 {
+  font-size: 21px;
+  margin: 0 0 4px;
+}
+.release-history-heading p {
+  font-size: 12px;
+  color: #637b72;
+  margin: 0;
+}
+.release-history-heading button {
+  display: grid;
+  place-items: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px;
+}
+.release-history-list {
+  overflow-y: auto;
+  max-height: calc(min(760px, 85dvh) - 94px);
+  padding: 16px 24px;
+  overscroll-behavior: contain;
+}
+.release-history-list article {
+  padding: 18px 0;
+  border-bottom: 1px solid #dce6df;
+}
+.release-history-list article:first-child {
+  padding-top: 4px;
+}
+.release-history-list article:last-child {
+  border: 0;
+}
+.release-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.release-history-meta strong {
+  font-size: 16px;
+}
+.release-history-meta span {
+  font-size: 11px;
+  border-radius: 12px;
+  padding: 3px 8px;
+  background: #145d56;
+  color: #fffdf6;
+}
+.release-history-meta time {
+  color: #637b72;
+  font-size: 12px;
+  margin-left: auto;
+}
+.release-history-list ul {
+  padding-left: 20px;
+  margin: 12px 0 0;
+}
+.release-history-list li {
+  font-size: 14px;
+  line-height: 1.7;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .topbar .update-controls {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .release-history-heading {
+    padding: 16px;
+  }
+  .release-history-list {
+    padding: 12px 16px;
+  }
+}

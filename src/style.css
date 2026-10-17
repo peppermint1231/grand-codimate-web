@@ -5549,20 +5549,20 @@ html.custom-pull-refresh {
   .history-row > svg { display:none; }
 }
 
-.top-utility-actions { display:flex; align-items:center; gap:inherit; }
-.sync-count { display:none; }
+/* Compact utility bar; status/recovery live under Settings > Device storage. */
+.top-utility-actions { display:flex; align-items:center; gap:2px; }
+.topbar .top-actions { display:flex; align-items:center; flex-wrap:nowrap; gap:4px; width:auto; }
+.topbar .top-actions button { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; width:40px; min-width:40px; min-height:40px; padding:6px; }
+.topbar .top-actions button:focus-visible { outline:2px solid var(--teal); outline-offset:1px; }
+.topbar .header-opinions { position:relative; }
+.header-opinion-count { position:absolute; top:0; right:0; font-size:10px; line-height:16px; min-width:16px; border-radius:10px; background:#e5efe9; color:var(--teal); }
 @media (max-width:600px) {
-  .topbar { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:0 8px; padding:4px 12px; }
-  .topbar .home-brand { grid-column:1; grid-row:1; justify-self:start; min-height:40px; white-space:nowrap; }
-  .topbar .top-actions { display:contents; }
-  .topbar .header-update { grid-column:2; grid-row:1; padding:8px 4px; font-size:12px; }
-  .topbar .sync { grid-column:3; grid-row:1; justify-content:center; min-width:24px; }
-  .topbar .sync-label { display:none; }
-  .topbar .sync-count { display:inline; font-weight:700; }
-  .topbar button[aria-label="의견 요청 알림"] { grid-column:4; grid-row:1; padding:8px 4px; }
-  .topbar .top-utility-actions { grid-column:1 / -1; grid-row:2; display:flex; justify-content:space-between; gap:4px; min-width:0; overflow-x:auto; }
-  .topbar .top-utility-actions > button { font-size:calc(12px * var(--ui-font-scale,1)); padding:8px 6px; min-height:40px; }
+  .topbar { display:flex; flex-wrap:nowrap; justify-content:space-between; gap:4px; height:56px; min-height:56px; padding:4px 8px; }
+  .topbar .home-brand { padding:0; gap:5px; min-height:40px; white-space:nowrap; font-size:13px; flex-shrink:0; }
+  .topbar .top-actions { gap:0; }
+  .topbar .top-utility-actions { display:flex; flex-wrap:nowrap; gap:0; width:auto; }
 }
+@media (max-width:360px) { .topbar .home-brand-name { display:none; } }
 
 .history-search-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; padding:14px; margin-bottom:14px; background:#fff; border:1px solid var(--line); border-radius:12px; align-items:end; }
 .history-search-panel .field { margin:0; min-width:0; }

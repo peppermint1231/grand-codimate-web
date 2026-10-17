@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import "./StartupLoading.css";
 export function StartupLoading({
   reconnecting = false,
@@ -13,7 +14,7 @@ export function StartupLoading({
       <div className="startup-glow" aria-hidden="true" />
       <section className="startup-content" role="status" aria-live="polite">
         <div className="startup-mark" aria-hidden="true">
-          <span>C</span>
+          <BrandMark size={88} />
           <i />
           <i />
         </div>

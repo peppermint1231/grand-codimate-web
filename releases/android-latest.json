@@ -1,7 +1,7 @@
 {
-  "version": "0.18.33",
-  "versionCode": 103,
-  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.33.apk",
-  "sha256": "88608bda9b6716109a0017f88980ea556e28604b5abcd07ddab2a100f82d0e0b",
+  "version": "0.18.34",
+  "versionCode": 104,
+  "url": "https://raw.githubusercontent.com/peppermint1231/grand-codimate-web/main/releases/codimate-0.18.34.apk",
+  "sha256": "12305b9b17a7f62d70df8cb8e4aaea9da958c53c8a3cd7426f99bd31f3ac60a7",
   "notes": "환자 체크 선택·일괄삭제와 관리자 전용 자료 영구삭제를 추가했습니다. 기본정보·상담·사진·메모·수납·서명 중 범위를 선택하고 서버 및 연결 백업의 정리 진행을 확인할 수 있습니다. 상담이력 이름·연락처·환자번호 검색과 상담자·상태·분야·종류·기간 필터를 추가했습니다."
 }

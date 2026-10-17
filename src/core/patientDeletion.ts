@@ -51,6 +51,7 @@ export type PatientPurgePlan = {
   scope: DeletionScope;
   protectedMediaIds: string[];
   documentMediaIds?: string[];
+  recordIds?: Partial<Record<keyof State, string[]>>;
   snapshots: { path: string; content?: string; consultationId?: string }[];
   inquiryIds: string[];
 };
@@ -60,8 +61,9 @@ export function purgeChange(
 ): StateChange {
   const v = change.value as any;
   if (!v) return change;
-  const patient = plan.patientIds.includes(v.patientId || v.id),
-    consult = plan.consultationIds.includes(v.consultationId || v.id),
+  const linked = !!plan.recordIds?.[change.section]?.includes(change.id);
+  const patient = linked || plan.patientIds.includes(v.patientId || v.id),
+    consult = linked || plan.consultationIds.includes(v.consultationId || v.id),
     s = plan.scope;
   let value = v;
   if (change.section === "patients" && plan.patientIds.includes(v.id)) {
@@ -74,7 +76,7 @@ export function purgeChange(
           ? { ...v.importSummary, totalPaid: 0 }
           : undefined,
       };
-  } else if (change.section === "consultations" && patient) {
+  } else if (change.section === "consultations" && (patient || consult)) {
     if (s.consultations) value = null;
     else
       value = {

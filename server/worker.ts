@@ -3242,6 +3242,20 @@ export class Clinic extends DurableObject<Env> {
           scope,
           consultationIds: consultations.map((c) => c.id),
           documentMediaIds: consultations.flatMap((c) => c.documents),
+          recordIds: Object.fromEntries(
+            Object.entries(before).map(([section, rows]) => [
+              section,
+              (rows as any[])
+                .filter(
+                  (v) =>
+                    patientIds.includes(v.patientId) ||
+                    consultations.some(
+                      (c) => c.id === v.consultationId || c.id === v.id,
+                    ),
+                )
+                .map((v) => v.id),
+            ]),
+          ),
           protectedMediaIds: after.consultations.flatMap((c) => [
             ...c.photos.map((p) => p.mediaId),
             ...c.documents,

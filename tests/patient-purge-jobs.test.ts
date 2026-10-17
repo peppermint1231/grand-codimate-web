@@ -22,7 +22,7 @@ function fixture() {
   const db = new DatabaseSync(":memory:");
   db.exec(
     patientPurgeSchema +
-      "CREATE TABLE operations(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE inquiries(id TEXT PRIMARY KEY,remoteId TEXT);",
+      "CREATE TABLE entities(section TEXT,id TEXT,value TEXT,PRIMARY KEY(section,id));CREATE TABLE operations(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE media(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE secrets(id TEXT PRIMARY KEY,value TEXT);CREATE TABLE inquiries(id TEXT PRIMARY KEY,remoteId TEXT);",
   );
   const sql = {
     exec(q: string, ...args: any[]) {
@@ -233,29 +233,27 @@ it("document-only erasure removes historical JPG exports while preserving patien
       snapshots: [],
       inquiryIds: [],
     };
-    f.db
-      .prepare("INSERT INTO operations VALUES(?,?)")
-      .run(
-        "history",
-        await seal(
-          {
-            path: "상담/_codimate/commits/h.enc",
-            changes: [
-              {
-                section: "consultations",
+    f.db.prepare("INSERT INTO operations VALUES(?,?)").run(
+      "history",
+      await seal(
+        {
+          path: "상담/_codimate/commits/h.enc",
+          changes: [
+            {
+              section: "consultations",
+              id: "c",
+              value: {
                 id: "c",
-                value: {
-                  id: "c",
-                  patientId: "p",
-                  documents: ["jpg-export"],
-                  photos: [],
-                },
+                patientId: "p",
+                documents: ["jpg-export"],
+                photos: [],
               },
-            ],
-          },
-          key,
-        ),
-      );
+            },
+          ],
+        },
+        key,
+      ),
+    );
     for (const id of ["jpg-export", "patient-photo"])
       f.db
         .prepare("INSERT INTO media VALUES(?,?)")
@@ -276,6 +274,87 @@ it("document-only erasure removes historical JPG exports while preserving patien
         .all()
         .map((r: any) => r.id),
     ).toEqual(["patient-photo"]);
+  } finally {
+    f.db.close();
+  }
+});
+
+it("erases old versions of the selected records even when a patient merge changed their patient ID", async () => {
+  const f = fixture();
+  try {
+    const p = {
+      ...plan,
+      recordIds: { notes: ["linked-note"], ledger: ["linked-money"] },
+      snapshots: [],
+      inquiryIds: [],
+    };
+    const changes = [
+      {
+        section: "consultations",
+        id: "c",
+        value: {
+          id: "c",
+          patientId: "before-merge",
+          category: "미용",
+          photos: [{ mediaId: "old" }],
+          documents: [],
+        },
+      },
+      {
+        section: "notes",
+        id: "linked-note",
+        value: {
+          id: "linked-note",
+          patientId: "before-merge",
+          text: "과거 메모",
+        },
+      },
+      {
+        section: "ledger",
+        id: "linked-money",
+        value: { id: "linked-money", patientId: "before-merge", amount: 100 },
+      },
+      {
+        section: "notes",
+        id: "other-note",
+        value: { id: "other-note", patientId: "another", text: "남길 메모" },
+      },
+    ];
+    f.db
+      .prepare("INSERT INTO operations VALUES(?,?)")
+      .run(
+        "old",
+        await seal({ path: "상담/_codimate/commits/old.enc", changes }, key),
+      );
+    f.db
+      .prepare("INSERT INTO entities VALUES(?,?,?)")
+      .run(
+        "patients",
+        "before-merge",
+        await seal(
+          {
+            id: "before-merge",
+            name: "통합전",
+            sex: "F",
+            storageName: "old-patient",
+          },
+          key,
+        ),
+      );
+    f.files.set("상담/미용/old-patient/상담_c.json", "historical-mirror");
+    await f.jobs().enqueue("j", p, "상담");
+    await finish(f);
+    const op = await open<any>(
+      (f.db.prepare("SELECT value FROM operations").get() as any).value,
+      key,
+    );
+    expect(op.changes.slice(0, 3).map((x: any) => x.value)).toEqual([
+      null,
+      null,
+      null,
+    ]);
+    expect(op.changes[3].value.text).toBe("남길 메모");
+    expect(f.removed).toContain("historical-mirror");
   } finally {
     f.db.close();
   }

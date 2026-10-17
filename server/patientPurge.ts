@@ -4,7 +4,7 @@ import {
   purgeChange,
   type PatientPurgePlan,
 } from "../src/core/patientDeletion";
-import { relocateStoragePath } from "../src/core/storagePaths";
+import { relocateStoragePath, patientFolder } from "../src/core/storagePaths";
 export const patientPurgeSchema =
   "CREATE TABLE IF NOT EXISTS patient_purge(id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS erased_media(id TEXT PRIMARY KEY);CREATE TABLE IF NOT EXISTS patient_purge_media(jobId TEXT,seq INTEGER,id TEXT,PRIMARY KEY(jobId,seq));CREATE INDEX IF NOT EXISTS patient_purge_media_id ON patient_purge_media(jobId,id);";
 type Job = {
@@ -144,6 +144,28 @@ export class PatientPurgeJobs {
           .toArray();
         for (const row of rows) {
           const op = await open<any>(row.value, this.key);
+          for (const c of op.changes) {
+            if (
+              c.section !== "consultations" ||
+              !c.value ||
+              !job.plan.consultationIds.includes(c.id)
+            )
+              continue;
+            // Merging a patient changes the current folder, but earlier mirrors
+            // in the source patient's stable folder still belong to this consultation.
+            const saved = this.sql
+              .exec(
+                "SELECT value FROM entities WHERE section='patients' AND id=?",
+                c.value.patientId,
+              )
+              .toArray()[0];
+            if (!saved) continue;
+            const patient = await open<any>(saved.value, this.key);
+            const path = `${patientFolder(patient, c.value.category, job.root)}/상담_${c.id}.json`;
+            if (!job.plan.snapshots.some((s) => s.path === path))
+              job.plan.snapshots.push({ path, consultationId: c.id });
+          }
+
           job.plan.documentMediaIds = [
             ...new Set([
               ...(job.plan.documentMediaIds || []),

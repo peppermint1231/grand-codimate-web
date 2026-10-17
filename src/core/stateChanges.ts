@@ -2,7 +2,29 @@ import { allowed, emptyQuote, type State, type User } from "./model";
 
 export type StateChange = { section: keyof State; id: string; value: unknown };
 
-/** Only consent templates currently support physical deletion. */
+const deletionSections = new Set<keyof State>([
+  "consents",
+  "patients",
+  "consultations",
+  "notes",
+  "opinions",
+  "signatures",
+  "quoteConsents",
+  "ledger",
+  "vipAccounts",
+  "pointEntries",
+  "benefitAccounts",
+  "events",
+]);
+export function isEntityDeletion(change: StateChange): boolean {
+  return (
+    deletionSections.has(change.section) &&
+    typeof change.id === "string" &&
+    change.id.length > 0 &&
+    change.value === null
+  );
+}
+/** Compatibility helper for consent template deletion. */
 export function isConsentDeletion(change: StateChange): boolean {
   return (
     change.section === "consents" &&
@@ -25,7 +47,7 @@ export function diffStateChanges(before: State, after: State): StateChange[] {
         changes.push({ section, id: v.id, value: v });
       prior.delete(v.id);
     }
-    if (section === "consents")
+    if (deletionSections.has(section))
       for (const id of prior.keys()) changes.push({ section, id, value: null });
   }
   return changes;
@@ -42,7 +64,7 @@ export function mergeStateChanges(state: State, changes: StateChange[]): State {
     const rows = state[section].flatMap((row) => {
       const value = updates.get(row.id);
       updates.delete(row.id);
-      if (isConsentDeletion({ section, id: row.id, value })) return [];
+      if (isEntityDeletion({ section, id: row.id, value })) return [];
       return [value || row];
     });
     (next[section] as unknown[]) = [
@@ -58,7 +80,7 @@ export function visibleChanges(
   user: User,
 ): StateChange[] {
   return changes.flatMap((change) => {
-    if (change.value == null) return isConsentDeletion(change) ? [change] : [];
+    if (change.value == null) return isEntityDeletion(change) ? [change] : [];
     if (change.section === "catalogRevisions" || change.section === "users")
       return [];
     if (change.section === "notes" && !allowed(user, "note.read")) return [];

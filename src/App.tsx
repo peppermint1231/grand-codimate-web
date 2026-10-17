@@ -1,4 +1,12 @@
 import {
+  PatientDeletionDialog,
+  PatientDeletionProgress,
+} from "./components/PatientDeletionDialog";
+import {
+  searchConsultations,
+  emptyConsultationSearch,
+} from "./core/consultationSearch";
+import {
   readClipboardPhotos,
   clipboardPhotoFiles,
 } from "./lib/clipboardPhotos";
@@ -352,10 +360,16 @@ export function App() {
     if (trainingMode && user)
       window.dispatchEvent(new CustomEvent("practice:ready"));
   }, [user?.id]);
+  const [historySearch, setHistorySearch] = useState(emptyConsultationSearch);
+  const [historyPage, setHistoryPage] = useState(0);
   const [historySelection, setHistorySelection] = useState<string[]>([]);
   const [historySelecting, setHistorySelecting] = useState(false);
   const [historyDeleting, setHistoryDeleting] = useState(false);
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>("all");
+  useEffect(() => {
+    setHistoryPage(0);
+    setHistorySelection([]);
+  }, [historySearch, historyFilter]);
   const [quickPatientId, setQuickPatientId] = useState("");
   const [quickRegistrationMode, setQuickRegistrationMode] = useState<
     "new" | "existing"
@@ -618,7 +632,7 @@ export function App() {
   }, [user?.id, pending.length]);
   const execute = async (c: Command) => {
     opinionPollGeneration.current++;
-    if (vaultEnabled()) {
+    if (vaultEnabled() && c.type !== "patient.purge") {
       const q = [
         ...((await vaultRead<Command[]>("pending")) || []).filter(
           (x) => x.id !== c.id,
@@ -669,12 +683,15 @@ export function App() {
       setNotice(
         trainingMode
           ? "연습 자료에 반영했습니다."
-          : health.mode === "local-development"
-            ? "개발 서버에 저장했습니다."
-            : "OneDrive에 저장했습니다.",
+          : c.type === "patient.purge"
+            ? "선택 자료를 목록에서 제거했습니다. 연결 파일·백업 정리 상태를 확인하세요."
+            : health.mode === "local-development"
+              ? "개발 서버에 저장했습니다."
+              : "OneDrive에 저장했습니다.",
       );
       return true;
     } catch (e: any) {
+      if (c.type === "patient.purge") throw e;
       if (!e.status || e.status >= 500) {
         if (!vaultEnabled())
           throw new Error(
@@ -948,28 +965,24 @@ export function App() {
     )
     .slice()
     .reverse();
-  const historyConsultations = state.consultations
-    .filter(
-      (c) =>
-        !c.historyDeletedAt &&
-        (historyFilter === "all" ||
-          (historyFilter === "cancelled"
-            ? c.cancelled
-            : !c.cancelled &&
-              (historyFilter === "pending"
-                ? pendingPatientIds.has(c.patientId)
-                : historyFilter === "held"
-                  ? c.status === "H"
-                  : historyFilter === "today"
-                    ? c.appointment?.slice(0, 10) ===
-                      new Intl.DateTimeFormat("sv-SE", {
-                        timeZone: "Asia/Seoul",
-                      }).format(new Date())
-                    : c.status === "P" &&
-                      ledgerAvailable(state, c.id, "receipt") > 0))),
-    )
-    .slice()
-    .reverse();
+  const historyConsultations = useMemo(
+    () =>
+      searchConsultations(
+        state,
+        historyFilter,
+        historySearch,
+        !!user && allowed(user, "money.read"),
+      ),
+    [state, historyFilter, historySearch, user],
+  );
+  const historyPageIndex = Math.min(
+    historyPage,
+    Math.max(0, Math.ceil(historyConsultations.length / 30) - 1),
+  );
+  const historyRows = historyConsultations.slice(
+    historyPageIndex * 30,
+    (historyPageIndex + 1) * 30,
+  );
   const syncLabel = pending.length
     ? `기기 저장 · ${pending.length}건 ${syncingNow ? "전송 중" : "대기"}`
     : trainingMode
@@ -1963,12 +1976,146 @@ export function App() {
                 title="상담이력"
                 description="함께 이어온 상담을 한눈에 확인하세요."
               />
+              <div className="history-search-panel">
+                <label className="field history-search-query">
+                  환자 검색
+                  <input
+                    type="search"
+                    placeholder="이름 · 연락처 · 생년월일 · 환자번호"
+                    value={historySearch.query}
+                    onChange={(e) =>
+                      setHistorySearch({
+                        ...historySearch,
+                        query: e.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <button
+                  onClick={() => {
+                    setHistorySearch(emptyConsultationSearch);
+                    setHistoryFilter("all");
+                  }}
+                >
+                  검색·필터 초기화
+                </button>
+                <details className="history-extra-filters">
+                  <summary>
+                    상세 필터 · 상담자 / 분야 / 종류 / 기간{" "}
+                    {Object.entries(historySearch).filter(
+                      ([key, value]) => key !== "query" && value,
+                    ).length > 0 &&
+                      `(${Object.entries(historySearch).filter(([key, value]) => key !== "query" && value).length}개 적용)`}
+                  </summary>
+                  <div className="history-filter-fields">
+                    <label className="field">
+                      상담자
+                      <select
+                        aria-label="상담자"
+                        value={historySearch.owner}
+                        onChange={(e) =>
+                          setHistorySearch({
+                            ...historySearch,
+                            owner: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">전체 상담자</option>
+                        {Array.from(
+                          new Set(state.consultations.map((c) => c.ownerId)),
+                        ).map((id) => (
+                          <option key={id} value={id}>
+                            {state.users.find((u) => u.id === id)?.name ||
+                              "이전 직원"}
+                            {state.users.find((u) => u.id === id)?.active ===
+                            false
+                              ? " (비활성)"
+                              : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      상담 분야
+                      <select
+                        aria-label="상담 분야"
+                        value={historySearch.category}
+                        onChange={(e) =>
+                          setHistorySearch({
+                            ...historySearch,
+                            category: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">전체 분야</option>
+                        <option>미용</option>
+                        <option>보험</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      상담 종류
+                      <select
+                        aria-label="상담 종류"
+                        value={historySearch.kind}
+                        onChange={(e) =>
+                          setHistorySearch({
+                            ...historySearch,
+                            kind: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">전체 종류</option>
+                        <option value="initial">첫 상담</option>
+                        <option value="interim">중간상담</option>
+                        <option value="renewal">연장상담</option>
+                      </select>
+                    </label>
+                    <label className="field">
+                      상담 시작일
+                      <input
+                        type="date"
+                        value={historySearch.from}
+                        max={historySearch.to || undefined}
+                        onChange={(e) =>
+                          setHistorySearch({
+                            ...historySearch,
+                            from: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label className="field">
+                      상담 종료일
+                      <input
+                        type="date"
+                        value={historySearch.to}
+                        min={historySearch.from || undefined}
+                        onChange={(e) =>
+                          setHistorySearch({
+                            ...historySearch,
+                            to: e.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                </details>
+                {historySearch.from &&
+                  historySearch.to &&
+                  historySearch.from > historySearch.to && (
+                    <p className="error" role="alert">
+                      시작일을 종료일 이전으로 선택하세요.
+                    </p>
+                  )}
+              </div>
               <div className="history-filters">
                 {(
                   [
                     ["all", "전체"],
                     ["pending", "바로상담환자"],
                     ["held", "보류"],
+                    ["success", "성공"],
+                    ["failed", "실패"],
                     ["cancelled", "상담취소"],
                     ["today", "오늘 예약"],
                     ...(allowed(user, "money.read")
@@ -2025,7 +2172,7 @@ export function App() {
                       <span>
                         {selectedHistory.length}건 선택
                         {historyConsultations.length > 100
-                          ? " · 한 번에 최대 100건"
+                          ? " · 검색 결과 중 최대 100건"
                           : ""}
                       </span>
                       <button
@@ -2041,9 +2188,31 @@ export function App() {
                   )}
                 </div>
               )}
+              <div className="patient-pagination" aria-label="상담이력 페이지">
+                <span role="status">
+                  검색 결과 {historyConsultations.length}건 ·{" "}
+                  {historyPageIndex + 1}/
+                  {Math.max(1, Math.ceil(historyConsultations.length / 30))}
+                  페이지
+                </span>
+                <button
+                  disabled={!historyPageIndex}
+                  onClick={() => setHistoryPage(historyPageIndex - 1)}
+                >
+                  이전
+                </button>
+                <button
+                  disabled={
+                    (historyPageIndex + 1) * 30 >= historyConsultations.length
+                  }
+                  onClick={() => setHistoryPage(historyPageIndex + 1)}
+                >
+                  다음
+                </button>
+              </div>
               <div className="card">
                 {historyConsultations.length ? (
-                  historyConsultations.map((c) => (
+                  historyRows.map((c) => (
                     <div
                       role="link"
                       tabIndex={0}
@@ -2112,11 +2281,7 @@ export function App() {
                     </div>
                   ))
                 ) : (
-                  <Empty>
-                    {historyFilter === "all"
-                      ? "바로상담 또는 환자목록에서 첫 상담을 시작하세요."
-                      : "선택한 조건에 해당하는 상담이 없습니다."}
-                  </Empty>
+                  <Empty>검색·필터 조건에 해당하는 상담이 없습니다.</Empty>
                 )}
               </div>
             </>
@@ -2405,6 +2570,12 @@ function Patients({
     [owner, setOwner] = useState(""),
     [consultStatus, setConsultStatus] = useState(""),
     [since, setSince] = useState("");
+  const [deletingPatients, setDeletingPatients] = useState<Patient[] | null>(
+    null,
+  );
+  const [selectedPatients, setSelectedPatients] = useState<Patient[]>([]);
+  const [patientSelecting, setPatientSelecting] = useState(false);
+  const [deletionRefresh, setDeletionRefresh] = useState(0);
   const [editing, setEditing] = useState<Patient | null>(null);
   const [duplicateId, setDuplicateId] = useState("");
   const [mergePair, setMergePair] = useState<{
@@ -2425,15 +2596,12 @@ function Patients({
     );
   const duplicatePatient = comparePatients.find((p) => p.id === duplicateId);
   const archive = async (p: Patient) => {
-    if (
-      !window.confirm(
-        p.archived
-          ? `${p.name} 환자를 목록에 복원할까요?`
-          : `${p.name} 환자를 목록에서 삭제할까요? 상담·수납·사진 기록은 보존되며 삭제 목록에서 복원할 수 있습니다.`,
-      )
-    )
+    if (!p.archived) {
+      setDeletingPatients([p]);
       return;
-    await send("patient.archive", { archived: !p.archived }, p.id, p.rev);
+    }
+    if (window.confirm(`${p.name} 환자를 목록에 복원할까요?`))
+      await send("patient.archive", { archived: false }, p.id, p.rev);
   };
   const [listPage, setListPage] = useState(0),
     [remoteList, setRemoteList] = useState<ReturnType<
@@ -2537,6 +2705,22 @@ function Patients({
       allowed(user, "money.read"),
     );
   const ps = listResult.rows;
+  useEffect(
+    () => setSelectedPatients([]),
+    [
+      search,
+      grade,
+      addressStatus,
+      sort,
+      unpaid,
+      owner,
+      consultStatus,
+      since,
+      archived,
+      duplicateOnly,
+      listPage,
+    ],
+  );
   return (
     <>
       <Title
@@ -2548,6 +2732,47 @@ function Patients({
           </button>
         }
       />
+      {isAdministrator(user) && (
+        <PatientDeletionProgress refresh={deletionRefresh} />
+      )}
+      {canUseExecutiveFeatures(user) && (
+        <div className="history-selection-bar">
+          <button
+            onClick={() => {
+              setPatientSelecting(!patientSelecting);
+              setSelectedPatients([]);
+            }}
+          >
+            {patientSelecting ? "환자 선택 취소" : "환자 선택"}
+          </button>
+          {patientSelecting && (
+            <>
+              <button
+                disabled={listLoading || !ps.length}
+                onClick={() =>
+                  setSelectedPatients(
+                    selectedPatients.length === ps.length
+                      ? []
+                      : ps.map((x) => x.p),
+                  )
+                }
+              >
+                {selectedPatients.length === ps.length && ps.length
+                  ? "선택 해제"
+                  : "현재 페이지 전체 선택"}
+              </button>
+              <span>{selectedPatients.length}명 선택 · 최대 30명</span>
+              <button
+                className="danger"
+                disabled={!selectedPatients.length || listLoading}
+                onClick={() => setDeletingPatients(selectedPatients)}
+              >
+                선택 환자 삭제
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div className="summary-grid">
         <Summary
           label="전체 환자"
@@ -2697,6 +2922,9 @@ function Patients({
           <table>
             <thead>
               <tr>
+                {patientSelecting && canUseExecutiveFeatures(user) && (
+                  <th>선택</th>
+                )}
                 <th>환자</th>
                 <th>연락처</th>
                 <th>등록일</th>
@@ -2720,6 +2948,22 @@ function Patients({
                     select(p.id)
                   }
                 >
+                  {patientSelecting && canUseExecutiveFeatures(user) && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        aria-label={`${p.name} 환자 선택`}
+                        checked={selectedPatients.some((x) => x.id === p.id)}
+                        onChange={(e) =>
+                          setSelectedPatients((rows) =>
+                            e.target.checked
+                              ? [...rows, p]
+                              : rows.filter((x) => x.id !== p.id),
+                          )
+                        }
+                      />
+                    </td>
+                  )}
                   <td>
                     <div className="person">
                       <span className="patient-avatar">{p.name[0]}</span>
@@ -2834,6 +3078,15 @@ function Patients({
                           {p.archived ? "복원" : "삭제"}
                         </button>
                       )}
+                      {p.archived && isAdministrator(user) && (
+                        <button
+                          className="danger"
+                          aria-label={`${p.name} 환자 영구삭제`}
+                          onClick={() => setDeletingPatients([p])}
+                        >
+                          영구삭제
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -2847,6 +3100,19 @@ function Patients({
           </Empty>
         )}
       </div>
+      {deletingPatients && (
+        <PatientDeletionDialog
+          patients={deletingPatients}
+          user={user}
+          send={send}
+          close={() => setDeletingPatients(null)}
+          done={() => {
+            setDeletingPatients(null);
+            setSelectedPatients([]);
+            setDeletionRefresh((x) => x + 1);
+          }}
+        />
+      )}
       {editing && (
         <Modal title="환자정보 수정" close={() => setEditing(null)}>
           <PatientForm

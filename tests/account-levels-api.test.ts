@@ -592,3 +592,69 @@ it("does not change the password or revoke sessions when account backup fails", 
       .get("session:" + (await sha(f.tokens.get(f.standard.id)!))),
   ).toBeTruthy();
 });
+
+it("enforces admin-only data erasure and replays deletion tombstones without resurrecting a patient", async () => {
+  const f = await fixture();
+  const id = "erase-patient";
+  const created = await f.request(f.admin, "/commands", {
+    id: crypto.randomUUID(),
+    type: "patient.create",
+    entityId: id,
+    payload: {
+      name: "삭제시험",
+      sex: "F",
+      dob: "1990-01-01",
+      phone: "01011112222",
+      address: "석사동",
+    },
+  });
+  expect(created.status).toBe(200);
+  const state = ((await (await f.request(f.admin, "/state")).json()) as any)
+    .state;
+  const patient = state.patients.find((p: any) => p.id === id);
+  const cmd = {
+    id: crypto.randomUUID(),
+    type: "patient.purge",
+    payload: {
+      items: [{ id, rev: patient.rev }],
+      confirmation: "영구삭제",
+      scope: {
+        profile: true,
+        consultations: false,
+        photos: false,
+        notes: false,
+        money: false,
+        documents: false,
+      },
+    },
+  };
+  for (const user of [f.executive, f.standard]) {
+    expect((await f.request(user, "/commands", cmd)).status).toBe(403);
+    expect((await f.request(user, "/patient-deletions")).status).toBe(403);
+  }
+  const deleted = await f.request(f.admin, "/commands", cmd);
+  expect(deleted.status).toBe(200);
+  expect(((await deleted.json()) as any).changes).toContainEqual({
+    section: "patients",
+    id,
+    value: null,
+  });
+  expect((await f.request(f.admin, "/restore", {})).status).toBe(409);
+  for (let n = 0; n < 25; n++) {
+    const r = await f.request(f.admin, "/patient-deletions", {});
+    expect(r.status).toBe(200);
+    if (((await r.json()) as any).job?.phase === "done") break;
+  }
+  const replay = await f.request(f.admin, "/commands", cmd);
+  expect(replay.status).toBe(200);
+  expect(((await replay.json()) as any).changes).toContainEqual({
+    section: "patients",
+    id,
+    value: null,
+  });
+  expect(
+    f.db
+      .prepare("SELECT * FROM entities WHERE section='patients' AND id=?")
+      .all(id),
+  ).toEqual([]);
+});

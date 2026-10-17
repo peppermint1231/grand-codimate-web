@@ -311,6 +311,30 @@ export class PatientDirectory {
     );
     this.add("duplicates", (next > 1 ? next : 0) - (n > 1 ? n : 0));
   }
+  private remove(id: string) {
+    const prior = this.rows(
+      "SELECT rowid,identity,archived,merged,revenue,facets FROM patient_directory WHERE id=?",
+      id,
+    )[0];
+    if (prior) {
+      for (const facet of JSON.parse(prior.facets))
+        this.add(facet, -1, -prior.revenue);
+      if (!prior.archived && !prior.merged)
+        this.identityDelta(prior.identity, -1);
+      this.sql.exec(
+        "DELETE FROM patient_directory_search WHERE rowid=?",
+        prior.rowid,
+      );
+      this.marketing.update(
+        id,
+        prior.identity || this.hash("id:" + id),
+        undefined,
+      );
+    }
+    this.sql.exec("DELETE FROM patient_directory WHERE id=?", id);
+    this.sql.exec("DELETE FROM patient_directory_tags WHERE id=?", id);
+    this.sql.exec("DELETE FROM patient_relations WHERE patient_id=?", id);
+  }
   private apply(entry: Entry) {
     const prior = this.rows(
       "SELECT rowid,identity,archived,merged,revenue,facets FROM patient_directory WHERE id=?",
@@ -434,6 +458,8 @@ export class PatientDirectory {
       if (entry) entries.push(entry);
     }
     this.transaction(() => {
+      for (const row of rows)
+        if (!entries.some((e) => e.id === row.id)) this.remove(row.id);
       for (const entry of entries) this.apply(entry);
       for (const row of rows)
         this.sql.exec("DELETE FROM patient_directory_dirty WHERE id=?", row.id);

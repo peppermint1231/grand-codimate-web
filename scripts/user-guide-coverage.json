@@ -53,13 +53,23 @@
       "src/components/BirthDateInput.tsx",
       "src/components/BirthDateInput.css",
       "src/core/phone.ts",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/components/PatientDeletionDialog.tsx",
+      "src/core/patientDeletion.ts",
+      "src/core/stateChanges.ts",
+      "server/patientPurge.ts",
+      "server/patientDirectory.ts",
+      "server/drive.ts",
+      "server/restoreJobs.ts",
+      "server/worker.ts"
     ],
     "commands": [
       "patient.import.enrich",
       "patient.import",
       "patient.archive",
-      "patient.merge"
+      "patient.merge",
+      "patient.archiveBatch",
+      "patient.purge"
     ]
   },
   "register": {
@@ -310,7 +320,8 @@
       "src/lib/guideProgress.ts",
       "server/guideLearning.ts",
       "src/data/guidePracticeScenarios.json",
-      "src/data/userGuideLearningLegacy.json"
+      "src/data/userGuideLearningLegacy.json",
+      "src/core/consultationSearch.ts"
     ],
     "commands": [
       "consultation.save",

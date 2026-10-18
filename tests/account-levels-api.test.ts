@@ -640,6 +640,30 @@ it("enforces admin-only data erasure and replays deletion tombstones without res
     value: null,
   });
   expect((await f.request(f.admin, "/restore", {})).status).toBe(409);
+  expect((await f.request(f.admin, "/backup", {})).status).toBe(409);
+  expect(
+    (
+      await f.request(f.admin, "/storage", {
+        baseRoot: "상담",
+        rootFolder: "정리중변경",
+      })
+    ).status,
+  ).toBe(409);
+  await f.db
+    .prepare("INSERT OR REPLACE INTO secrets VALUES(?,?)")
+    .run(
+      "oauth",
+      await seal({ value: "test-state", expires: Date.now() + 60000 }, f.key),
+    );
+  const external = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("unexpected network"));
+  expect(
+    (await f.request(f.admin, "/onedrive/callback?state=test-state&code=test"))
+      .status,
+  ).toBe(409);
+  expect(external).not.toHaveBeenCalled();
+  external.mockRestore();
   for (let n = 0; n < 25; n++) {
     const r = await f.request(f.admin, "/patient-deletions", {});
     expect(r.status).toBe(200);
@@ -657,4 +681,90 @@ it("enforces admin-only data erasure and replays deletion tombstones without res
       .prepare("SELECT * FROM entities WHERE section='patients' AND id=?")
       .all(id),
   ).toEqual([]);
+  expect((await f.request(f.admin, "/backup", {})).status).toBe(200);
 });
+
+it.each([
+  { driveId: "original-drive", folder: true, status: 302 },
+  { driveId: "different-drive", folder: true, status: 409 },
+  { driveId: "original-drive", folder: false, status: 409 },
+])(
+  "reauthenticates only the bound deletion drive and existing root: $driveId / $folder",
+  async ({ driveId, folder, status }) => {
+    const f = await fixture();
+    const job = {
+      id: "purge-test",
+      driveId: "original-drive",
+      root: "상담",
+      phase: "operations",
+      cursor: 0,
+      maxOperation: 0,
+      completed: 0,
+      error: "OneDrive 재연결이 필요합니다",
+      plan: {
+        patientIds: [],
+        consultationIds: [],
+        protectedMediaIds: [],
+        snapshots: [],
+        inquiryIds: [],
+        scope: {},
+      },
+    };
+    f.db
+      .prepare("INSERT INTO patient_purge VALUES(?,?)")
+      .run(job.id, await seal(job, f.key));
+    const original = await seal(
+      { access_token: "old", refresh_token: "old-refresh", expires_at: 0 },
+      f.key,
+    );
+    for (const [id, value] of [
+      ["drive", original],
+      ["storage-root", await seal("상담", f.key)],
+      [
+        "oauth",
+        await seal({ value: "test-state", expires: Date.now() + 60000 }, f.key),
+      ],
+    ])
+      f.db.prepare("INSERT OR REPLACE INTO secrets VALUES(?,?)").run(id, value);
+    expect((await f.request(f.admin, "/backup", {})).status).toBe(409);
+    const external = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "new",
+          refresh_token: "new-refresh",
+          expires_in: 3600,
+        }),
+      )
+      .mockResolvedValueOnce(Response.json({ id: driveId }))
+      .mockResolvedValueOnce(
+        folder
+          ? Response.json({ id: "root", folder: {} })
+          : new Response(null, { status: 404 }),
+      );
+    const response = await f.request(
+      f.admin,
+      "/onedrive/callback?state=test-state&code=test",
+    );
+    expect(response.status, await response.clone().text()).toBe(status);
+    const read = async (id: string) =>
+      open<any>(
+        (f.db.prepare("SELECT value FROM secrets WHERE id=?").get(id) as any)
+          .value,
+        f.key,
+      );
+    expect((await read("drive")).access_token).toBe(
+      status === 302 ? "new" : "old",
+    );
+    expect(await read("storage-root")).toBe("상담");
+    expect(external).toHaveBeenCalledTimes(
+      driveId === "original-drive" ? 3 : 2,
+    );
+    expect(
+      await open(
+        (f.db.prepare("SELECT value FROM patient_purge").get() as any).value,
+        f.key,
+      ),
+    ).toEqual(job);
+  },
+);

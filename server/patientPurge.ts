@@ -6,11 +6,12 @@ import {
 } from "../src/core/patientDeletion";
 import { relocateStoragePath, patientFolder } from "../src/core/storagePaths";
 export const patientPurgeSchema =
-  "CREATE TABLE IF NOT EXISTS patient_purge(id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS erased_media(id TEXT PRIMARY KEY);CREATE TABLE IF NOT EXISTS patient_purge_media(jobId TEXT,seq INTEGER,id TEXT,PRIMARY KEY(jobId,seq));CREATE INDEX IF NOT EXISTS patient_purge_media_id ON patient_purge_media(jobId,id);";
+  "CREATE TABLE IF NOT EXISTS patient_purge(id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS erased_media(id TEXT PRIMARY KEY);CREATE TABLE IF NOT EXISTS patient_purge_media(jobId TEXT,seq INTEGER,id TEXT,PRIMARY KEY(jobId,seq));CREATE INDEX IF NOT EXISTS patient_purge_media_id ON patient_purge_media(jobId,id);CREATE TABLE IF NOT EXISTS patient_purge_folders(jobId TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(jobId,id));";
 type Job = {
   id: string;
   plan: PatientPurgePlan;
   root: string;
+  driveId?: string;
   phase: "operations" | "media" | "snapshots" | "inquiries" | "done";
   cursor: number;
   maxOperation: number;
@@ -43,6 +44,7 @@ export class PatientPurgeJobs {
         .length
     )
       return;
+    const driveId = await this.drive?.identity();
     this.sql.exec(
       "INSERT OR IGNORE INTO patient_purge_media SELECT ?,ROW_NUMBER() OVER (ORDER BY id),id FROM (SELECT id FROM media UNION SELECT substr(id,15) AS id FROM secrets WHERE id LIKE 'media-session:%')",
       id,
@@ -51,6 +53,7 @@ export class PatientPurgeJobs {
       id,
       plan,
       root,
+      driveId,
       phase: "operations",
       cursor: 0,
       completed: 0,
@@ -144,6 +147,19 @@ export class PatientPurgeJobs {
           .toArray();
         for (const row of rows) {
           const op = await open<any>(row.value, this.key);
+          // Full erasure removes live patient rows before this history scan.
+          // Retain only encrypted folder identities until the job completes,
+          // so earlier categories/merged-source folders survive a restart.
+          for (const c of op.changes) {
+            if (c.section !== "patients" || !c.value) continue;
+            const { id, number, name, sex, storageName } = c.value;
+            this.sql.exec(
+              "INSERT OR REPLACE INTO patient_purge_folders VALUES(?,?,?)",
+              job.id,
+              c.id,
+              await seal({ id, number, name, sex, storageName }, this.key),
+            );
+          }
           for (const c of op.changes) {
             if (
               c.section !== "consultations" ||
@@ -159,11 +175,20 @@ export class PatientPurgeJobs {
                 c.value.patientId,
               )
               .toArray()[0];
-            if (!saved) continue;
-            const patient = await open<any>(saved.value, this.key);
-            const path = `${patientFolder(patient, c.value.category, job.root)}/상담_${c.id}.json`;
-            if (!job.plan.snapshots.some((s) => s.path === path))
-              job.plan.snapshots.push({ path, consultationId: c.id });
+            const historical = this.sql
+              .exec(
+                "SELECT value FROM patient_purge_folders WHERE jobId=? AND id=?",
+                job.id,
+                c.value.patientId,
+              )
+              .toArray()[0];
+            for (const record of [saved, historical]) {
+              if (!record) continue;
+              const patient = await open<any>(record.value, this.key);
+              const path = `${patientFolder(patient, c.value.category, job.root)}/상담_${c.id}.json`;
+              if (!job.plan.snapshots.some((s) => s.path === path))
+                job.plan.snapshots.push({ path, consultationId: c.id });
+            }
           }
 
           job.plan.documentMediaIds = [
@@ -298,6 +323,10 @@ export class PatientPurgeJobs {
         } else {
           this.sql.exec(
             "DELETE FROM patient_purge_media WHERE jobId=?",
+            job.id,
+          );
+          this.sql.exec(
+            "DELETE FROM patient_purge_folders WHERE jobId=?",
             job.id,
           );
           job.phase = "done";

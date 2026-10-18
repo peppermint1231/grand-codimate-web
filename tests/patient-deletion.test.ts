@@ -192,3 +192,32 @@ it("full erasure produces client and restore tombstones, leaving no patient in a
       .value,
   ).toEqual(s.patients[1]);
 });
+
+it("rejects an offline edit of an erased note instead of recreating it, while allowing a new note", async () => {
+  const s = await fixture();
+  const after = await applyCommand(
+    s,
+    admin,
+    command("patient.purge", payload(s, { notes: true })),
+  );
+  const data = {
+    patientId: "a",
+    text: "삭제 전에 작성한 메모",
+    important: false,
+  };
+  await expect(
+    applyCommand(after, admin, {
+      ...command("note.save", data, "note-a"),
+      baseRev: s.notes[0].rev,
+    }),
+  ).rejects.toThrow("삭제");
+  const fresh = await applyCommand(
+    after,
+    admin,
+    command("note.save", { ...data, text: "삭제 후 새 메모" }, "new-note"),
+  );
+  expect(fresh.notes.find((n) => n.id === "new-note")?.text).toBe(
+    "삭제 후 새 메모",
+  );
+  expect(fresh.notes.some((n) => n.id === "note-a")).toBe(false);
+});

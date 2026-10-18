@@ -33,6 +33,7 @@ function fixture() {
   const files = new Map<string, string>(),
     removed: string[] = [];
   const drive = {
+    identity: vi.fn(async () => "test-drive"),
     exists: vi.fn(async (path: string) =>
       files.has(path) ? { id: files.get(path) } : undefined,
     ),
@@ -326,21 +327,19 @@ it("erases old versions of the selected records even when a patient merge change
         "old",
         await seal({ path: "상담/_codimate/commits/old.enc", changes }, key),
       );
-    f.db
-      .prepare("INSERT INTO entities VALUES(?,?,?)")
-      .run(
-        "patients",
-        "before-merge",
-        await seal(
-          {
-            id: "before-merge",
-            name: "통합전",
-            sex: "F",
-            storageName: "old-patient",
-          },
-          key,
-        ),
-      );
+    f.db.prepare("INSERT INTO entities VALUES(?,?,?)").run(
+      "patients",
+      "before-merge",
+      await seal(
+        {
+          id: "before-merge",
+          name: "통합전",
+          sex: "F",
+          storageName: "old-patient",
+        },
+        key,
+      ),
+    );
     f.files.set("상담/미용/old-patient/상담_c.json", "historical-mirror");
     await f.jobs().enqueue("j", p, "상담");
     await finish(f);
@@ -355,6 +354,77 @@ it("erases old versions of the selected records even when a patient merge change
     ]);
     expect(op.changes[3].value.text).toBe("남길 메모");
     expect(f.removed).toContain("historical-mirror");
+  } finally {
+    f.db.close();
+  }
+});
+
+it("finds historical consultation folders after the patient entity has already been erased, across restart", async () => {
+  const f = fixture();
+  try {
+    const patient = {
+      id: "p",
+      name: "가상환자",
+      sex: "F",
+      storageName: "historical-folder",
+    };
+    for (const [id, changes] of [
+      ["1", [{ section: "patients", id: "p", value: patient }]],
+      ["2", []],
+      [
+        "3",
+        [
+          {
+            section: "consultations",
+            id: "c",
+            value: {
+              id: "c",
+              patientId: "p",
+              category: "보험",
+              photos: [],
+              documents: [],
+            },
+          },
+        ],
+      ],
+    ] as const) {
+      f.db
+        .prepare("INSERT INTO operations VALUES(?,?)")
+        .run(
+          id,
+          await seal(
+            { path: `상담/_codimate/commits/${id}.enc`, changes },
+            key,
+          ),
+        );
+    }
+    const oldPath = "상담/보험/historical-folder/상담_c.json";
+    f.files.set(oldPath, "old-mirror");
+    f.files.set(
+      "상담/보험/historical-folder/상담_other.json",
+      "unselected-mirror",
+    );
+    // The initial deletion already removed the patient. Only a current-category
+    // snapshot was planned; the old category must be recovered from history.
+    await f
+      .jobs()
+      .enqueue(
+        "j",
+        {
+          ...plan,
+          snapshots: [{ path: "상담/미용/historical-folder/상담_c.json" }],
+          inquiryIds: [],
+        },
+        "상담",
+      );
+    await f.jobs().step();
+    // Each call creates a fresh job service, simulating durable-object restart.
+    await finish(f);
+    expect(f.removed).toContain("old-mirror");
+    expect(f.db.prepare("SELECT * FROM patient_purge_folders").all()).toEqual([]);
+    expect(f.files.get("상담/보험/historical-folder/상담_other.json")).toBe(
+      "unselected-mirror",
+    );
   } finally {
     f.db.close();
   }

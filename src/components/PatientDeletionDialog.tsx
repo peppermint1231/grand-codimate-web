@@ -119,9 +119,40 @@ export function PatientDeletionDialog({
                 링크도 폐기합니다. 통계 금액도 달라질 수 있습니다.
               </p>
               <p className="small">
-                서버와 연결된 OneDrive 원본·백업을 정리합니다. 기기에
-                보관·다운로드한 사본이나 외부 초진설문지 원본은 별도로 삭제해야 합니다.
+                서버와 현재 연결된 OneDrive에서 앱이 추적하는 원본·변경 이력
+                백업을 정리합니다. 정리 완료는 모든 장소의 사본 삭제를 뜻하지
+                않습니다. 정리 중에는 백업 내보내기·복구·저장 폴더 변경·다른 OneDrive로
+                연결 변경을 진행할 수 없습니다.
               </p>
+              <details className="small">
+                <summary>별도로 확인할 사본과 다시 나타날 수 있는 경우</summary>
+                <ul>
+                  <li>
+                    모든 사용 기기의 암호화 보관·초안·전송 대기·복구 자료를
+                    확인하세요. 로그아웃과 새로고침만으로 기기 사본이 모두
+                    삭제되지는 않습니다.
+                  </li>
+                  <li>
+                    다운로드한 PDF·사진·암호화 백업, OneDrive 밖으로 복사한
+                    파일, 이전 저장 폴더 사본과 휴지통은 따로 정리하세요.
+                  </li>
+                  <li>
+                    외부 초진설문지와 해당 앱·기기의 원본은 따로 정리하세요.
+                    원본이 남아 있으면 검색·통계에 남거나 다시 가져올 수
+                    있습니다.
+                  </li>
+                  <li>
+                    삭제 전 백업을 복원하거나 기기의 이전 내용을 새 기록으로
+                    입력하면 다시 저장될 수 있습니다. 복구 전에 삭제 대상이 없는
+                    원본인지 확인하세요.
+                  </li>
+                  <li>
+                    통합 전 환자 기본정보, 앱에서 추적하지 못하는 이전 사진
+                    원본·수동 사본, 조회 기록은 별도 점검 대상입니다. 다른
+                    환자와 공유된 파일은 보존됩니다.
+                  </li>
+                </ul>
+              </details>
               <label className="field">
                 확인 문구 ‘영구삭제’ 입력
                 <input
@@ -227,7 +258,7 @@ export function PatientDeletionProgress({ refresh }: { refresh: number }) {
   return (
     <div className={job?.error || error ? "error" : "notice"} role="status">
       {job?.phase === "done"
-        ? "영구삭제 완료 · 서버 원본·백업 정리를 마쳤습니다."
+        ? "앱이 추적하는 서버·OneDrive 자료 정리 완료 · 기기·다운로드·외부 설문·별도 백업 사본은 따로 확인하세요."
         : `영구삭제 자료 정리 중 · ${job?.patientCount || 0}명 · ${job?.completed || 0}개 확인`}
       {(job?.error || error) && (
         <>

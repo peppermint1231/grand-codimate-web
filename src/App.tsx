@@ -8486,6 +8486,11 @@ function SettingsView({
               </>
             )}
             <h3>백업·복구</h3>
+            <p className="small">
+              내려받은 암호화 백업은 이후 서버에서 영구삭제해도 자동으로
+              정리되지 않습니다. 삭제 정리 중에는 새 백업을 만들 수 없습니다.
+              이전 백업·사진·PDF 사본은 별도로 확인하세요.
+            </p>
             <button
               onClick={() =>
                 work(async () => {

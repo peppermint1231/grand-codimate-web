@@ -50,6 +50,12 @@ export function RestoreJobPanel() {
         닫아도 확인한 위치를 보존합니다. 확인 중에는 서버 변경 작업을 잠시
         제한합니다.
       </p>
+      <p className="small">
+        삭제 정리가 끝난 현재 OneDrive 원본을 사용하세요. 삭제 전 폴더 사본이나
+        이전 백업을 원본 위치에 되돌리면 삭제된 정보가 다시 나타날 수 있습니다.
+        복구는 기기의 초안·전송 대기·복구 자료를 지우지 않으므로, 대상 자료를
+        다시 전송하거나 새 기록으로 입력하지 않도록 각 기기도 확인하세요.
+      </p>
       {job && (
         <>
           <progress max={job.total || 1} value={job.processed} />

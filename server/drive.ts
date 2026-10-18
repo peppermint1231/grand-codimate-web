@@ -48,6 +48,13 @@ export async function exchange(
 export class Drive {
   private knownFolders = new Map<string, number>();
   constructor(private token: () => Promise<string>) {}
+  async identity(): Promise<string> {
+    const item = (await (
+      await this.request("/me/drive?$select=id")
+    ).json()) as { id?: string };
+    if (!item.id) throw new Error("OneDrive 드라이브를 확인할 수 없습니다");
+    return item.id;
+  }
   async request(path: string, init: RequestInit = {}) {
     const r = await fetch("https://graph.microsoft.com/v1.0" + path, {
       ...init,

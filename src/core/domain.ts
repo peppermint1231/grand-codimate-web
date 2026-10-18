@@ -1234,6 +1234,11 @@ export async function applyCommand(
     case "note.save": {
       need("note.edit");
       const x = s.notes.find((x) => x.id === id);
+      ensure(
+        x || cmd.baseRev === undefined,
+        "메모가 삭제되었습니다. 이전 기기의 수정 내용을 다시 저장할 수 없습니다",
+        409,
+      );
       const d = z
         .object({
           patientId: z.string(),

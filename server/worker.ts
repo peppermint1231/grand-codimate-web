@@ -235,6 +235,14 @@ export class Clinic extends DurableObject<Env> {
       this.env.REQUIRE_ONEDRIVE === "true" ? this.drive() : undefined,
     );
   }
+  private async requirePurgeComplete() {
+    const job = await this.purgeJobs().active();
+    ensure(
+      !job || job.phase === "done",
+      "영구삭제 자료 정리가 끝난 뒤 백업·복구·저장 폴더 변경을 진행하세요",
+      409,
+    );
+  }
   private async account(id: string) {
     const account = await this.secret<Account>("user:" + id);
     return account ? normalizeUser(account) : undefined;
@@ -1094,11 +1102,36 @@ export class Clinic extends DurableObject<Env> {
         "인증 요청이 만료되었습니다",
         403,
       );
+      const purge = await this.purgeJobs().active();
+      if (purge && purge.phase !== "done")
+        ensure(
+          purge.driveId,
+          "진행 중인 이전 삭제 작업의 OneDrive를 확인할 수 없습니다. 연결을 변경하지 않고 기존 정리 상태를 확인하세요",
+          409,
+        );
       await this.setSecret("oauth", {});
       const tokens = await exchange(this.env, {
         grant_type: "authorization_code",
         code: url.searchParams.get("code") || "",
       });
+      if (purge && purge.phase !== "done") {
+        // A failed/expired token must be repairable, but a different drive must
+        // never turn missing originals into false successful deletions.
+        const candidate = new Drive(async () => tokens.access_token);
+        ensure(
+          (await candidate.identity()) === purge.driveId,
+          "영구삭제 진행 중에는 기존 OneDrive 계정으로만 다시 연결할 수 있습니다",
+          409,
+        );
+        ensure(
+          (await candidate.exists(purge.root))?.folder,
+          "영구삭제 중인 저장 폴더가 없습니다. 기존 폴더 위치를 확인하세요",
+          409,
+        );
+        await this.setSecret("drive", tokens);
+        this.driveClient = undefined;
+        return Response.redirect(this.env.APP_ORIGIN + "/?connected=1", 302);
+      }
       await this.setSecret("drive", tokens);
       // A stable item ID finds renamed roots even on a fresh recovery server.
       const locator = await this.drive().exists(".codimate-storage.enc");
@@ -1486,12 +1519,7 @@ export class Clinic extends DurableObject<Env> {
     }
     const user = await this.user(req);
     if (path.startsWith("/api/restore")) {
-      const job = await this.purgeJobs().active();
-      ensure(
-        !job || job.phase === "done",
-        "영구삭제 자료 정리가 끝난 뒤 복구하세요",
-        409,
-      );
+      await this.requirePurgeComplete();
     }
     if (path === "/api/password" && req.method === "POST") {
       const b = await body();
@@ -2371,6 +2399,7 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/storage" && req.method === "POST") {
       admin();
+      await this.requirePurgeComplete();
       const b = await body();
       ensure(
         validStorageRoot(b.rootFolder),
@@ -2434,6 +2463,7 @@ export class Clinic extends DurableObject<Env> {
     }
     if (path === "/api/backup" && req.method === "POST") {
       executive();
+      await this.requirePurgeComplete();
       const snapshot = {
         version: 1,
         createdAt: new Date().toISOString(),

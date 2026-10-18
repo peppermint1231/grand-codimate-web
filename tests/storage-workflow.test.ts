@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import { Clinic } from "../server/worker";
 import { Drive } from "../server/drive";
 import { seal, open } from "../server/crypto";
+import { noDeletionScope } from "../src/core/patientDeletion";
 const databases: DatabaseSync[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
@@ -154,6 +155,148 @@ async function fixture() {
     );
   return { db, key, request, cmd, upload, put, files, clinic };
 }
+
+it.each(["/restore", "/restore-jobs"])(
+  "purges virtual OneDrive originals and restores sanitized history through %s without resurrecting patient data",
+  async (route) => {
+    const f = await fixture();
+    const network = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("No live network in deletion audit"));
+    vi.spyOn(Drive.prototype, "identity").mockResolvedValue("test-drive");
+    vi.spyOn(Drive.prototype, "permanentRemove").mockImplementation(
+      async (id) => {
+        for (const [path, file] of f.files)
+          if (file.id === id) f.files.delete(path);
+      },
+    );
+    vi.spyOn(Drive.prototype, "folders").mockResolvedValue(undefined);
+    vi.spyOn(Drive.prototype, "listCommits").mockImplementation(
+      async (folder = "commits", root = "상담") =>
+        [...f.files]
+          .filter(([path]) => path.startsWith(`${root}/_codimate/${folder}/`))
+          .map(([path, file]) => ({
+            id: file.id,
+            name: path.split("/").at(-1)!,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+    const account = f.db
+      .prepare("SELECT id,value FROM secrets WHERE id LIKE 'user:%'")
+      .get() as any;
+    await Drive.prototype.put(
+      `상담/_codimate/accounts/${account.id.slice(5)}.enc`,
+      account.value,
+    );
+    expect(
+      (
+        await f.cmd(
+          "patient.create",
+          {
+            name: "보존대상",
+            sex: "F",
+            dob: "1991-01-01",
+            phone: "01011110000",
+            address: "시험동",
+          },
+          "other",
+        )
+      ).status,
+    ).toBe(200);
+    expect((await f.upload("audit-photo")).status).toBe(200);
+    const before = await (f.clinic as any).state(false);
+    const patient = before.patients.find((p: any) => p.id === "patient");
+    const c = before.consultations.find((c: any) => c.id === "consult");
+    const deleted = await f.request("/commands", {
+      id: crypto.randomUUID(),
+      type: "patient.purge",
+      payload: {
+        items: [{ id: patient.id, rev: patient.rev }],
+        confirmation: "영구삭제",
+        scope: { ...noDeletionScope, profile: true },
+      },
+    });
+    expect(deleted.status, await deleted.clone().text()).toBe(200);
+    expect((await f.request("/backup", {})).status).toBe(409);
+    let phase = "";
+    for (let i = 0; i < 100 && phase !== "done"; i++) {
+      const result = await f.request("/patient-deletions", {});
+      expect(result.status).toBe(200);
+      const { job } = (await result.json()) as any;
+      expect(job.error).toBeUndefined();
+      phase = job.phase;
+    }
+    expect(phase).toBe("done");
+    expect(
+      [...f.files.keys()].some(
+        (p) =>
+          p.endsWith(".jpg") ||
+          p.endsWith("/상담_consult.json") ||
+          p.endsWith("/media/audit-photo.enc"),
+      ),
+    ).toBe(false);
+    expect((await f.request("/media/audit-photo")).status).not.toBe(200);
+    // A previously offline editor cannot overwrite a deleted consultation.
+    expect(
+      (
+        await f.cmd(
+          "consultation.save",
+          { memo: "이전 기기 메모" },
+          c.id,
+          c.rev,
+        )
+      ).status,
+    ).toBe(404);
+    const exported = await f.request("/backup", {});
+    expect(exported.status).toBe(200);
+    const backup = await open<any>(
+      ((await exported.json()) as any).encrypted,
+      f.key,
+    );
+    expect(
+      backup.entities.some(
+        (r: any) => r.section === "patients" && r.id === patient.id,
+      ),
+    ).toBe(false);
+    for (const row of backup.operations) {
+      const op = await open<any>(row.value, f.key);
+      expect(
+        op.changes.some(
+          (change: any) =>
+            [patient.id, c.id].includes(change.id) && change.value !== null,
+        ),
+      ).toBe(false);
+    }
+    if (route === "/restore") {
+      const restored = await f.request(route, {});
+      expect(restored.status, await restored.clone().text()).toBe(200);
+    } else {
+      let response = await f.request(route, { action: "start" });
+      expect(response.status, await response.clone().text()).toBe(200);
+      let { job } = (await response.json()) as any;
+      for (let i = 0; i < 100 && job.phase !== "ready"; i++) {
+        response = await f.request(route, { action: "step", id: job.id });
+        expect(response.status, await response.clone().text()).toBe(200);
+        job = ((await response.json()) as any).job;
+      }
+      expect(job.phase).toBe("ready");
+      response = await f.request(route, { action: "commit", id: job.id });
+      expect(response.status, await response.clone().text()).toBe(200);
+    }
+    expect(
+      f.db
+        .prepare("SELECT id FROM entities WHERE section='patients' ORDER BY id")
+        .all(),
+    ).toEqual([{ id: "other" }]);
+    expect(
+      f.db
+        .prepare("SELECT id FROM entities WHERE section='consultations'")
+        .all(),
+    ).toEqual([]);
+    expect(f.db.prepare("SELECT id FROM media").all()).toEqual([]);
+    expect(network).not.toHaveBeenCalled();
+  },
+);
 it("patient photo names avoid collisions, upload retries are idempotent, and optional PDF-free record retains annotation selection", async () => {
   const f = await fixture();
   expect((await f.upload("upload-0001")).status).toBe(200);

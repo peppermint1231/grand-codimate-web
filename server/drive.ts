@@ -245,13 +245,13 @@ export class Drive {
   }
   async permanentRemove(id: string) {
     const path = "/me/drive/items/" + encodeURIComponent(id);
-    const item = await fetch(
-      "https://graph.microsoft.com/v1.0" + path + "?$select=id,parentReference",
-      { headers: { Authorization: "Bearer " + (await this.token()) } },
-    );
+    const itemUrl =
+      "https://graph.microsoft.com/v1.0" + path + "?$select=id,parentReference";
+    const item = await fetch(itemUrl, {
+      headers: { Authorization: "Bearer " + (await this.token()) },
+    });
     if (item.status === 404) return;
-    if (!item.ok)
-      throw new Error(`OneDrive 영구삭제 파일 확인 실패 (${item.status})`);
+    if (!item.ok) throw await this.permanentRemoveError(item, "파일 확인");
     const data = (await item.json()) as {
       parentReference?: { driveId?: string };
     };
@@ -265,11 +265,66 @@ export class Drive {
         "/permanentDelete",
       {
         method: "POST",
-        headers: { Authorization: "Bearer " + (await this.token()) },
+        headers: {
+          Authorization: "Bearer " + (await this.token()),
+          Accept: "application/json",
+        },
       },
     );
-    if (!r.ok && r.status !== 404)
-      throw new Error(`OneDrive 영구삭제 실패 (${r.status})`);
+    if (r.ok) return;
+    if (r.status === 404) {
+      // An unavailable action endpoint can also return 404. Only skip an item
+      // when a separate lookup confirms that it is no longer present.
+      const remaining = await fetch(itemUrl, {
+        headers: { Authorization: "Bearer " + (await this.token()) },
+      });
+      if (remaining.status === 404) return;
+      if (!remaining.ok)
+        throw await this.permanentRemoveError(remaining, "파일 확인");
+    }
+    throw await this.permanentRemoveError(r);
+  }
+  private async permanentRemoveError(r: Response, operation = "") {
+    const body = (await r.json().catch(() => null)) as any;
+    const codes: string[] = [];
+    let requestId = r.headers.get("request-id");
+    // Keep diagnostic identifiers, but do not persist Graph's raw message:
+    // it can include patient names, file paths or other request-specific data.
+    for (let e = body?.error, depth = 0; e && depth < 10; depth++) {
+      if (
+        typeof e.code === "string" &&
+        /^[a-zA-Z0-9_.-]{1,80}$/.test(e.code) &&
+        !codes.includes(e.code)
+      )
+        codes.push(e.code);
+      requestId ||= e["request-id"];
+      e = e.innerError || e.innererror;
+    }
+    const hint =
+      r.status === 401
+        ? "설정에서 OneDrive를 다시 연결한 뒤 삭제 정리를 재시도하세요."
+        : r.status === 403
+          ? "연결 계정의 파일 삭제 권한을 확인한 뒤 삭제 정리를 재시도하세요."
+          : r.status === 429 || r.status >= 500
+            ? "잠시 후 삭제 정리를 재시도하세요."
+            : r.status === 400 || r.status === 404 || r.status === 405
+              ? "OneDrive가 영구삭제 요청을 처리하지 못했습니다. 같은 오류가 계속되면 원인 확인이 필요합니다. 오류 코드·요청 ID가 표시되면 함께 전달하세요."
+              : "OneDrive 파일 상태를 확인한 뒤 삭제 정리를 재시도하세요.";
+    const diagnostics = [
+      // A fixed diagnostic label is safe to show; arbitrary Graph messages are
+      // not. This does not change deletion behavior or trigger a fallback.
+      typeof body?.error?.message === "string" &&
+      body.error.message.trim().toLowerCase() === "api not found"
+        ? "응답 원인: 영구삭제 API를 찾지 못함"
+        : "",
+      codes.length ? `오류 코드: ${codes.join(" / ")}` : "",
+      typeof requestId === "string" && /^[a-zA-Z0-9-]{1,100}$/.test(requestId)
+        ? `요청 ID: ${requestId}`
+        : "",
+    ].filter(Boolean);
+    return new Error(
+      `OneDrive 영구삭제${operation ? " " + operation : ""} 실패 (${r.status}). ${hint}${diagnostics.length ? " " + diagnostics.join(" · ") : ""}`,
+    );
   }
   async remove(id: string) {
     const r = await fetch(

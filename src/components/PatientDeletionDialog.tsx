@@ -259,10 +259,15 @@ export function PatientDeletionProgress({ refresh }: { refresh: number }) {
     <div className={job?.error || error ? "error" : "notice"} role="status">
       {job?.phase === "done"
         ? "앱이 추적하는 서버·OneDrive 자료 정리 완료 · 기기·다운로드·외부 설문·별도 백업 사본은 따로 확인하세요."
-        : `영구삭제 자료 정리 중 · ${job?.patientCount || 0}명 · ${job?.completed || 0}개 확인`}
+        : `${job?.error || error ? "영구삭제 자료 정리 중단" : "영구삭제 자료 정리 중"} · ${job?.patientCount || 0}명 · ${job?.completed || 0}개 확인`}
       {(job?.error || error) && (
         <>
           <p>정리를 완료하지 못했습니다: {job?.error || error}</p>
+          <p>
+            확인 건수는 삭제 완료 건수가 아닙니다. 정리가 완료될 때까지
+            OneDrive 원본·백업이 남아 있을 수 있습니다. 원인을 해결한 뒤
+            삭제 정리 재시도를 누르면 저장된 진행 지점부터 이어서 처리합니다.
+          </p>
           <button
             onClick={async () => {
               try {

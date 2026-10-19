@@ -221,3 +221,185 @@ it("rejects an offline edit of an erased note instead of recreating it, while al
   );
   expect(fresh.notes.some((n) => n.id === "note-a")).toBe(false);
 });
+
+it.each([
+  "profile",
+  "consultations",
+  "photos",
+  "notes",
+  "money",
+  "documents",
+] as const)(
+  "%s erasure keeps other patients intact and leaves no orphan consultation records",
+  async (scope) => {
+    const s = await fixture();
+    for (const patientId of ["a", "b"]) {
+      const base = { rev: 1, createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+      const consultationId = "c" + patientId;
+      s.opinions.push({
+        ...base,
+        id: "opinion-" + patientId,
+        consultationId,
+        fromId: "admin",
+        toId: "doctor",
+        request: "의견 요청",
+        answer: "의견 보존",
+        answerPhotoComments: [
+          {
+            photoId: "photo-" + patientId,
+            photoName: "사진",
+            text: "사진 의견",
+          },
+        ],
+      });
+      s.quoteConsents.push({
+        ...base,
+        id: "quote-sign-" + patientId,
+        consultationId,
+      } as any);
+      s.vipAccounts.push({ ...base, id: "vip-" + patientId, patientId } as any);
+      s.benefitAccounts.push({
+        ...base,
+        id: "benefit-" + patientId,
+        patientId,
+      } as any);
+      s.pointEntries.push({
+        ...base,
+        id: "point-" + patientId,
+        patientId,
+        consultationId,
+        amount: 100,
+        kind: "grant",
+      } as any);
+      s.ledger.push({
+        ...s.ledger.find((x) => x.patientId === patientId)!,
+        id: "refund-" + patientId,
+        kind: "refund",
+        amount: 100,
+        originalId: "money-" + patientId,
+      });
+    }
+    const before = structuredClone(s);
+    const after = await applyCommand(
+      s,
+      admin,
+      command("patient.purge", payload(s, { [scope]: true })),
+    );
+    expect(s).toEqual(before);
+    expect(mergeStateChanges(s, diffStateChanges(s, after))).toEqual(after);
+    for (const section of [
+      "patients",
+      "consultations",
+      "notes",
+      "ledger",
+      "signatures",
+      "quoteConsents",
+      "opinions",
+      "vipAccounts",
+      "benefitAccounts",
+      "pointEntries",
+    ] as const) {
+      const other = (before[section] as { id: string }[]).filter(
+        (x) => x.id === "b" || x.id === "cb" || x.id.endsWith("-b"),
+      );
+      for (const row of other)
+        expect(
+          (after[section] as { id: string }[]).find((x) => x.id === row.id),
+        ).toEqual(row);
+    }
+    const consultationIds = new Set(after.consultations.map((c) => c.id));
+    for (const row of [
+      ...after.ledger,
+      ...after.signatures,
+      ...after.quoteConsents,
+      ...after.opinions,
+      ...after.pointEntries,
+    ])
+      if (row.consultationId)
+        expect(consultationIds.has(row.consultationId)).toBe(true);
+    const removedConsultations =
+      scope === "profile" || scope === "consultations";
+    expect(after.consultations.some((c) => c.id === "ca")).toBe(
+      !removedConsultations,
+    );
+    expect(after.patients.some((p) => p.id === "a")).toBe(scope !== "profile");
+    const moneyRemoved = removedConsultations || scope === "money";
+    for (const section of [
+      "ledger",
+      "vipAccounts",
+      "benefitAccounts",
+      "pointEntries",
+    ] as const)
+      expect(after[section].some((x) => x.patientId === "a")).toBe(
+        !moneyRemoved,
+      );
+    expect(after.notes.some((n) => n.patientId === "a")).toBe(
+      scope !== "profile" && scope !== "notes",
+    );
+    // Every supported scope revokes old exports and signatures containing deleted data.
+    expect(after.signatures.map((x) => x.id)).toEqual(["sign-b"]);
+    expect(after.quoteConsents.map((x) => x.id)).toEqual(["quote-sign-b"]);
+    if (!removedConsultations) {
+      const c = after.consultations.find((c) => c.id === "ca")!;
+      expect(c.photos.length).toBe(scope === "photos" ? 0 : 1);
+      expect(c.memo).toBe(scope === "notes" ? "" : "남길 메모");
+      const opinion = after.opinions.find((o) => o.consultationId === "ca");
+      if (scope === "notes") expect(opinion).toBeUndefined();
+      else {
+        expect(opinion?.answer).toBe("의견 보존");
+        expect(opinion?.answerPhotoComments?.length).toBe(
+          scope === "photos" ? 0 : 1,
+        );
+      }
+    }
+  },
+);
+
+it("archive and restore preserve consultation history, refunds and signatures exactly", async () => {
+  const s = await fixture();
+  const archived = await applyCommand(
+    s,
+    admin,
+    command("patient.archiveBatch", {
+      items: [{ id: "a", rev: s.patients[0].rev }],
+    }),
+  );
+  const restored = await applyCommand(archived, admin, {
+    ...command("patient.archive", { archived: false }, "a"),
+    baseRev: archived.patients.find((p) => p.id === "a")!.rev,
+  });
+  for (const section of [
+    "consultations",
+    "notes",
+    "ledger",
+    "signatures",
+  ] as const)
+    expect(restored[section]).toEqual(s[section]);
+  expect(restored.patients.find((p) => p.id === "a")?.archived).toBe(false);
+});
+
+it("purges all consultations and financial records moved by a patient merge", async () => {
+  const s = await fixture();
+  const merged = await applyCommand(s, admin, {
+    ...command(
+      "patient.merge",
+      { targetId: "b", targetRev: s.patients[1].rev, reason: "중복 통합" },
+      "a",
+    ),
+    baseRev: s.patients[0].rev,
+  });
+  expect(merged.consultations.every((c) => c.patientId === "b")).toBe(true);
+  const after = await applyCommand(
+    merged,
+    admin,
+    command("patient.purge", {
+      items: [{ id: "b", rev: merged.patients.find((p) => p.id === "b")!.rev }],
+      scope: { ...noDeletionScope, profile: true },
+      confirmation: "영구삭제",
+    }),
+  );
+  expect(after.consultations).toEqual([]);
+  expect(after.ledger).toEqual([]);
+  expect(after.signatures).toEqual([]);
+  expect(after.notes).toEqual([]);
+});

@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { PatientPurgeJobs, patientPurgeSchema } from "../server/patientPurge";
 import { seal, open } from "../server/crypto";
-import { Drive } from "../server/drive";
+import { Drive, PermanentDeleteUnavailable } from "../server/drive";
 import {
   noDeletionScope,
   normalizedDeletionScope,
@@ -645,3 +645,227 @@ it("identifies the fixed API-not-found response without treating it as a deleted
   ).rejects.toThrow("영구삭제 API를 찾지 못함");
   expect(fetch).toHaveBeenCalledTimes(2);
 });
+
+function personalFixture() {
+  const f = fixture();
+  const drive = Object.assign(f.drive, {
+    isPersonal: vi.fn(async () => true),
+    folders: vi.fn(async (path: string) => {
+      f.files.set(path, "trash-folder");
+    }),
+    stageDeletion: vi.fn(async (id: string, folder: string) => {
+      for (const [path, value] of f.files)
+        if (value === id) f.files.delete(path);
+      f.files.set(`${folder}/${id}`, id);
+    }),
+    recycleDeletionFolder: vi.fn(async (id: string, ids: Set<string>) => {
+      for (const [path, value] of f.files)
+        if (value === id || (path.startsWith(id + "/") && ids.has(value)))
+          f.files.delete(path);
+    }),
+    itemExists: vi.fn(async (id: string) => [...f.files.values()].includes(id)),
+  });
+  drive.exists.mockImplementation(async (path) =>
+    f.files.has(path)
+      ? {
+          id: f.files.get(path),
+          ...(f.files.get(path) === "trash-folder" ? { folder: {} } : {}),
+        }
+      : undefined,
+  );
+  drive.permanentRemove.mockRejectedValue(
+    new PermanentDeleteUnavailable("unsupported"),
+  );
+  return { ...f, drive };
+}
+async function awaitManual(f: ReturnType<typeof fixture>) {
+  for (let n = 0; n < 30; n++) {
+    const job = await f.jobs().step();
+    if (job?.error) throw new Error(job.error);
+    if (job?.phase === "awaiting-recycle-bin") return job;
+  }
+  throw new Error("never reached manual cleanup");
+}
+it("personal-drive cleanup preserves other patient history and versions, resumes after upload failure, and waits for explicit admin confirmation", async () => {
+  const f = personalFixture();
+  try {
+    const path = "상담/_codimate/commits/history.enc";
+    f.files.set(path, "old-with-versions");
+    f.files.set("other/patient.jpg", "untouched");
+    f.db.prepare("INSERT INTO operations VALUES(?,?)").run(
+      "old",
+      await seal(
+        {
+          path,
+          changes: [
+            {
+              section: "patients",
+              id: "p",
+              value: { id: "p", name: "삭제대상" },
+            },
+            {
+              section: "patients",
+              id: "other",
+              value: { id: "other", name: "유지대상" },
+            },
+          ],
+        },
+        key,
+      ),
+    );
+    await f
+      .jobs()
+      .enqueue(
+        "personal-job",
+        { ...plan, snapshots: [], inquiryIds: [] },
+        "상담",
+      );
+    f.drive.put.mockRejectedValueOnce(new Error("upload failed"));
+    expect(await f.jobs().step()).toMatchObject({
+      phase: "operations",
+      completed: 0,
+      error: "upload failed",
+    });
+    expect(f.files.get("trash-folder/old-with-versions")).toBe(
+      "old-with-versions",
+    );
+    expect((await f.jobs().active())?.pending).toBeDefined();
+    const waiting = await awaitManual(f);
+    expect(waiting.phase).toBe("awaiting-recycle-bin");
+    expect(f.drive.permanentRemove).toHaveBeenCalledTimes(1);
+    expect(f.drive.recycleDeletionFolder).toHaveBeenCalledWith(
+      "trash-folder",
+      new Set(["old-with-versions"]),
+    );
+    const clean = await open<any>(
+      (f.db.prepare("SELECT value FROM operations").get() as any).value,
+      key,
+    );
+    expect(clean.changes[0].value).toBeNull();
+    expect(clean.changes[1].value.name).toBe("유지대상");
+    expect(f.files.get("other/patient.jpg")).toBe("untouched");
+    expect(f.files.has(path)).toBe(true);
+    expect(await f.jobs().step()).toEqual(waiting);
+    const name = waiting.manualCleanup!.folderName;
+    await expect(
+      f.jobs().confirmRecycleBin("wrong-job", name, "admin"),
+    ).rejects.toThrow("현재 삭제 작업");
+    await expect(
+      f.jobs().confirmRecycleBin("personal-job", "wrong-name", "admin"),
+    ).rejects.toThrow("현재 삭제 작업");
+    f.drive.identity.mockResolvedValueOnce("different-drive");
+    await expect(
+      f.jobs().confirmRecycleBin("personal-job", name, "admin"),
+    ).rejects.toThrow("OneDrive 계정");
+    f.files.set("restored-trash", "trash-folder");
+    await expect(
+      f.jobs().confirmRecycleBin("personal-job", name, "admin"),
+    ).rejects.toThrow("복원");
+    f.files.delete("restored-trash");
+    expect(
+      await f.jobs().confirmRecycleBin("personal-job", name, "admin"),
+    ).toMatchObject({
+      phase: "done",
+      manualCleanup: { confirmedAt: expect.any(String) },
+    });
+    expect((await f.jobs().active())?.manualCleanup?.confirmedBy).toBe("admin");
+    expect(f.db.prepare("SELECT * FROM patient_purge_trash").all()).toEqual([]);
+  } finally {
+    f.db.close();
+  }
+});
+it("does not activate manual cleanup for business drives or ordinary failures", async () => {
+  const f = personalFixture();
+  try {
+    f.drive.isPersonal.mockResolvedValue(false);
+    f.files.set(plan.snapshots[0].path, "old");
+    await f.jobs().enqueue("j", plan, "상담");
+    for (let n = 0; n < 6; n++) await f.jobs().step();
+    expect((await f.jobs().active())?.error).toBe("unsupported");
+    expect(f.drive.stageDeletion).not.toHaveBeenCalled();
+    expect(f.drive.recycleDeletionFolder).not.toHaveBeenCalled();
+  } finally {
+    f.db.close();
+  }
+});
+it("keeps manual cleanup pending when staging or recycling fails and safely retries after restart", async () => {
+  const f = personalFixture();
+  try {
+    f.files.set(plan.snapshots[0].path, "snapshot");
+    await f.jobs().enqueue("j", plan, "상담");
+    f.drive.stageDeletion.mockRejectedValueOnce(new Error("move failed"));
+    for (let n = 0; n < 3; n++) await f.jobs().step();
+    expect((await f.jobs().active())?.error).toBe("move failed");
+    expect(f.files.get(plan.snapshots[0].path)).toBe("snapshot");
+    f.drive.recycleDeletionFolder.mockRejectedValueOnce(
+      new Error("recycle failed"),
+    );
+    for (let n = 0; n < 4; n++) {
+      const result = await f.jobs().step();
+      if (result?.error) break;
+    }
+    expect((await f.jobs().active())?.error).toBe("recycle failed");
+    expect((await awaitManual(f)).phase).toBe("awaiting-recycle-bin");
+  } finally {
+    f.db.close();
+  }
+});
+it("moves a single file with all versions using a stable non-patient name", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ id: "file" }))
+    .mockResolvedValueOnce(Response.json({ id: "file", name: "private-name" }))
+    .mockResolvedValueOnce(Response.json({ id: "file" }));
+  await new Drive(async () => "test").stageDeletion("file", "quarantine");
+  expect(fetch.mock.calls[2][1]?.method).toBe("PATCH");
+  const payload = JSON.parse(fetch.mock.calls[2][1]!.body as string);
+  expect(payload).toMatchObject({
+    parentReference: { id: "quarantine" },
+    "@microsoft.graph.conflictBehavior": "fail",
+  });
+  expect(payload.name).toMatch(/^file-[0-9a-f]{64}$/);
+});
+it("refuses to stage a whole folder", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(Response.json({ id: "folder" }))
+    .mockResolvedValueOnce(Response.json({ id: "folder", folder: {} }));
+  await expect(
+    new Drive(async () => "test").stageDeletion("folder", "quarantine"),
+  ).rejects.toThrow("폴더 전체");
+});
+it.each([true, false])(
+  "checks every page before recycling a dedicated folder (foreign child: %s)",
+  async (foreign) => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({ id: "folder", folder: {}, eTag: "folder-version" }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          value: [{ id: "own" }],
+          "@odata.nextLink":
+            "https://graph.microsoft.com/v1.0/me/drive/items/folder/children?$skiptoken=next",
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ value: [{ id: foreign ? "other" : "own2" }] }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const result = new Drive(async () => "test").recycleDeletionFolder(
+      "folder",
+      new Set(["own", "own2"]),
+    );
+    if (foreign) {
+      await expect(result).rejects.toThrow("대상 외 자료");
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } else {
+      await result;
+      expect(fetch.mock.calls[3][1]?.method).toBe("DELETE");
+      expect(fetch.mock.calls[3][1]?.headers).toMatchObject({
+        "If-Match": "folder-version",
+      });
+      expect(fetch.mock.calls[3][0]).toContain("/items/folder");
+    }
+  },
+);

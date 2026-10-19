@@ -562,7 +562,12 @@ export class Clinic extends DurableObject<Env> {
           await this.flush();
           await this.flushAccess();
           const purge = await this.purgeJobs().step();
-          if (purge && purge.phase !== "done") return;
+          if (
+            purge &&
+            purge.phase !== "done" &&
+            purge.phase !== "awaiting-recycle-bin"
+          )
+            return;
           await this.runVipDay();
           this.patientDirectory().scanAddresses(100);
           await this.patientDirectory().step(200);
@@ -583,7 +588,9 @@ export class Clinic extends DurableObject<Env> {
               .toArray().length;
           const purge = await this.purgeJobs().active();
           await this.ctx.storage.setAlarm(
-            purge && purge.phase !== "done"
+            purge &&
+              purge.phase !== "done" &&
+              purge.phase !== "awaiting-recycle-bin"
               ? Date.now() + (purge.error ? 60000 : 2000)
               : !this.patientDirectory().status().ready ||
                   this.patientDirectory().status().dirty ||
@@ -2978,13 +2985,37 @@ export class Clinic extends DurableObject<Env> {
       await this.flush();
       if (req.method === "POST") {
         const result = await this.purgeJobs().step();
-        if (result && result.phase !== "done")
+        if (
+          result &&
+          result.phase !== "done" &&
+          result.phase !== "awaiting-recycle-bin"
+        )
           await this.ctx.storage.setAlarm?.(Date.now() + 2000);
         return json({ job: result });
       }
       return json({
         job: this.purgeJobs().public(await this.purgeJobs().active()),
       });
+    }
+    if (
+      path === "/api/patient-deletions/confirm-recycle-bin" &&
+      req.method === "POST"
+    ) {
+      admin();
+      const b = await body();
+      ensure(
+        b.confirmed === true &&
+          typeof b.jobId === "string" &&
+          typeof b.folderName === "string",
+        "휴지통에서 해당 폴더를 영구삭제한 뒤 확인하세요",
+      );
+      const result = await this.purgeJobs().confirmRecycleBin(
+        b.jobId,
+        b.folderName,
+        user.id,
+      );
+      await this.ctx.storage.setAlarm?.(Date.now() + 2000);
+      return json({ job: result });
     }
     if (path === "/api/users/reset-password" && req.method === "POST") {
       admin();

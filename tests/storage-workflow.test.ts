@@ -1107,3 +1107,73 @@ it("persists quick cancellation and shared-list removal across workspace reloads
   expect(state.patients.some((p: any) => p.id === c.patientId)).toBe(true);
   expect(f.files.size).toBeGreaterThan(0);
 });
+
+it("keeps backup and restore blocked while personal-drive recycle-bin deletion awaits explicit administrator attestation", async () => {
+  const f = await fixture();
+  const { PatientPurgeJobs } = await import("../server/patientPurge");
+  const sql = {
+    exec(q: string, ...args: any[]) {
+      const rows = f.db.prepare(q).all(...args);
+      return { toArray: () => rows };
+    },
+  };
+  const jobs = new PatientPurgeJobs(sql, f.key, undefined);
+  await jobs.enqueue(
+    "manual-job",
+    {
+      patientIds: ["deleted-patient"],
+      consultationIds: [],
+      scope: { ...noDeletionScope, profile: true },
+      protectedMediaIds: [],
+      snapshots: [],
+      inquiryIds: [],
+    },
+    "상담",
+  );
+  const job = (await jobs.active())!;
+  job.phase = "awaiting-recycle-bin";
+  job.driveId = "same-drive";
+  job.manualCleanup = {
+    folderId: "dedicated-folder",
+    folderName: "코디메이트-영구삭제-시험작업",
+  };
+  f.db
+    .prepare("UPDATE patient_purge SET value=? WHERE id=?")
+    .run(await seal(job, f.key), job.id);
+  vi.spyOn(Drive.prototype, "identity").mockResolvedValue("same-drive");
+  vi.spyOn(Drive.prototype, "itemExists").mockResolvedValue(false);
+  for (const route of ["/backup", "/restore", "/restore-jobs"])
+    expect((await f.request(route, {})).status).toBe(409);
+  expect(
+    ((await (await f.request("/patient-deletions", {})).json()) as any).job
+      .phase,
+  ).toBe("awaiting-recycle-bin");
+  expect(
+    (
+      await f.request("/patient-deletions/confirm-recycle-bin", {
+        jobId: job.id,
+        folderName: job.manualCleanup.folderName,
+      })
+    ).status,
+  ).toBe(400);
+  expect(
+    (
+      await f.request("/patient-deletions/confirm-recycle-bin", {
+        confirmed: true,
+        jobId: "stale-job",
+        folderName: job.manualCleanup.folderName,
+      })
+    ).status,
+  ).toBe(409);
+  const result = await f.request("/patient-deletions/confirm-recycle-bin", {
+    confirmed: true,
+    jobId: job.id,
+    folderName: job.manualCleanup.folderName,
+  });
+  expect(result.status, await result.clone().text()).toBe(200);
+  expect(((await result.json()) as any).job).toMatchObject({
+    phase: "done",
+    manualCleanup: { confirmedAt: expect.any(String) },
+  });
+  expect((await jobs.active())?.manualCleanup?.confirmedBy).toBeTruthy();
+});

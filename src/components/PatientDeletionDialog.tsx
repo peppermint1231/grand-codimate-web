@@ -121,8 +121,11 @@ export function PatientDeletionDialog({
               <p className="small">
                 서버와 현재 연결된 OneDrive에서 앱이 추적하는 원본·변경 이력
                 백업을 정리합니다. 정리 완료는 모든 장소의 사본 삭제를 뜻하지
-                않습니다. 정리 중에는 백업 내보내기·복구·저장 폴더 변경·다른 OneDrive로
-                연결 변경을 진행할 수 없습니다.
+                않습니다. 정리 중에는 백업 내보내기·복구·저장 폴더 변경·다른
+                OneDrive로 연결 변경을 진행할 수 없습니다. 개인용 OneDrive가
+                자동 영구삭제를 지원하지 않으면 앱이 대상 원본을 작업별 폴더로
+                모아 휴지통으로 옮깁니다. 관리자가 휴지통에서 그 폴더를
+                영구삭제하고 앱에서 확인해야 정리가 끝납니다.
               </p>
               <details className="small">
                 <summary>별도로 확인할 사본과 다시 나타날 수 있는 경우</summary>
@@ -224,11 +227,14 @@ type Job = {
   completed: number;
   error?: string;
   patientCount: number;
+  manualCleanup?: { folderName: string; confirmedAt?: string };
 };
 export function PatientDeletionProgress({ refresh }: { refresh: number }) {
   const [job, setJob] = useState<Job | null>(null),
     [error, setError] = useState(""),
-    [retry, setRetry] = useState(0);
+    [retry, setRetry] = useState(0),
+    [confirmed, setConfirmed] = useState(""),
+    [busy, setBusy] = useState(false);
   useEffect(() => {
     if (trainingMode) return;
     let active = true,
@@ -242,7 +248,11 @@ export function PatientDeletionProgress({ refresh }: { refresh: number }) {
         if (!active) return;
         setJob(d.job);
         setError("");
-        if (d.job && d.job.phase !== "done" && !d.job.error)
+        if (
+          d.job &&
+          !["done", "awaiting-recycle-bin"].includes(d.job.phase) &&
+          !d.job.error
+        )
           timer = setTimeout(() => poll(true), 2500);
       } catch (e) {
         if (active) setError((e as Error).message);
@@ -258,15 +268,90 @@ export function PatientDeletionProgress({ refresh }: { refresh: number }) {
   return (
     <div className={job?.error || error ? "error" : "notice"} role="status">
       {job?.phase === "done"
-        ? "앱이 추적하는 서버·OneDrive 자료 정리 완료 · 기기·다운로드·외부 설문·별도 백업 사본은 따로 확인하세요."
-        : `${job?.error || error ? "영구삭제 자료 정리 중단" : "영구삭제 자료 정리 중"} · ${job?.patientCount || 0}명 · ${job?.completed || 0}개 확인`}
+        ? `${job.manualCleanup?.confirmedAt ? "서버 자료 정리·관리자 휴지통 삭제 확인 완료" : "앱이 추적하는 서버·OneDrive 자료 정리 완료"} · 기기·다운로드·외부 설문·별도 백업 사본은 따로 확인하세요.`
+        : job?.phase === "awaiting-recycle-bin"
+          ? "서버 자료 정리 완료 · OneDrive 휴지통 영구삭제 필요"
+          : `${job?.error || error ? "영구삭제 자료 정리 중단" : "영구삭제 자료 정리 중"} · ${job?.patientCount || 0}명 · ${job?.completed || 0}개 확인`}
+      {job?.phase === "awaiting-recycle-bin" && job.manualCleanup && (
+        <div>
+          <p>
+            개인용 OneDrive는 자동 영구삭제를 지원하지 않습니다. 아래 폴더에
+            모은 원본과 이전 버전이 휴지통에 남아 있습니다.
+          </p>
+          <p style={{ overflowWrap: "anywhere" }}>
+            <b>{job.manualCleanup.folderName}</b>
+          </p>
+          <ol>
+            <li>
+              <a
+                href="https://onedrive.live.com/?qt=recyclebin"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                연결한 계정의 OneDrive 휴지통 열기
+              </a>
+            </li>
+            <li>
+              위 이름의 폴더만 선택하여 영구삭제하세요. 휴지통 전체를 비울
+              필요는 없습니다.
+            </li>
+            <li>폴더가 사라진 것을 확인한 뒤 아래 확인을 완료하세요.</li>
+          </ol>
+          <p className="small">
+            앱은 개인용 휴지통의 삭제 여부를 자동 조회할 수 없습니다. 관리자
+            확인 기록을 남기며, 확인 전에는 백업·복구·저장소 변경이 계속
+            제한됩니다.
+          </p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={confirmed === job.id}
+              disabled={busy}
+              onChange={(e) => setConfirmed(e.target.checked ? job.id : "")}
+            />
+            해당 폴더를 OneDrive 휴지통에서 영구삭제했습니다.
+          </label>
+          <button
+            disabled={confirmed !== job.id || busy}
+            onClick={async () => {
+              setBusy(true);
+              setError("");
+              try {
+                const d = await api("/patient-deletions/confirm-recycle-bin", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    jobId: job.id,
+                    folderName: job.manualCleanup!.folderName,
+                    confirmed: true,
+                  }),
+                });
+                setJob(d.job);
+                setConfirmed("");
+              } catch (e) {
+                setError((e as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? "확인 중…" : "휴지통 영구삭제 확인 완료"}
+          </button>
+        </div>
+      )}
+      {job?.manualCleanup &&
+        !["done", "awaiting-recycle-bin"].includes(job.phase) && (
+          <p>
+            삭제 대상 원본을 작업별 폴더로 모으고 있습니다. 정리가 끝나면
+            OneDrive 휴지통에서 삭제할 폴더를 안내합니다.
+          </p>
+        )}
       {(job?.error || error) && (
         <>
           <p>정리를 완료하지 못했습니다: {job?.error || error}</p>
           <p>
-            확인 건수는 삭제 완료 건수가 아닙니다. 정리가 완료될 때까지
-            OneDrive 원본·백업이 남아 있을 수 있습니다. 원인을 해결한 뒤
-            삭제 정리 재시도를 누르면 저장된 진행 지점부터 이어서 처리합니다.
+            확인 건수는 삭제 완료 건수가 아닙니다. 정리가 완료될 때까지 OneDrive
+            원본·백업이 남아 있을 수 있습니다. 원인을 해결한 뒤 삭제 정리
+            재시도를 누르면 저장된 진행 지점부터 이어서 처리합니다.
           </p>
           <button
             onClick={async () => {

@@ -631,6 +631,15 @@ it("enforces admin-only data erasure and replays deletion tombstones without res
   for (const user of [f.executive, f.standard]) {
     expect((await f.request(user, "/commands", cmd)).status).toBe(403);
     expect((await f.request(user, "/patient-deletions")).status).toBe(403);
+    expect(
+      (
+        await f.request(user, "/patient-deletions/confirm-recycle-bin", {
+          confirmed: true,
+          jobId: "j",
+          folderName: "folder",
+        })
+      ).status,
+    ).toBe(403);
   }
   const deleted = await f.request(f.admin, "/commands", cmd);
   expect(deleted.status).toBe(200);

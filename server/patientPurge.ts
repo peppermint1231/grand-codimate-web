@@ -1,18 +1,31 @@
 import { open, seal } from "./crypto";
-import type { Drive } from "./drive";
+import { PermanentDeleteUnavailable, type Drive } from "./drive";
 import {
   purgeChange,
   type PatientPurgePlan,
 } from "../src/core/patientDeletion";
 import { relocateStoragePath, patientFolder } from "../src/core/storagePaths";
+import { ensure } from "../src/core/domain";
 export const patientPurgeSchema =
-  "CREATE TABLE IF NOT EXISTS patient_purge(id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS erased_media(id TEXT PRIMARY KEY);CREATE TABLE IF NOT EXISTS patient_purge_media(jobId TEXT,seq INTEGER,id TEXT,PRIMARY KEY(jobId,seq));CREATE INDEX IF NOT EXISTS patient_purge_media_id ON patient_purge_media(jobId,id);CREATE TABLE IF NOT EXISTS patient_purge_folders(jobId TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(jobId,id));";
+  "CREATE TABLE IF NOT EXISTS patient_purge(id TEXT PRIMARY KEY,value TEXT NOT NULL);CREATE TABLE IF NOT EXISTS erased_media(id TEXT PRIMARY KEY);CREATE TABLE IF NOT EXISTS patient_purge_media(jobId TEXT,seq INTEGER,id TEXT,PRIMARY KEY(jobId,seq));CREATE INDEX IF NOT EXISTS patient_purge_media_id ON patient_purge_media(jobId,id);CREATE TABLE IF NOT EXISTS patient_purge_folders(jobId TEXT,id TEXT,value TEXT NOT NULL,PRIMARY KEY(jobId,id));CREATE TABLE IF NOT EXISTS patient_purge_trash(jobId TEXT,id TEXT,PRIMARY KEY(jobId,id));";
 type Job = {
   id: string;
   plan: PatientPurgePlan;
   root: string;
   driveId?: string;
-  phase: "operations" | "media" | "snapshots" | "inquiries" | "done";
+  phase:
+    | "operations"
+    | "media"
+    | "snapshots"
+    | "inquiries"
+    | "awaiting-recycle-bin"
+    | "done";
+  manualCleanup?: {
+    folderName: string;
+    folderId?: string;
+    confirmedBy?: string;
+    confirmedAt?: string;
+  };
   cursor: number;
   maxOperation: number;
   completed: number;
@@ -70,6 +83,12 @@ export class PatientPurgeJobs {
           completed: job.completed,
           error: job.error,
           patientCount: job.plan.patientIds.length,
+          manualCleanup: job.manualCleanup
+            ? {
+                folderName: job.manualCleanup.folderName,
+                confirmedAt: job.manualCleanup.confirmedAt,
+              }
+            : undefined,
         }
       : null;
   }
@@ -106,25 +125,65 @@ export class PatientPurgeJobs {
           : j.plan.scope.documents))
     );
   }
-  private async erasePath(path: string) {
+  private async eraseItem(job: Job, id: string) {
+    if (!this.drive) return;
+    if (!job.manualCleanup) {
+      try {
+        await this.drive.permanentRemove(id);
+        return;
+      } catch (error) {
+        if (
+          !(error instanceof PermanentDeleteUnavailable) ||
+          !(await this.drive.isPersonal())
+        )
+          throw error;
+        job.driveId ||= await this.drive.identity();
+        job.manualCleanup = {
+          folderName: `코디메이트-영구삭제-${crypto.randomUUID()}`,
+        };
+        await this.save(job);
+      }
+    }
+    const cleanup = job.manualCleanup;
+    if (!cleanup.folderId) {
+      const path = `${job.root}/_codimate/purge-trash/${cleanup.folderName}`;
+      await this.drive.folders(path);
+      const folder = await this.drive.exists(path);
+      if (!folder?.folder)
+        throw new Error("삭제 대기 폴더를 확인하지 못했습니다");
+      cleanup.folderId = folder.id;
+      await this.save(job);
+    }
+    // Record intent before the remote move. A lost response/restart can safely
+    // repeat the same move by item ID without losing old versions.
+    this.sql.exec(
+      "INSERT OR IGNORE INTO patient_purge_trash VALUES(?,?)",
+      job.id,
+      id,
+    );
+    await this.drive.stageDeletion(id, cleanup.folderId);
+  }
+  private async erasePath(job: Job, path: string) {
     if (!this.drive) return;
     const file = await this.drive.exists(path);
-    if (file) await this.drive.permanentRemove(file.id);
+    if (file) await this.eraseItem(job, file.id);
   }
   private async replace(
+    job: Job,
     path: string,
     value: string,
     mime = "application/json",
   ) {
     if (!this.drive) return;
-    // Destroy the old item's version history before recreating its sanitized contents.
-    await this.erasePath(path);
+    // Separate the old item and all its versions before creating a clean item.
+    // Personal drives remain incomplete until an administrator deletes the staged folder from the recycle bin.
+    await this.erasePath(job, path);
     await this.drive.put(path, value, mime);
   }
   private async pending(job: Job) {
     const p = job.pending;
     if (!p) return;
-    await this.replace(p.path, p.value);
+    await this.replace(job, p.path, p.value);
     this.sql.exec("UPDATE operations SET value=? WHERE id=?", p.value, p.id);
     job.cursor = p.rowid;
     job.completed++;
@@ -133,7 +192,8 @@ export class PatientPurgeJobs {
   }
   async step() {
     const job = await this.active();
-    if (!job || job.phase === "done") return this.public(job);
+    if (!job || job.phase === "done" || job.phase === "awaiting-recycle-bin")
+      return this.public(job);
     delete job.error;
     try {
       await this.pending(job);
@@ -235,7 +295,7 @@ export class PatientPurgeJobs {
       } else if (job.phase === "media") {
         const rows = this.sql
           .exec(
-            "SELECT s.seq AS rowid,s.id,COALESCE(m.value,u.value) AS value,u.value AS session FROM patient_purge_media s LEFT JOIN media m ON m.id=s.id LEFT JOIN secrets u ON u.id='media-session:'||s.id WHERE s.jobId=? AND s.seq>? ORDER BY s.seq LIMIT 10",
+            "SELECT s.seq AS rowid,s.id,COALESCE(m.value,u.value) AS value,u.value AS session FROM patient_purge_media s LEFT JOIN media m ON m.id=s.id LEFT JOIN secrets u ON u.id='media-session:'||s.id WHERE s.jobId=? AND s.seq>? ORDER BY s.seq LIMIT 3",
             job.id,
             job.cursor,
           )
@@ -262,11 +322,13 @@ export class PatientPurgeJobs {
               if (session.uploadUrl)
                 await this.drive.cancelUpload(session.uploadUrl);
             }
-            if (m.remoteId && this.drive)
-              await this.drive.permanentRemove(m.remoteId);
+            if (m.remoteId && this.drive) await this.eraseItem(job, m.remoteId);
             else if (m.path)
-              await this.erasePath(relocateStoragePath(m.path, job.root));
-            await this.erasePath(`${job.root}/_codimate/media/${row.id}.enc`);
+              await this.erasePath(job, relocateStoragePath(m.path, job.root));
+            await this.erasePath(
+              job,
+              `${job.root}/_codimate/media/${row.id}.enc`,
+            );
             this.sql.exec("DELETE FROM media WHERE id=?", row.id);
             const prefix = `file:${row.id}:`;
             this.sql.exec(
@@ -302,8 +364,9 @@ export class PatientPurgeJobs {
                 })
               : undefined;
           }
-          if (entry.content === undefined) await this.erasePath(entry.path);
-          else await this.replace(entry.path, entry.content);
+          if (entry.content === undefined)
+            await this.erasePath(job, entry.path);
+          else await this.replace(job, entry.path, entry.content);
           job.cursor++;
           job.completed++;
         } else {
@@ -317,12 +380,26 @@ export class PatientPurgeJobs {
             .exec("SELECT remoteId FROM inquiries WHERE id=?", id)
             .toArray()[0];
           if (row?.remoteId && this.drive)
-            await this.drive.permanentRemove(row.remoteId);
-          await this.erasePath(`${job.root}/_codimate/inquiries/${id}.enc`);
+            await this.eraseItem(job, row.remoteId);
+          await this.erasePath(
+            job,
+            `${job.root}/_codimate/inquiries/${id}.enc`,
+          );
           this.sql.exec("DELETE FROM inquiries WHERE id=?", id);
           job.cursor++;
           job.completed++;
         } else {
+          if (job.manualCleanup) {
+            if (!this.drive || !job.manualCleanup.folderId)
+              throw new Error("삭제 대기 폴더를 확인하지 못했습니다");
+            const ids = this.sql
+              .exec("SELECT id FROM patient_purge_trash WHERE jobId=?", job.id)
+              .toArray();
+            await this.drive.recycleDeletionFolder(
+              job.manualCleanup.folderId,
+              new Set(ids.map((x: { id: string }) => x.id)),
+            );
+          }
           this.sql.exec(
             "DELETE FROM patient_purge_media WHERE jobId=?",
             job.id,
@@ -331,7 +408,7 @@ export class PatientPurgeJobs {
             "DELETE FROM patient_purge_folders WHERE jobId=?",
             job.id,
           );
-          job.phase = "done";
+          job.phase = job.manualCleanup ? "awaiting-recycle-bin" : "done";
           job.plan = { ...job.plan, snapshots: [], protectedMediaIds: [] };
         }
       }
@@ -340,6 +417,37 @@ export class PatientPurgeJobs {
         error instanceof Error ? error.message : "자료 정리에 실패했습니다";
     }
     await this.save(job);
+    return this.public(job);
+  }
+  async confirmRecycleBin(id: string, folderName: string, userId: string) {
+    const job = await this.active();
+    ensure(
+      job &&
+        job.id === id &&
+        job.phase === "awaiting-recycle-bin" &&
+        job.manualCleanup?.folderId &&
+        job.manualCleanup.folderName === folderName,
+      "현재 삭제 작업과 휴지통 폴더 이름을 확인하세요",
+      409,
+    );
+    ensure(
+      this.drive && (await this.drive.identity()) === job.driveId,
+      "삭제 작업을 시작한 OneDrive 계정을 확인하세요",
+      409,
+    );
+    ensure(
+      !(await this.drive.itemExists(job.manualCleanup.folderId)),
+      "삭제 대기 폴더가 OneDrive에 남아 있거나 복원되었습니다. 폴더를 삭제한 뒤 휴지통에서도 영구삭제하세요",
+      409,
+    );
+    // Graph cannot inspect personal recycle bins. This is an explicit human
+    // attestation, never an automated verification or a timeout-based success.
+    job.manualCleanup.confirmedBy = userId;
+    job.manualCleanup.confirmedAt = new Date().toISOString();
+    job.phase = "done";
+    delete job.error;
+    await this.save(job);
+    this.sql.exec("DELETE FROM patient_purge_trash WHERE jobId=?", job.id);
     return this.public(job);
   }
 }

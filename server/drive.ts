@@ -9,6 +9,7 @@ export interface DriveEnv {
   APP_ORIGIN: string;
 }
 const authority = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
+export class PermanentDeleteUnavailable extends Error {}
 export function loginUrl(env: DriveEnv, state: string) {
   return (
     authority +
@@ -48,6 +49,96 @@ export async function exchange(
 export class Drive {
   private knownFolders = new Map<string, number>();
   constructor(private token: () => Promise<string>) {}
+  async isPersonal() {
+    const data = (await (
+      await this.request("/me/drive?$select=driveType")
+    ).json()) as { driveType?: string };
+    return data.driveType === "personal";
+  }
+  async itemExists(id: string) {
+    const r = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/items/" +
+        encodeURIComponent(id) +
+        "?$select=id",
+      {
+        headers: { Authorization: "Bearer " + (await this.token()) },
+      },
+    );
+    if (r.status === 404) return false;
+    if (!r.ok) throw new Error(`OneDrive 파일 확인 실패 (${r.status})`);
+    return true;
+  }
+  async stageDeletion(id: string, folderId: string) {
+    if (!(await this.itemExists(id))) return;
+    const item = await this.item(id);
+    if (item.folder)
+      throw new Error("삭제 대상으로 폴더 전체를 이동할 수 없습니다");
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(id),
+    );
+    const name =
+      "file-" +
+      Array.from(new Uint8Array(digest), (x) =>
+        x.toString(16).padStart(2, "0"),
+      ).join("");
+    await this.request("/me/drive/items/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        parentReference: { id: folderId },
+        "@microsoft.graph.conflictBehavior": "fail",
+      }),
+    });
+  }
+  async recycleDeletionFolder(id: string, expectedIds: Set<string>) {
+    const response = await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/items/" +
+        encodeURIComponent(id) +
+        "?$select=id,folder,eTag",
+      {
+        headers: { Authorization: "Bearer " + (await this.token()) },
+      },
+    );
+    if (response.status === 404) return;
+    if (!response.ok)
+      throw new Error(`OneDrive 삭제 폴더 확인 실패 (${response.status})`);
+    const folder = (await response.json()) as {
+      folder?: object;
+      eTag?: string;
+    };
+    if (!folder.folder || !folder.eTag)
+      throw new Error("삭제 대기 폴더 상태를 확인하지 못했습니다");
+    let path =
+      "/me/drive/items/" +
+      encodeURIComponent(id) +
+      "/children?$select=id,folder&$top=200";
+    while (path) {
+      const data = (await (await this.request(path)).json()) as {
+        value: { id: string; folder?: object }[];
+        "@odata.nextLink"?: string;
+      };
+      if (
+        !Array.isArray(data.value) ||
+        data.value.some((x) => x.folder || !expectedIds.has(x.id))
+      )
+        throw new Error(
+          "삭제 대기 폴더에 대상 외 자료가 있습니다. 다른 자료를 옮긴 뒤 재시도하세요",
+        );
+      path = "";
+      if (data["@odata.nextLink"]) {
+        const next = new URL(data["@odata.nextLink"]);
+        if (
+          next.origin !== "https://graph.microsoft.com" ||
+          !next.pathname.startsWith("/v1.0/")
+        )
+          throw new Error("잘못된 페이지 주소");
+        path = next.pathname.slice(5) + next.search;
+      }
+    }
+    await this.remove(id, folder.eTag);
+  }
   async identity(): Promise<string> {
     const item = (await (
       await this.request("/me/drive?$select=id")
@@ -322,17 +413,28 @@ export class Drive {
         ? `요청 ID: ${requestId}`
         : "",
     ].filter(Boolean);
-    return new Error(
+    const ErrorType =
+      !operation &&
+      r.status === 400 &&
+      body?.error?.code === "invalidRequest" &&
+      typeof body.error.message === "string" &&
+      body.error.message.trim().toLowerCase() === "api not found"
+        ? PermanentDeleteUnavailable
+        : Error;
+    return new ErrorType(
       `OneDrive 영구삭제${operation ? " " + operation : ""} 실패 (${r.status}). ${hint}${diagnostics.length ? " " + diagnostics.join(" · ") : ""}`,
     );
   }
-  async remove(id: string) {
+  async remove(id: string, eTag?: string) {
     const r = await fetch(
       "https://graph.microsoft.com/v1.0/me/drive/items/" +
         encodeURIComponent(id),
       {
         method: "DELETE",
-        headers: { Authorization: "Bearer " + (await this.token()) },
+        headers: {
+          Authorization: "Bearer " + (await this.token()),
+          ...(eTag ? { "If-Match": eTag } : {}),
+        },
       },
     );
     if (!r.ok && r.status !== 404)

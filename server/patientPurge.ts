@@ -268,9 +268,11 @@ export class PatientPurgeJobs {
               await this.erasePath(relocateStoragePath(m.path, job.root));
             await this.erasePath(`${job.root}/_codimate/media/${row.id}.enc`);
             this.sql.exec("DELETE FROM media WHERE id=?", row.id);
+            const prefix = `file:${row.id}:`;
             this.sql.exec(
-              "DELETE FROM secrets WHERE id LIKE ? OR id=?",
-              `file:${row.id}:%`,
+              "DELETE FROM secrets WHERE substr(id,1,?)=? OR id=?",
+              prefix.length,
+              prefix,
               `media-session:${row.id}`,
             );
           }

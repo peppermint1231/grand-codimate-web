@@ -171,42 +171,45 @@ it("scrubs historical snapshots and old cleanup metadata; removes actual files/c
     f.db.close();
   }
 });
-it("does not claim success on permanent-delete failure and resumes the same durable pending rewrite after restart", async () => {
-  const f = fixture();
-  try {
-    const path = "상담/_codimate/commits/1.enc";
-    f.files.set(path, "old");
-    f.db.prepare("INSERT INTO operations VALUES(?,?)").run(
-      "1",
-      await seal(
-        {
-          path,
-          changes: [
-            {
-              section: "patients",
-              id: "p",
-              value: { id: "p", name: "지울이름" },
-            },
-          ],
-        },
-        key,
-      ),
-    );
-    await f.jobs().enqueue("j", plan, "상담");
-    f.drive.permanentRemove.mockRejectedValueOnce(new Error("403 permission"));
-    expect(await f.jobs().step()).toMatchObject({
-      phase: "operations",
-      error: "403 permission",
-    });
-    expect(f.drive.put).not.toHaveBeenCalled();
-    expect((await f.jobs().active())?.pending).toBeDefined();
-    await finish(f);
-    expect((await f.jobs().active())?.pending).toBeUndefined();
-    expect(f.removed).toContain("old");
-  } finally {
-    f.db.close();
-  }
-});
+it.each(["400 invalidRequest", "403 permission"])(
+  "does not claim success on %s and resumes the same durable pending rewrite after restart",
+  async (message) => {
+    const f = fixture();
+    try {
+      const path = "상담/_codimate/commits/1.enc";
+      f.files.set(path, "old");
+      f.db.prepare("INSERT INTO operations VALUES(?,?)").run(
+        "1",
+        await seal(
+          {
+            path,
+            changes: [
+              {
+                section: "patients",
+                id: "p",
+                value: { id: "p", name: "지울이름" },
+              },
+            ],
+          },
+          key,
+        ),
+      );
+      await f.jobs().enqueue("j", plan, "상담");
+      f.drive.permanentRemove.mockRejectedValueOnce(new Error(message));
+      expect(await f.jobs().step()).toMatchObject({
+        phase: "operations",
+        error: message,
+      });
+      expect(f.drive.put).not.toHaveBeenCalled();
+      expect((await f.jobs().active())?.pending).toBeDefined();
+      await finish(f);
+      expect((await f.jobs().active())?.pending).toBeUndefined();
+      expect(f.removed).toContain("old");
+    } finally {
+      f.db.close();
+    }
+  },
+);
 it("uses OneDrive permanentDelete, never silently falling back to recycle-bin deletion", async () => {
   const fetch = vi
     .spyOn(globalThis, "fetch")
@@ -223,6 +226,90 @@ it("uses OneDrive permanentDelete, never silently falling back to recycle-bin de
   expect(fetch).toHaveBeenCalledTimes(2);
   fetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
   await expect(d.permanentRemove("already-gone")).resolves.toBeUndefined();
+});
+
+it("preserves Graph error codes and request ID on 400 without exposing patient data or falling back to trash", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      Response.json({ parentReference: { driveId: "drive" } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json(
+        {
+          error: {
+            code: "invalidRequest",
+            message: "API not found: 상담/가상환자/상담.json",
+            innerError: {
+              code: "notSupported",
+              "request-id": "test-request-400",
+            },
+          },
+        },
+        { status: 400 },
+      ),
+    );
+  const error = await new Drive(async () => "test")
+    .permanentRemove("item")
+    .catch((e) => e);
+  expect(error.message).toContain("OneDrive 영구삭제 실패 (400)");
+  expect(error.message).toContain("invalidRequest / notSupported");
+  expect(error.message).toContain("test-request-400");
+  expect(error.message).not.toContain("가상환자");
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(fetch.mock.calls[1][1]).toMatchObject({
+    method: "POST",
+    headers: { Accept: "application/json" },
+  });
+  expect(fetch.mock.calls[1][1]?.body).toBeUndefined();
+});
+
+it("accepts a successful permanent deletion", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      Response.json({ parentReference: { driveId: "drive" } }),
+    )
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  await expect(
+    new Drive(async () => "test").permanentRemove("item"),
+  ).resolves.toBeUndefined();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it.each([true, false])(
+  "verifies an action 404 against the item before claiming success (exists: %s)",
+  async (exists) => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        Response.json({ parentReference: { driveId: "drive" } }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({ error: { code: "notSupported" } }, { status: 404 }),
+      )
+      .mockResolvedValueOnce(
+        exists
+          ? Response.json({ id: "item" })
+          : new Response(null, { status: 404 }),
+      );
+    const result = new Drive(async () => "test").permanentRemove("item");
+    if (exists) await expect(result).rejects.toThrow("notSupported");
+    else await expect(result).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[2][0]).toBe(fetch.mock.calls[0][0]);
+  },
+);
+
+it("keeps the original HTTP error when Graph returns a non-JSON response", async () => {
+  vi.spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      Response.json({ parentReference: { driveId: "drive" } }),
+    )
+    .mockResolvedValueOnce(new Response("unavailable", { status: 503 }));
+  await expect(
+    new Drive(async () => "test").permanentRemove("item"),
+  ).rejects.toThrow("OneDrive 영구삭제 실패 (503)");
 });
 
 it("document-only erasure removes historical JPG exports while preserving patient photos", async () => {
@@ -406,26 +493,155 @@ it("finds historical consultation folders after the patient entity has already b
     );
     // The initial deletion already removed the patient. Only a current-category
     // snapshot was planned; the old category must be recovered from history.
-    await f
-      .jobs()
-      .enqueue(
-        "j",
-        {
-          ...plan,
-          snapshots: [{ path: "상담/미용/historical-folder/상담_c.json" }],
-          inquiryIds: [],
-        },
-        "상담",
-      );
+    await f.jobs().enqueue(
+      "j",
+      {
+        ...plan,
+        snapshots: [{ path: "상담/미용/historical-folder/상담_c.json" }],
+        inquiryIds: [],
+      },
+      "상담",
+    );
     await f.jobs().step();
     // Each call creates a fresh job service, simulating durable-object restart.
     await finish(f);
     expect(f.removed).toContain("old-mirror");
-    expect(f.db.prepare("SELECT * FROM patient_purge_folders").all()).toEqual([]);
+    expect(f.db.prepare("SELECT * FROM patient_purge_folders").all()).toEqual(
+      [],
+    );
     expect(f.files.get("상담/보험/historical-folder/상담_other.json")).toBe(
       "unselected-mirror",
     );
   } finally {
     f.db.close();
   }
+});
+
+it("deletes only the selected file's chunks when its ID contains SQL wildcard characters", async () => {
+  const f = fixture();
+  try {
+    for (const id of ["a_own", "axown", "a%file", "another-file"]) {
+      f.db.prepare("INSERT INTO media VALUES(?,?)").run(
+        id,
+        await seal(
+          {
+            consultationId: id === "a_own" || id === "a%file" ? "c" : "other",
+            mime: "image/jpeg",
+          },
+          key,
+        ),
+      );
+      f.db
+        .prepare("INSERT INTO secrets VALUES(?,?)")
+        .run("file:" + id + ":0", "chunk");
+    }
+    await f
+      .jobs()
+      .enqueue("j", { ...plan, snapshots: [], inquiryIds: [] }, "상담");
+    await finish(f);
+    expect(
+      f.db
+        .prepare("SELECT id FROM secrets ORDER BY id")
+        .all()
+        .map((x: any) => x.id),
+    ).toEqual(["file:another-file:0", "file:axown:0"]);
+  } finally {
+    f.db.close();
+  }
+});
+
+it("resumes a sanitized rewrite after deletion succeeded but upload failed, preserving later consultation edits", async () => {
+  const f = fixture();
+  try {
+    const path = "상담/_codimate/commits/failed-upload.enc";
+    f.files.set(path, "old-version");
+    f.db.prepare("INSERT INTO operations VALUES(?,?)").run(
+      "history",
+      await seal(
+        {
+          path,
+          changes: [
+            {
+              section: "patients",
+              id: "p",
+              value: { id: "p", name: "지울이름" },
+            },
+            {
+              section: "patients",
+              id: "other",
+              value: { id: "other", name: "남길이름" },
+            },
+          ],
+        },
+        key,
+      ),
+    );
+    f.drive.put.mockRejectedValueOnce(new Error("upload interrupted"));
+    await f.jobs().enqueue(
+      "j",
+      {
+        ...plan,
+        snapshots: [
+          {
+            path: "상담/current.json",
+            consultationId: "c",
+            content: "stale",
+          },
+        ],
+      },
+      "상담",
+    );
+    expect(await f.jobs().step()).toMatchObject({
+      phase: "operations",
+      completed: 0,
+      error: "upload interrupted",
+    });
+    expect(f.files.has(path)).toBe(false);
+    expect((await f.jobs().active())?.pending).toBeDefined();
+    f.db
+      .prepare("INSERT INTO entities VALUES(?,?,?)")
+      .run(
+        "consultations",
+        "c",
+        await seal(
+          { id: "c", memo: "정리 시작 후 저장한 새 메모", rev: 8 },
+          key,
+        ),
+      );
+    await finish(f);
+    const clean = await open<any>(
+      (f.db.prepare("SELECT value FROM operations").get() as any).value,
+      key,
+    );
+    expect(clean.changes[0].value).toBeNull();
+    expect(clean.changes[1].value.name).toBe("남길이름");
+    expect(f.drive.put).toHaveBeenCalledWith(
+      "상담/current.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        consultation: { id: "c", memo: "정리 시작 후 저장한 새 메모", rev: 8 },
+      }),
+      "application/json",
+    );
+  } finally {
+    f.db.close();
+  }
+});
+
+it("identifies the fixed API-not-found response without treating it as a deleted file", async () => {
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValueOnce(
+      Response.json({ parentReference: { driveId: "drive" } }),
+    )
+    .mockResolvedValueOnce(
+      Response.json(
+        { error: { code: "invalidRequest", message: "API not found" } },
+        { status: 400 },
+      ),
+    );
+  await expect(
+    new Drive(async () => "test").permanentRemove("item"),
+  ).rejects.toThrow("영구삭제 API를 찾지 못함");
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

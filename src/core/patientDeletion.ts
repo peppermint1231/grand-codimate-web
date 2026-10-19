@@ -86,6 +86,16 @@ export function purgeChange(
         ...(s.documents ? { documents: [] } : {}),
       };
   } else if (
+    change.section === "opinions" &&
+    consult &&
+    s.photos &&
+    !s.notes &&
+    !s.consultations &&
+    v.answerPhotoComments?.length
+  ) {
+    // Keep the consultation opinion, but remove comments tied to erased photos.
+    value = { ...v, answerPhotoComments: [] };
+  } else if (
     (change.section === "notes" && patient && s.notes) ||
     (change.section === "opinions" &&
       consult &&

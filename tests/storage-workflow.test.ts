@@ -207,6 +207,20 @@ it.each(["/restore", "/restore-jobs"])(
     const before = await (f.clinic as any).state(false);
     const patient = before.patients.find((p: any) => p.id === "patient");
     const c = before.consultations.find((c: any) => c.id === "consult");
+    for (const id of ["patient", "other"]) {
+      f.db
+        .prepare("INSERT INTO vip_shares VALUES(?,?,?)")
+        .run(id, "vip-" + id, await seal({ patientId: id }, f.key));
+      f.db
+        .prepare("INSERT INTO quote_shares VALUES(?,?,?,?,?)")
+        .run(
+          "quote-" + id,
+          "meta",
+          id === "patient" ? c.id : "other-consult",
+          Date.now() + 60000,
+          await seal({}, f.key),
+        );
+    }
     const deleted = await f.request("/commands", {
       id: crypto.randomUUID(),
       type: "patient.purge",
@@ -217,6 +231,12 @@ it.each(["/restore", "/restore-jobs"])(
       },
     });
     expect(deleted.status, await deleted.clone().text()).toBe(200);
+    expect(f.db.prepare("SELECT patientId FROM vip_shares").all()).toEqual([
+      { patientId: "other" },
+    ]);
+    expect(f.db.prepare("SELECT id FROM quote_shares").all()).toEqual([
+      { id: "quote-other" },
+    ]);
     expect((await f.request("/backup", {})).status).toBe(409);
     let phase = "";
     for (let i = 0; i < 100 && phase !== "done"; i++) {
